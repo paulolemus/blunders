@@ -1,0 +1,18 @@
+[package]
+authors = ["Paulo Lemus <plemus@hawaii.edu>"]
+default-run = "blunders"
+description = "UCI chess engine application"
+edition = "2018"
+keywords = ["chess", "engine", "checkmate", "game", "uci"]
+name = "blunders"
+publish = false
+readme = "README.md"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+[workspace]
+members = ["blunders-engine"]
+
+[dependencies]

@@ -1,0 +1,13 @@
+[package]
+authors = ["Paulo Lemus <plemus@hawaii.edu>"]
+description = "UCI chess engine"
+edition = "2018"
+keywords = ["chess", "engine"]
+name = "blunders-engine"
+publish = false
+readme = "README.md"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
