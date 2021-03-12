@@ -1,7 +1,7 @@
 pub mod bitboard;
+pub mod coretypes;
 pub mod fen;
 pub mod mailbox;
-pub mod pieces;
 
 #[cfg(test)]
 mod tests {

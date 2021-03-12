@@ -2,7 +2,7 @@
 # Project Specific
 build/
 .vscode/
-/target
+target/
 
 # General purpose gitignore file
 

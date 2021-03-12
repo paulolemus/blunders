@@ -1,5 +1,8 @@
 use std::ops::Not;
 
+pub const NUM_FILES: usize = 8;
+pub const NUM_RANKS: usize = 8;
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Color {
     White,
@@ -22,9 +25,10 @@ pub struct Piece {
     piece: PieceType,
 }
 
+pub struct Square {}
+
 impl Not for Color {
     type Output = Self;
-
     fn not(self) -> Self::Output {
         match self {
             Color::White => Color::Black,
