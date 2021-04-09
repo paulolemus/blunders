@@ -2,8 +2,11 @@
 //! Forsyth-Edwards Notation, a standard notation for describing a chess position.
 //! https://en.wikipedia.org/wiki/Forsyth%E2%80%93Edwards_Notation
 //! https://www.chessprogramming.org/Forsyth-Edwards_Notation
+//!
+//! Example:
+//! Starting Chess FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
 
-use std::fmt;
+use std::fmt::{self, Display};
 use std::ops::RangeInclusive;
 use std::str::FromStr;
 
@@ -11,7 +14,7 @@ type MoveInt = u64;
 
 /// An intermediary structure used for converting
 /// to and from String, and to and from A Position object.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Fen {
     placement: String,
     side_to_move: String,
@@ -33,6 +36,13 @@ pub enum ParseFenError {
 }
 
 impl Fen {
+    /// Return an iterator that yields Option<Piece>.
+    //fn placement(&self) {
+    //for rank in self.placement.split('/').rev() {
+    //for ch in rank.chars() {}
+    //}
+    //}
+
     /// Placement is 8 ranks separated by '/'.
     /// Each rank need to sum up to 8 pieces.
     fn parse_placement(s: &str) -> Result<String, ParseFenError> {
@@ -189,7 +199,7 @@ impl FromStr for Fen {
     }
 }
 
-impl fmt::Display for Fen {
+impl Display for Fen {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -236,6 +246,7 @@ mod tests {
         const INVALID3: &str = "nbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
         const INVALID4: &str = "nbqkbnr/ pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
         const INVALID5: &str = " rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+        const INVALID6: &str = "rnbqkbnr/pppppppp/27/8/8/8/PPPPPPPP/RNBQKBNR";
 
         assert_eq!(Fen::parse_placement(VALID1).unwrap(), VALID1);
         assert_eq!(Fen::parse_placement(VALID2).unwrap(), VALID2);
@@ -246,6 +257,7 @@ mod tests {
         assert!(Fen::parse_placement(INVALID3).is_err());
         assert!(Fen::parse_placement(INVALID4).is_err());
         assert!(Fen::parse_placement(INVALID5).is_err());
+        assert!(Fen::parse_placement(INVALID6).is_err());
     }
 
     #[test]
