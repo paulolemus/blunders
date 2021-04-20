@@ -6,25 +6,15 @@
 //! Example:
 //! Starting Chess FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
 
+use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::ops::RangeInclusive;
 use std::str::FromStr;
 
-type MoveInt = u64;
+use crate::coretypes::{Castling, Color, File, MoveCount, Piece, Rank, Square};
+use crate::mailbox::Mailbox;
 
-/// An intermediary structure used for converting
-/// to and from String, and to and from A Position object.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Fen {
-    placement: String,
-    side_to_move: String,
-    castling: Option<String>,
-    en_passant: Option<String>,
-    halfmove_clock: MoveInt,
-    fullmove_number: MoveInt,
-}
-
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ParseFenError {
     IllFormed,
     Placement,
@@ -35,115 +25,187 @@ pub enum ParseFenError {
     FullMoveNumber,
 }
 
-impl Fen {
-    /// Return an iterator that yields Option<Piece>.
-    //fn placement(&self) {
-    //for rank in self.placement.split('/').rev() {
-    //for ch in rank.chars() {}
-    //}
-    //}
+/// Allows converting data that can be represented as a FEN sub-string
+/// to and from &str.
+trait FenComponent: Sized {
+    type Error;
+    fn try_from_fen_str(s: &str) -> Result<Self, Self::Error>;
+    fn to_fen_str(&self) -> String;
+}
 
-    /// Placement is 8 ranks separated by '/'.
-    /// Each rank need to sum up to 8 pieces.
-    fn parse_placement(s: &str) -> Result<String, ParseFenError> {
+/// Placement FenComponent.
+impl FenComponent for Mailbox {
+    type Error = ParseFenError;
+    fn try_from_fen_str(s: &str) -> Result<Self, Self::Error> {
+        // Placement is 8 ranks separated by '/'.
+        // Each rank need to sum up to 8 pieces.
         const NUMS: RangeInclusive<char> = '1'..='8';
         const PIECES: [char; 12] = ['R', 'N', 'B', 'Q', 'K', 'P', 'r', 'n', 'b', 'q', 'k', 'p'];
-        const TO_VALUE: fn(char) -> u32 = |ch: char| -> u32 {
-            if NUMS.contains(&ch) {
-                ch.to_digit(10).unwrap()
-            } else if PIECES.contains(&ch) {
-                1
-            } else {
-                9 // Assures failure as is past 8.
-            }
-        };
+        const ERR: ParseFenError = ParseFenError::Placement;
+
         let mut num_ranks = 0u32;
+        let mut squares = Square::iter();
+        let mut board = Mailbox::with_none();
 
-        for rank in s.split('/') {
+        // Iterate FEN string in normal Rank-File order.
+        for rank_str in s.split('/').rev() {
+            let mut sum_rank = 0;
             num_ranks += 1;
-            let sum_rank: u32 = rank.chars().map(TO_VALUE).sum();
+
+            for ch in rank_str.chars() {
+                if NUMS.contains(&ch) {
+                    let num = ch.to_digit(10).ok_or(ERR)?;
+                    squares.nth(num as usize - 1);
+                    sum_rank += num;
+                } else if PIECES.contains(&ch) {
+                    let piece = Piece::try_from(ch).map_err(|_| ERR)?;
+                    let square = squares.next().ok_or(ERR)?;
+                    board[square] = Some(piece);
+                    sum_rank += 1;
+                } else {
+                    return Err(ERR);
+                }
+            }
             if sum_rank != 8 {
-                return Err(ParseFenError::Placement);
+                return Err(ERR);
             }
         }
 
-        if num_ranks == 8 {
-            Ok(s.to_string())
-        } else {
-            Err(ParseFenError::Placement)
-        }
+        (num_ranks == 8)
+            .then(|| board)
+            .ok_or(ParseFenError::Placement)
     }
 
+    fn to_fen_str(&self) -> String {
+        // For each Rank, count consecutive empty squares.
+        // Before pushing some char, add empty count if not 0 then set to 0.
+        use File::*;
+        use Rank::*;
+        let mut fen_str = String::new();
+
+        for &rank in &[R8, R7, R6, R5, R4, R3, R2, R1] {
+            let mut empty_counter = 0u8;
+
+            for &file in &[A, B, C, D, E, F, G, H] {
+                match self[(file, rank)] {
+                    Some(piece) => {
+                        if empty_counter != 0 {
+                            fen_str.push_str(&empty_counter.to_string());
+                            empty_counter = 0;
+                        }
+                        fen_str.push(piece.into())
+                    }
+                    None => empty_counter += 1,
+                };
+            }
+
+            if empty_counter != 0 {
+                fen_str.push_str(&empty_counter.to_string());
+            }
+            fen_str.push('/');
+        }
+        fen_str.pop(); // Extra '/'.
+        fen_str
+    }
+}
+
+/// Side-To-Move FenComponent.
+impl FenComponent for Color {
+    type Error = ParseFenError;
     /// Side to move is either character 'w' | 'b'
-    fn parse_side_to_move(s: &str) -> Result<String, ParseFenError> {
-        let chars: Vec<char> = s.chars().collect();
-        if chars.len() != 1 {
-            Err(ParseFenError::SideToMove)
-        } else {
-            match chars[0] {
-                'w' | 'b' => Ok(chars[0].to_string()),
-                _ => Err(ParseFenError::SideToMove),
-            }
-        }
+    fn try_from_fen_str(s: &str) -> Result<Self, Self::Error> {
+        let ch = s.chars().next().ok_or(ParseFenError::SideToMove)?;
+        Color::try_from(ch).map_err(|_| ParseFenError::SideToMove)
     }
+    fn to_fen_str(&self) -> String {
+        self.to_string()
+    }
+}
 
+/// Castling FenComponent.
+impl FenComponent for Castling {
+    type Error = ParseFenError;
     /// Castling is either '-' or [K][Q][k][q]
-    fn parse_castling(s: &str) -> Result<Option<String>, ParseFenError> {
-        let chars: Vec<char> = s.chars().collect();
-
-        // Check for -
-        if chars.len() < 1 || chars.len() > 4 {
-            return Err(ParseFenError::Castling);
-        } else if chars.len() == 1 && chars[0] == '-' {
-            return Ok(None);
-        }
-
-        let mut castling: [Option<char>; 4] = [None, None, None, None]; // KQkq
-        for ch in &chars {
-            match ch {
-                'K' => castling[0] = Some('K'),
-                'Q' => castling[1] = Some('Q'),
-                'k' => castling[2] = Some('k'),
-                'q' => castling[3] = Some('q'),
-                _ => return Err(ParseFenError::Castling),
-            }
-        }
-
-        Ok(Some(castling.iter().flatten().collect()))
+    fn try_from_fen_str(s: &str) -> Result<Self, Self::Error> {
+        Castling::from_str(s).map_err(|_| ParseFenError::Castling)
     }
+    fn to_fen_str(&self) -> String {
+        self.to_string()
+    }
+}
 
+/// En-Passant FenComponent.
+impl FenComponent for Option<Square> {
+    type Error = ParseFenError;
     /// En Passant is either - or a square coordinate ex: "a4".
-    fn parse_en_passant(s: &str) -> Result<Option<String>, ParseFenError> {
-        const LETTERS: [char; 8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    fn try_from_fen_str(s: &str) -> Result<Self, Self::Error> {
         const RANKS: [char; 2] = ['3', '6'];
+        let mut chars = s.chars();
+        let first = chars.next().ok_or(ParseFenError::EnPassant)?;
 
-        let chars: Vec<char> = s.chars().collect();
-
-        if chars.len() == 1 {
-            // Check for -
-            match chars[0] {
-                '-' => Ok(None),
-                _ => Err(ParseFenError::EnPassant),
-            }
-        } else if chars.len() == 2 && LETTERS.contains(&chars[0]) && RANKS.contains(&chars[1]) {
-            // Check for coordinate
-            Ok(Some(format!("{}{}", chars[0], chars[1])))
+        if first == '-' {
+            Ok(None)
         } else {
-            Err(ParseFenError::EnPassant)
+            let second = chars.next().ok_or(ParseFenError::EnPassant)?;
+            Ok(Some(
+                RANKS
+                    .contains(&second)
+                    .then(|| Square::from_str(s))
+                    .ok_or(ParseFenError::EnPassant)?
+                    .map_err(|_| ParseFenError::EnPassant)?,
+            ))
         }
+    }
+    fn to_fen_str(&self) -> String {
+        match self {
+            Some(square) => square.to_string(),
+            None => "-".to_string(),
+        }
+    }
+}
+
+/// An intermediary structure used for converting
+/// to and from String, and to and from A Position object.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Fen {
+    placement: Mailbox,
+    side_to_move: Color,
+    castling: Castling,
+    en_passant: Option<Square>,
+    halfmove_clock: MoveCount,
+    fullmove_number: MoveCount,
+}
+
+impl Fen {
+    /// Immutable Getters
+    pub fn placement(&self) -> &Mailbox {
+        &self.placement
+    }
+    pub fn side_to_move(&self) -> &Color {
+        &self.side_to_move
+    }
+    pub fn castling(&self) -> &Castling {
+        &self.castling
+    }
+    pub fn en_passant(&self) -> &Option<Square> {
+        &self.en_passant
+    }
+    pub fn halfmove_clock(&self) -> &MoveCount {
+        &self.halfmove_clock
+    }
+    pub fn fullmove_number(&self) -> &MoveCount {
+        &self.fullmove_number
     }
 
     /// HalfMove Clock is any non-negative number.
-    fn parse_halfmove_clock(s: &str) -> Result<MoveInt, ParseFenError> {
-        match s.parse::<MoveInt>() {
-            Ok(halfmove) => Ok(halfmove),
-            Err(_) => Err(ParseFenError::HalfMoveClock),
-        }
+    fn parse_halfmove_clock(s: &str) -> Result<MoveCount, ParseFenError> {
+        s.parse::<MoveCount>()
+            .map_err(|_| ParseFenError::HalfMoveClock)
     }
 
     /// FullMove Number starts at 1, and can increment infinitely.
-    pub fn parse_fullmove_number(s: &str) -> Result<MoveInt, ParseFenError> {
-        let fullmove: MoveInt = s.parse().unwrap_or(0);
+    pub fn parse_fullmove_number(s: &str) -> Result<MoveCount, ParseFenError> {
+        let fullmove: MoveCount = s.parse().unwrap_or(0);
         if fullmove != 0 {
             Ok(fullmove)
         } else {
@@ -156,9 +218,9 @@ impl Default for Fen {
     /// Fen for starting chess position.
     fn default() -> Self {
         Fen {
-            placement: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR".into(),
-            side_to_move: 'w'.into(),
-            castling: Some("KQkq".into()),
+            placement: Mailbox::default(),
+            side_to_move: Color::White,
+            castling: Castling::default(),
             en_passant: None,
             halfmove_clock: 0,
             fullmove_number: 1,
@@ -175,17 +237,12 @@ impl FromStr for Fen {
         }
         let fen_parts: Vec<&str> = s.split_whitespace().collect();
 
-        // Check piece placement substring.
-        let placement: String = Fen::parse_placement(fen_parts[0])?;
-        // Check color character.
-        let side_to_move: String = Fen::parse_side_to_move(fen_parts[1])?;
-        // Check castling rights substring.
-        let castling: Option<String> = Fen::parse_castling(fen_parts[2])?;
-        // Check En Passant substring.
-        let en_passant: Option<String> = Fen::parse_en_passant(fen_parts[3])?;
-        // Check halfmove integer.
+        // Fen Order: Placement/Side-To-Move/Castling/En-Passant/Halfmove/Fullmove
+        let placement: Mailbox = FenComponent::try_from_fen_str(fen_parts[0])?;
+        let side_to_move: Color = FenComponent::try_from_fen_str(fen_parts[1])?;
+        let castling: Castling = FenComponent::try_from_fen_str(fen_parts[2])?;
+        let en_passant: Option<Square> = FenComponent::try_from_fen_str(fen_parts[3])?;
         let halfmove_clock = Fen::parse_halfmove_clock(fen_parts[4])?;
-        // Check fullmove integer.
         let fullmove_number = Fen::parse_fullmove_number(fen_parts[5])?;
 
         Ok(Fen {
@@ -204,10 +261,10 @@ impl Display for Fen {
         write!(
             f,
             "{} {} {} {} {} {}",
-            self.placement,
-            self.side_to_move,
-            self.castling.as_ref().unwrap_or(&'-'.into()),
-            self.en_passant.as_ref().unwrap_or(&'-'.into()),
+            self.placement.to_fen_str(),
+            self.side_to_move.to_fen_str(),
+            self.castling.to_fen_str(),
+            self.en_passant.to_fen_str(),
             self.halfmove_clock,
             self.fullmove_number
         )
@@ -248,16 +305,28 @@ mod tests {
         const INVALID5: &str = " rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
         const INVALID6: &str = "rnbqkbnr/pppppppp/27/8/8/8/PPPPPPPP/RNBQKBNR";
 
-        assert_eq!(Fen::parse_placement(VALID1).unwrap(), VALID1);
-        assert_eq!(Fen::parse_placement(VALID2).unwrap(), VALID2);
-        assert_eq!(Fen::parse_placement(VALID3).unwrap(), VALID3);
-        assert_eq!(Fen::parse_placement(VALID4).unwrap(), VALID4);
-        assert!(Fen::parse_placement(INVALID1).is_err());
-        assert!(Fen::parse_placement(INVALID2).is_err());
-        assert!(Fen::parse_placement(INVALID3).is_err());
-        assert!(Fen::parse_placement(INVALID4).is_err());
-        assert!(Fen::parse_placement(INVALID5).is_err());
-        assert!(Fen::parse_placement(INVALID6).is_err());
+        assert_eq!(
+            Mailbox::try_from_fen_str(VALID1).unwrap().to_fen_str(),
+            VALID1
+        );
+        assert_eq!(
+            Mailbox::try_from_fen_str(VALID2).unwrap().to_fen_str(),
+            VALID2
+        );
+        assert_eq!(
+            Mailbox::try_from_fen_str(VALID3).unwrap().to_fen_str(),
+            VALID3
+        );
+        assert_eq!(
+            Mailbox::try_from_fen_str(VALID4).unwrap().to_fen_str(),
+            VALID4
+        );
+        assert!(Mailbox::try_from_fen_str(INVALID1).is_err());
+        assert!(Mailbox::try_from_fen_str(INVALID2).is_err());
+        assert!(Mailbox::try_from_fen_str(INVALID3).is_err());
+        assert!(Mailbox::try_from_fen_str(INVALID4).is_err());
+        assert!(Mailbox::try_from_fen_str(INVALID5).is_err());
+        assert!(Mailbox::try_from_fen_str(INVALID6).is_err());
     }
 
     #[test]
@@ -271,18 +340,34 @@ mod tests {
 
         const INVALID1: &str = "";
         const INVALID2: &str = "a";
-        const INVALID3: &str = "QQQQQ";
-        const INVALID4: &str = " KQkq";
+        const INVALID3: &str = " KQkq";
 
-        assert_eq!(Fen::parse_castling(VALID1).unwrap(), None);
-        assert_eq!(Fen::parse_castling(VALID2).unwrap().unwrap(), VALID2);
-        assert_eq!(Fen::parse_castling(VALID3).unwrap().unwrap(), VALID3);
-        assert_eq!(Fen::parse_castling(VALID4).unwrap().unwrap(), VALID4);
-        assert_eq!(Fen::parse_castling(VALID5).unwrap().unwrap(), VALID5);
-        assert_eq!(Fen::parse_castling(VALID6).unwrap().unwrap(), VALID6);
-        assert!(Fen::parse_castling(INVALID1).is_err());
-        assert!(Fen::parse_castling(INVALID2).is_err());
-        assert!(Fen::parse_castling(INVALID3).is_err());
-        assert!(Fen::parse_castling(INVALID4).is_err());
+        assert_eq!(
+            Castling::try_from_fen_str(VALID1).unwrap().to_fen_str(),
+            VALID1
+        );
+        assert_eq!(
+            Castling::try_from_fen_str(VALID2).unwrap().to_fen_str(),
+            VALID2
+        );
+        assert_eq!(
+            Castling::try_from_fen_str(VALID3).unwrap().to_fen_str(),
+            VALID3
+        );
+        assert_eq!(
+            Castling::try_from_fen_str(VALID4).unwrap().to_fen_str(),
+            VALID4
+        );
+        assert_eq!(
+            Castling::try_from_fen_str(VALID5).unwrap().to_fen_str(),
+            VALID5
+        );
+        assert_eq!(
+            Castling::try_from_fen_str(VALID6).unwrap().to_fen_str(),
+            VALID6
+        );
+        assert!(Castling::try_from_fen_str(INVALID1).is_err());
+        assert!(Castling::try_from_fen_str(INVALID2).is_err());
+        assert!(Castling::try_from_fen_str(INVALID3).is_err());
     }
 }

@@ -3,10 +3,10 @@
 //! Mailbox is an array of size Files x Ranks where each index may
 //! contain a chess piece or be empty.
 
-use crate::coretypes::{Color, Piece, PieceKind, NUM_FILES, NUM_RANKS};
-use crate::fen::Fen;
-use std::fmt;
-use std::ops;
+use std::fmt::{self, Display};
+use std::ops::{Index, IndexMut};
+
+use crate::coretypes::{Color, Indexable, Piece, PieceKind, Square, NUM_FILES, NUM_RANKS};
 
 /// Classic 8x8 square board representation of Chess board.
 /// Index starts at A1.
@@ -16,7 +16,7 @@ use std::ops;
 /// H7 = idx 63
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Mailbox {
-    board: [Option<Piece>; Mailbox::SIZE],
+    board: [Option<Piece>; Self::SIZE],
 }
 
 impl Mailbox {
@@ -41,60 +41,66 @@ impl Mailbox {
     }
 }
 
-impl ops::Index<usize> for Mailbox {
+impl Index<usize> for Mailbox {
     type Output = Option<Piece>;
     fn index(&self, idx: usize) -> &Self::Output {
         &self.board[idx]
     }
 }
-
-impl ops::IndexMut<usize> for Mailbox {
+impl IndexMut<usize> for Mailbox {
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
         &mut self.board[idx]
+    }
+}
+
+impl<I: Indexable> Index<I> for Mailbox {
+    type Output = Option<Piece>;
+    fn index(&self, idx: I) -> &Self::Output {
+        &self.board[idx.idx()]
+    }
+}
+impl<I: Indexable> IndexMut<I> for Mailbox {
+    fn index_mut(&mut self, idx: I) -> &mut Self::Output {
+        &mut self.board[idx.idx()]
     }
 }
 
 /// default value is that of a standard starting chess position.
 impl Default for Mailbox {
     fn default() -> Self {
-        const PAWN: usize = 40;
-        const REST: usize = 56;
+        use Color::*;
+        use PieceKind::*;
+        use Square::*;
         let mut mb = Mailbox::with_none();
 
-        // Pawns
-        for idx in 8..16usize {
-            mb[idx] = Some(Piece::new(Color::White, PieceKind::Pawn));
-            mb[idx + PAWN] = Some(Piece::new(Color::Black, PieceKind::Pawn));
+        mb[A1] = Some(Piece::new(White, Rook));
+        mb[B1] = Some(Piece::new(White, Knight));
+        mb[C1] = Some(Piece::new(White, Bishop));
+        mb[D1] = Some(Piece::new(White, Queen));
+        mb[E1] = Some(Piece::new(White, King));
+        mb[F1] = Some(Piece::new(White, Bishop));
+        mb[G1] = Some(Piece::new(White, Knight));
+        mb[H1] = Some(Piece::new(White, Rook));
+        for &square in &[A2, B2, C2, D2, E2, F2, G2, H2] {
+            mb[square] = Some(Piece::new(White, Pawn));
         }
-
-        // Rooks
-        for &idx in &[0, 7usize] {
-            mb[idx] = Some(Piece::new(Color::White, PieceKind::Rook));
-            mb[idx + REST] = Some(Piece::new(Color::Black, PieceKind::Rook));
+        mb[A8] = Some(Piece::new(Black, Rook));
+        mb[B8] = Some(Piece::new(Black, Knight));
+        mb[C8] = Some(Piece::new(Black, Bishop));
+        mb[D8] = Some(Piece::new(Black, Queen));
+        mb[E8] = Some(Piece::new(Black, King));
+        mb[F8] = Some(Piece::new(Black, Bishop));
+        mb[G8] = Some(Piece::new(Black, Knight));
+        mb[H8] = Some(Piece::new(Black, Rook));
+        for &square in &[A7, B7, C7, D7, E7, F7, G7, H7] {
+            mb[square] = Some(Piece::new(Black, Pawn));
         }
-
-        // Knights
-        for &idx in &[1, 6usize] {
-            mb[idx] = Some(Piece::new(Color::White, PieceKind::Knight));
-            mb[idx + REST] = Some(Piece::new(Color::Black, PieceKind::Knight));
-        }
-
-        // Bishops
-        for &idx in &[2, 5usize] {
-            mb[idx] = Some(Piece::new(Color::White, PieceKind::Bishop));
-            mb[idx + REST] = Some(Piece::new(Color::Black, PieceKind::Bishop));
-        }
-
-        mb[3] = Some(Piece::new(Color::White, PieceKind::Queen));
-        mb[3 + REST] = Some(Piece::new(Color::Black, PieceKind::Queen));
-        mb[4] = Some(Piece::new(Color::White, PieceKind::King));
-        mb[4 + REST] = Some(Piece::new(Color::Black, PieceKind::King));
 
         mb
     }
 }
 
-impl fmt::Display for Mailbox {
+impl Display for Mailbox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut s = String::with_capacity(Self::SIZE + Self::RANKS);
 
@@ -111,12 +117,6 @@ impl fmt::Display for Mailbox {
         write!(f, "{}", s)
     }
 }
-
-//impl From<&Fen> for Mailbox {
-//fn from(fen: &Fen) -> Self {
-
-//}
-//}
 
 #[cfg(test)]
 mod tests {
