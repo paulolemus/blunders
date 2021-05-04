@@ -1,9 +1,11 @@
-//! coretypes.rs
+//! The fundamental and simple types of `blunders_engine`.
+//!
 //! Types:
 //! Color, PieceKind, Piece, Castling, File, Rank, Square, MoveCount
 
 use std::convert::TryFrom;
 use std::fmt::{self, Display, Write};
+use std::mem::replace;
 use std::mem::transmute; // unsafe
 use std::ops::{BitOr, Not};
 use std::str::FromStr;
@@ -13,6 +15,9 @@ use std::str::FromStr;
 ///
 pub const NUM_FILES: usize = 8; // A, B, C, D, E, F, G, H
 pub const NUM_RANKS: usize = 8; // 1, 2, 3, 4, 5, 6, 7, 8
+pub const NUM_SQUARES: usize = NUM_FILES * NUM_RANKS;
+const WHITE_ARRAY_OFFSET: u8 = 0;
+const BLACK_ARRAY_OFFSET: u8 = 6;
 
 ///
 /// Data and Structures
@@ -21,12 +26,18 @@ pub const NUM_RANKS: usize = 8; // 1, 2, 3, 4, 5, 6, 7, 8
 /// Counter for half-move clock and full-moves.
 pub type MoveCount = u32;
 
+/// Color can represent the color of a piece, or a player.
+/// Color's set discriminant is used in position.rs to index without branching.
+/// First 6 are for each piece_kind as white, last 6 are for each piece_kind as black.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[repr(u8)]
 pub enum Color {
-    White,
-    Black,
+    White = WHITE_ARRAY_OFFSET,
+    Black = BLACK_ARRAY_OFFSET,
 }
 
+/// Enum variant order and discriminant are important.
+/// Must be contiguous and start from 0.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum PieceKind {
     Pawn,
@@ -39,8 +50,8 @@ pub enum PieceKind {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Piece {
-    color: Color,
-    piece_kind: PieceKind,
+    pub(crate) color: Color,
+    pub(crate) piece_kind: PieceKind,
 }
 
 /// Observe Castling rights for a position.
@@ -59,14 +70,18 @@ impl Castling {
     pub const NONE: Castling = Castling(0u8);
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+/// Enum variant order and discriminant must be contiguous, start from 0, 
+/// and be in ascending order ABCDEFGH.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 #[rustfmt::skip]
 #[repr(u8)]
 pub enum File {
     A, B, C, D, E, F, G, H = 7u8,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+/// Enum variant order and discriminant must be contiguous, start from 0, 
+/// and be in ascending order 12345678.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 #[rustfmt::skip]
 #[repr(u8)]
 pub enum Rank {
@@ -79,7 +94,7 @@ pub enum Rank {
 /// that Square's bit position in a bitboard.
 /// WARNING: The exact ordering of enums is important for their discriminants.
 ///          Changing the discriminant of any variant is breaking.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 #[rustfmt::skip]
 #[repr(u8)]
 pub enum Square {
@@ -95,23 +110,41 @@ pub enum Square {
 
 /// Move
 /// Long Algebraic form of moving a single chess piece.
-/// A chess "half move", or "ply".
-//pub struct Move {
-//    piece_kind: PieceKind,
-//    from: Square,
-//    to: Square,
-//    promotion: Option<PieceKind>,
-//}
+/// Equivalent to a chess "half move", or "ply".
+/// TODO: Store data to allow for unmake_move on position.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Move {
+    pub(crate) from: Square,
+    pub(crate) to: Square,
+    pub(crate) promotion: Option<PieceKind>,
+}
 
 ///
 /// Traits
 ///
 
-/// Indexable returns a number between 0-63 inclusive representing square
-/// on a chess board in rank-file order.
-/// WARNING: Returning values outside of 0-63 might cause panic.
-pub trait Indexable {
+/// SquareIndexable
+/// A chessboard has 64 squares on it. SquareIndexable can be implemented
+/// for types whose values can map directly to a chess Square's value.
+pub trait SquareIndexable {
+    /// idx must be implemented.
+    /// idx(&self) must return a number between 0-63 inclusive, representing
+    /// a square on a chess board in little-endian, rank-file order.
+    /// Warning: Values outside of 0-63 may panic or cause undefined behavior.
     fn idx(&self) -> usize;
+
+    /// shift returns a number that represents the bit-index equivalent of a
+    /// chess Square on a u64.
+    fn shift(&self) -> u64 {
+        1u64 << self.idx()
+    }
+}
+
+// Blanket impl on references of types that are SquareIndexable.
+impl<I: SquareIndexable> SquareIndexable for &I {
+    fn idx(&self) -> usize {
+        (*self).idx()
+    }
 }
 
 ///
@@ -125,6 +158,9 @@ impl Color {
             Color::White => 'w',
             Color::Black => 'b',
         }
+    }
+    pub const fn iter() -> ColorIterator {
+        ColorIterator::new()
     }
 }
 
@@ -161,6 +197,29 @@ impl Display for Color {
     }
 }
 
+pub struct ColorIterator {
+    maybe_color: Option<Color>,
+}
+
+impl ColorIterator {
+    pub const fn new() -> Self {
+        Self {
+            maybe_color: Some(Color::White),
+        }
+    }
+}
+
+impl Iterator for ColorIterator {
+    type Item = Color;
+    fn next(&mut self) -> Option<Self::Item> {
+        let value = match self.maybe_color {
+            Some(Color::White) => Some(Color::Black),
+            Some(Color::Black) | None => None,
+        };
+        replace(&mut self.maybe_color, value)
+    }
+}
+
 impl PieceKind {
     /// FEN compliant conversion, defaults as white pieces.
     pub const fn to_char(&self) -> char {
@@ -172,6 +231,38 @@ impl PieceKind {
             PieceKind::Queen => 'Q',
             PieceKind::King => 'K',
         }
+    }
+
+    pub const fn iter() -> PieceKindIterator {
+        PieceKindIterator::new()
+    }
+}
+
+pub struct PieceKindIterator {
+    maybe_piece_kind: Option<PieceKind>,
+}
+
+impl PieceKindIterator {
+    pub const fn new() -> Self {
+        Self {
+            maybe_piece_kind: Some(PieceKind::Pawn),
+        }
+    }
+}
+
+impl Iterator for PieceKindIterator {
+    type Item = PieceKind;
+    fn next(&mut self) -> Option<Self::Item> {
+        let value = match self.maybe_piece_kind {
+            Some(PieceKind::Pawn) => Some(PieceKind::Rook),
+            Some(PieceKind::Rook) => Some(PieceKind::Knight),
+            Some(PieceKind::Knight) => Some(PieceKind::Bishop),
+            Some(PieceKind::Bishop) => Some(PieceKind::Queen),
+            Some(PieceKind::Queen) => Some(PieceKind::King),
+            Some(PieceKind::King) | None => None,
+        };
+
+        replace(&mut self.maybe_piece_kind, value)
     }
 }
 
@@ -246,13 +337,13 @@ impl Castling {
     }
 
     /// Set given bits to '1' on Castling mask.
-    pub fn add(&mut self, rights: Castling) {
+    pub fn set(&mut self, rights: Castling) {
         assert!(Self::is_mask_valid(rights));
         self.0 |= rights.0;
     }
 
     /// Set given bits to '0' on Castling mask.
-    pub fn remove(&mut self, rights: Castling) {
+    pub fn clear(&mut self, rights: Castling) {
         assert!(Self::is_mask_valid(rights));
         self.0 &= !rights.0;
     }
@@ -262,6 +353,7 @@ impl Castling {
     }
 }
 
+/// Defaults to Castling rights for starting chess position, ALL.
 impl Default for Castling {
     fn default() -> Self {
         Self::ALL
@@ -309,20 +401,20 @@ impl FromStr for Castling {
         // First character is either '-' or in KQkq.
         match chars.next().ok_or("No characters")? {
             '-' => return Ok(castling_rights),
-            'K' => castling_rights.add(Self::W_KING),
-            'Q' => castling_rights.add(Self::W_QUEEN),
-            'k' => castling_rights.add(Self::B_KING),
-            'q' => castling_rights.add(Self::B_QUEEN),
+            'K' => castling_rights.set(Self::W_KING),
+            'Q' => castling_rights.set(Self::W_QUEEN),
+            'k' => castling_rights.set(Self::B_KING),
+            'q' => castling_rights.set(Self::B_QUEEN),
             _ => return Err("First char not of -KQkq"),
         };
 
         // castling_rights is now valid, add rest of rights or return early.
         for ch in chars {
             match ch {
-                'K' => castling_rights.add(Self::W_KING),
-                'Q' => castling_rights.add(Self::W_QUEEN),
-                'k' => castling_rights.add(Self::B_KING),
-                'q' => castling_rights.add(Self::B_QUEEN),
+                'K' => castling_rights.set(Self::W_KING),
+                'Q' => castling_rights.set(Self::W_QUEEN),
+                'k' => castling_rights.set(Self::B_KING),
+                'q' => castling_rights.set(Self::B_QUEEN),
                 _ => return Ok(castling_rights),
             };
         }
@@ -406,7 +498,7 @@ impl Display for Rank {
     }
 }
 
-impl Indexable for (File, Rank) {
+impl SquareIndexable for (File, Rank) {
     fn idx(&self) -> usize {
         let &(file, rank) = self;
         NUM_FILES * rank as usize + file as usize
@@ -420,7 +512,7 @@ pub struct SquareIterator {
 impl SquareIterator {
     fn new() -> Self {
         Self {
-            square_discriminant: 0,
+            square_discriminant: Square::A1 as u8,
         }
     }
 }
@@ -444,7 +536,7 @@ impl Square {
         // If value is in valid range, transmute, otherwise return None.
         (value <= Square::H8 as u8).then(|| unsafe { transmute::<u8, Square>(value) })
     }
-    pub fn from_idx<I: Indexable>(indexable: I) -> Option<Square> {
+    pub fn from_idx<I: SquareIndexable>(indexable: I) -> Option<Square> {
         Self::from_u8(indexable.idx() as u8)
     }
     pub fn iter() -> SquareIterator {
@@ -492,89 +584,50 @@ impl Square {
 
 /// There are better ways to do this, however as I am new to Rust I figure I should
 /// stay away from using unsafe blocks.
-/// TODO: Find a safe way to shorten this.
 impl From<(File, Rank)> for Square {
-    fn from((file, rank): (File, Rank)) -> Square {
+    fn from((file, rank): (File, Rank)) -> Self {
+        use {File::*, Rank::*, Square::*};
+
         match file {
-            File::A => match rank {
-                Rank::R1 => Self::A1,
-                Rank::R2 => Self::A2,
-                Rank::R3 => Self::A3,
-                Rank::R4 => Self::A4,
-                Rank::R5 => Self::A5,
-                Rank::R6 => Self::A6,
-                Rank::R7 => Self::A7,
-                Rank::R8 => Self::A8,
+            #[rustfmt::skip]
+            A => match rank {
+                R1 => A1, R2 => A2, R3 => A3, R4 => A4,
+                R5 => A5, R6 => A6, R7 => A7, R8 => A8,
             },
-            File::B => match rank {
-                Rank::R1 => Self::B1,
-                Rank::R2 => Self::B2,
-                Rank::R3 => Self::B3,
-                Rank::R4 => Self::B4,
-                Rank::R5 => Self::B5,
-                Rank::R6 => Self::B6,
-                Rank::R7 => Self::B7,
-                Rank::R8 => Self::B8,
+            #[rustfmt::skip]
+            B => match rank {
+                R1 => B1, R2 => B2, R3 => B3, R4 => B4,
+                R5 => B5, R6 => B6, R7 => B7, R8 => B8,
             },
-            File::C => match rank {
-                Rank::R1 => Self::C1,
-                Rank::R2 => Self::C2,
-                Rank::R3 => Self::C3,
-                Rank::R4 => Self::C4,
-                Rank::R5 => Self::C5,
-                Rank::R6 => Self::C6,
-                Rank::R7 => Self::C7,
-                Rank::R8 => Self::C8,
+            #[rustfmt::skip]
+            C => match rank {
+                R1 => C1, R2 => C2, R3 => C3, R4 => C4,
+                R5 => C5, R6 => C6, R7 => C7, R8 => C8,
             },
-            File::D => match rank {
-                Rank::R1 => Self::D1,
-                Rank::R2 => Self::D2,
-                Rank::R3 => Self::D3,
-                Rank::R4 => Self::D4,
-                Rank::R5 => Self::D5,
-                Rank::R6 => Self::D6,
-                Rank::R7 => Self::D7,
-                Rank::R8 => Self::D8,
+            #[rustfmt::skip]
+            D => match rank {
+                R1 => D1, R2 => D2, R3 => D3, R4 => D4,
+                R5 => D5, R6 => D6, R7 => D7, R8 => D8,
             },
-            File::E => match rank {
-                Rank::R1 => Self::E1,
-                Rank::R2 => Self::E2,
-                Rank::R3 => Self::E3,
-                Rank::R4 => Self::E4,
-                Rank::R5 => Self::E5,
-                Rank::R6 => Self::E6,
-                Rank::R7 => Self::E7,
-                Rank::R8 => Self::E8,
+            #[rustfmt::skip]
+            E => match rank {
+                R1 => E1, R2 => E2, R3 => E3, R4 => E4,
+                R5 => E5, R6 => E6, R7 => E7, R8 => E8,
             },
-            File::F => match rank {
-                Rank::R1 => Self::F1,
-                Rank::R2 => Self::F2,
-                Rank::R3 => Self::F3,
-                Rank::R4 => Self::F4,
-                Rank::R5 => Self::F5,
-                Rank::R6 => Self::F6,
-                Rank::R7 => Self::F7,
-                Rank::R8 => Self::F8,
+            #[rustfmt::skip]
+            F => match rank {
+                R1 => F1, R2 => F2, R3 => F3, R4 => F4,
+                R5 => F5, R6 => F6, R7 => F7, R8 => F8,
             },
-            File::G => match rank {
-                Rank::R1 => Self::G1,
-                Rank::R2 => Self::G2,
-                Rank::R3 => Self::G3,
-                Rank::R4 => Self::G4,
-                Rank::R5 => Self::G5,
-                Rank::R6 => Self::G6,
-                Rank::R7 => Self::G7,
-                Rank::R8 => Self::G8,
+            #[rustfmt::skip]
+            G => match rank {
+                R1 => G1, R2 => G2, R3 => G3, R4 => G4,
+                R5 => G5, R6 => G6, R7 => G7, R8 => G8,
             },
-            File::H => match rank {
-                Rank::R1 => Self::H1,
-                Rank::R2 => Self::H2,
-                Rank::R3 => Self::H3,
-                Rank::R4 => Self::H4,
-                Rank::R5 => Self::H5,
-                Rank::R6 => Self::H6,
-                Rank::R7 => Self::H7,
-                Rank::R8 => Self::H8,
+            #[rustfmt::skip]
+            H => match rank {
+                R1 => H1, R2 => H2, R3 => H3, R4 => H4,
+                R5 => H5, R6 => H6, R7 => H7, R8 => H8,
             },
         }
     }
@@ -597,9 +650,29 @@ impl Display for Square {
     }
 }
 
-impl Indexable for Square {
+impl SquareIndexable for Square {
     fn idx(&self) -> usize {
         *self as usize
+    }
+}
+
+impl Move {
+    pub fn new(from: Square, to: Square, promotion: Option<PieceKind>) -> Self {
+        Self {
+            from,
+            to,
+            promotion,
+        }
+    }
+    // Getters
+    pub fn from(&self) -> &Square {
+        &self.from
+    }
+    pub fn to(&self) -> &Square {
+        &self.to
+    }
+    pub fn promotion(&self) -> &Option<PieceKind> {
+        &self.promotion
     }
 }
 
@@ -625,7 +698,7 @@ mod tests {
         assert!(cr.has(Castling::B_SIDE));
         assert!(cr.is_none() == false);
 
-        cr.remove(Castling::W_KING);
+        cr.clear(Castling::W_KING);
         assert!(!cr.has(Castling::ALL));
         assert!(!cr.has(Castling::W_KING));
         assert!(cr.has(Castling::W_QUEEN));
@@ -635,7 +708,7 @@ mod tests {
         assert!(cr.has(Castling::B_SIDE));
         assert!(cr.is_none() == false);
 
-        cr.remove(Castling::W_QUEEN);
+        cr.clear(Castling::W_QUEEN);
         assert!(!cr.has(Castling::ALL));
         assert!(!cr.has(Castling::W_KING));
         assert!(!cr.has(Castling::W_QUEEN));
@@ -645,7 +718,7 @@ mod tests {
         assert!(cr.has(Castling::B_SIDE));
         assert!(cr.is_none() == false);
 
-        cr.remove(Castling::B_KING);
+        cr.clear(Castling::B_KING);
         assert!(!cr.has(Castling::ALL));
         assert!(!cr.has(Castling::W_KING));
         assert!(!cr.has(Castling::W_QUEEN));
@@ -655,7 +728,7 @@ mod tests {
         assert!(!cr.has(Castling::B_SIDE));
         assert!(cr.is_none() == false);
 
-        cr.remove(Castling::B_QUEEN);
+        cr.clear(Castling::B_QUEEN);
         assert!(!cr.has(Castling::ALL));
         assert!(!cr.has(Castling::W_KING));
         assert!(!cr.has(Castling::W_QUEEN));
@@ -747,33 +820,30 @@ mod tests {
 
     #[test]
     fn square_to_from_file_rank() {
-        {
-            let a1 = Square::from((File::A, Rank::R1));
-            assert_eq!(a1.file(), File::A);
-            assert_eq!(a1.rank(), Rank::R1);
-            assert_eq!(a1.file_u8(), File::A as u8);
-            assert_eq!(a1.rank_u8(), Rank::R1 as u8);
-        }
-        {
-            let a7 = Square::from((File::A, Rank::R7));
-            assert_eq!(a7.file(), File::A);
-            assert_eq!(a7.rank(), Rank::R7);
-            assert_eq!(a7.file_u8(), File::A as u8);
-            assert_eq!(a7.rank_u8(), Rank::R7 as u8);
-        }
-        {
-            let h8 = Square::from((File::H, Rank::R8));
-            assert_eq!(h8.file(), File::H);
-            assert_eq!(h8.rank(), Rank::R8);
-            assert_eq!(h8.file_u8(), File::H as u8);
-            assert_eq!(h8.rank_u8(), Rank::R8 as u8);
-        }
-        {
-            let e4 = Square::from((File::E, Rank::R4));
-            assert_eq!(e4.file(), File::E);
-            assert_eq!(e4.rank(), Rank::R4);
-            assert_eq!(e4.file_u8(), File::E as u8);
-            assert_eq!(e4.rank_u8(), Rank::R4 as u8);
-        }
+        use File::*;
+        use Rank::*;
+        let a1 = Square::from((A, R1));
+        assert_eq!(a1.file(), A);
+        assert_eq!(a1.rank(), R1);
+        assert_eq!(a1.file_u8(), A as u8);
+        assert_eq!(a1.rank_u8(), R1 as u8);
+
+        let a7 = Square::from((A, R7));
+        assert_eq!(a7.file(), A);
+        assert_eq!(a7.rank(), R7);
+        assert_eq!(a7.file_u8(), A as u8);
+        assert_eq!(a7.rank_u8(), R7 as u8);
+
+        let h8 = Square::from((H, R8));
+        assert_eq!(h8.file(), H);
+        assert_eq!(h8.rank(), R8);
+        assert_eq!(h8.file_u8(), H as u8);
+        assert_eq!(h8.rank_u8(), R8 as u8);
+
+        let e4 = Square::from((E, R4));
+        assert_eq!(e4.file(), E);
+        assert_eq!(e4.rank(), R4);
+        assert_eq!(e4.file_u8(), E as u8);
+        assert_eq!(e4.rank_u8(), R4 as u8);
     }
 }

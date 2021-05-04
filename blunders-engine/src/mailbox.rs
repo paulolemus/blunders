@@ -1,12 +1,15 @@
-//! mailbox.rs
-//! A mailbox is a board-oriented representation of a chess board.
-//! Mailbox is an array of size Files x Ranks where each index may
-//! contain a chess piece or be empty.
+//! A [mailbox](https://www.chessprogramming.org/Mailbox) is a square-centric
+//! representation of a chess board.
+//!
+//! A Mailbox is an array of size Files x Ranks where each index may contain a
+//! chess piece or be empty.
 
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
-use crate::coretypes::{Color, Indexable, Piece, PieceKind, Square, NUM_FILES, NUM_RANKS};
+use crate::coretypes::{
+    Color, Piece, PieceKind, Square, SquareIndexable, NUM_FILES, NUM_RANKS, NUM_SQUARES,
+};
 
 /// Classic 8x8 square board representation of Chess board.
 /// Index starts at A1.
@@ -22,15 +25,10 @@ pub struct Mailbox {
 impl Mailbox {
     const FILES: usize = NUM_FILES;
     const RANKS: usize = NUM_RANKS;
-    const SIZE: usize = NUM_FILES * NUM_RANKS;
+    const SIZE: usize = NUM_SQUARES;
 
-    /// Same as Default::default().
+    /// Creates an empty Mailbox, where all squares are None.
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Create Empty Mailbox with all values set to None.
-    pub fn with_none() -> Self {
         Mailbox {
             board: [None; Mailbox::SIZE],
         }
@@ -53,13 +51,13 @@ impl IndexMut<usize> for Mailbox {
     }
 }
 
-impl<I: Indexable> Index<I> for Mailbox {
+impl<I: SquareIndexable> Index<I> for Mailbox {
     type Output = Option<Piece>;
     fn index(&self, idx: I) -> &Self::Output {
         &self.board[idx.idx()]
     }
 }
-impl<I: Indexable> IndexMut<I> for Mailbox {
+impl<I: SquareIndexable> IndexMut<I> for Mailbox {
     fn index_mut(&mut self, idx: I) -> &mut Self::Output {
         &mut self.board[idx.idx()]
     }
@@ -71,7 +69,7 @@ impl Default for Mailbox {
         use Color::*;
         use PieceKind::*;
         use Square::*;
-        let mut mb = Mailbox::with_none();
+        let mut mb = Mailbox::new();
 
         mb[A1] = Some(Piece::new(White, Rook));
         mb[B1] = Some(Piece::new(White, Knight));

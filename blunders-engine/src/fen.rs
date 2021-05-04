@@ -1,10 +1,10 @@
-//! fen.rs
 //! Forsyth-Edwards Notation, a standard notation for describing a chess position.
-//! https://en.wikipedia.org/wiki/Forsyth%E2%80%93Edwards_Notation
-//! https://www.chessprogramming.org/Forsyth-Edwards_Notation
 //!
-//! Example:
-//! Starting Chess FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+//! [Wikipedia FEN](https://en.wikipedia.org/wiki/Forsyth%E2%80%93Edwards_Notation)\
+//! [Chess Programming FEN](https://www.chessprogramming.org/Forsyth-Edwards_Notation)\
+//!
+//! Example:\
+//! Starting Chess FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 use std::convert::TryFrom;
 use std::fmt::{self, Display};
@@ -45,7 +45,7 @@ impl FenComponent for Mailbox {
 
         let mut num_ranks = 0u32;
         let mut squares = Square::iter();
-        let mut board = Mailbox::with_none();
+        let mut board = Mailbox::new();
 
         // Iterate FEN string in normal Rank-File order.
         for rank_str in s.split('/').rev() {
@@ -177,6 +177,11 @@ pub struct Fen {
 }
 
 impl Fen {
+    /// Fen representing starting chess position.
+    pub fn start_position() -> Self {
+        Self::default()
+    }
+
     /// Immutable Getters
     pub fn placement(&self) -> &Mailbox {
         &self.placement
