@@ -166,6 +166,13 @@ impl BitOr for Bitboard {
     }
 }
 
+impl BitOr<&Bitboard> for Bitboard {
+    type Output = Self;
+    fn bitor(self, rhs: &Bitboard) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
 impl BitOr<Bitboard> for &Bitboard {
     type Output = Bitboard;
     fn bitor(self, rhs: Bitboard) -> Self::Output {

@@ -1,7 +1,4 @@
 //! The fundamental and simple types of `blunders_engine`.
-//!
-//! Types:
-//! Color, PieceKind, Piece, Castling, File, Rank, Square, MoveCount
 
 use std::convert::TryFrom;
 use std::fmt::{self, Display, Write};
@@ -10,18 +7,18 @@ use std::mem::transmute; // unsafe
 use std::ops::{BitOr, Not};
 use std::str::FromStr;
 
-///
-/// Constants
-///
+///////////////
+// Constants //
+///////////////
 pub const NUM_FILES: usize = 8; // A, B, C, D, E, F, G, H
 pub const NUM_RANKS: usize = 8; // 1, 2, 3, 4, 5, 6, 7, 8
 pub const NUM_SQUARES: usize = NUM_FILES * NUM_RANKS;
 const WHITE_ARRAY_OFFSET: u8 = 0;
 const BLACK_ARRAY_OFFSET: u8 = 6;
 
-///
-/// Data and Structures
-///
+/////////////////////////
+// Data and Structures //
+/////////////////////////
 
 /// Counter for half-move clock and full-moves.
 pub type MoveCount = u32;
@@ -119,13 +116,13 @@ pub struct Move {
     pub(crate) promotion: Option<PieceKind>,
 }
 
-///
-/// Traits
-///
+////////////
+// Traits //
+////////////
 
 /// SquareIndexable
 /// A chessboard has 64 squares on it. SquareIndexable can be implemented
-/// for types whose values can map directly to a chess Square's value.
+/// for types whose values can map directly to a chess Square's index.
 pub trait SquareIndexable {
     /// idx must be implemented.
     /// idx(&self) must return a number between 0-63 inclusive, representing
@@ -143,13 +140,13 @@ pub trait SquareIndexable {
 // Blanket impl on references of types that are SquareIndexable.
 impl<I: SquareIndexable> SquareIndexable for &I {
     fn idx(&self) -> usize {
-        (*self).idx()
+        I::idx(*self)
     }
 }
 
-///
-/// Implementations
-///
+//////////////////////
+/// Implementations //
+//////////////////////
 
 impl Color {
     /// FEN compliant conversion.
@@ -261,7 +258,6 @@ impl Iterator for PieceKindIterator {
             Some(PieceKind::Queen) => Some(PieceKind::King),
             Some(PieceKind::King) | None => None,
         };
-
         replace(&mut self.maybe_piece_kind, value)
     }
 }
@@ -297,7 +293,6 @@ impl From<&Piece> for char {
     }
 }
 
-// Try to convert char into a Piece.
 impl TryFrom<char> for Piece {
     type Error = &'static str;
     fn try_from(value: char) -> Result<Self, Self::Error> {
@@ -325,6 +320,11 @@ impl Display for Piece {
 }
 
 impl Castling {
+    /// Make new Castling with all rights of initial chess position.
+    pub fn start_position() -> Self {
+        Self::ALL
+    }
+
     /// Returns true if Castling mask has all of provided bits.
     pub fn has(&self, rights: Castling) -> bool {
         assert!(Self::is_mask_valid(rights));
@@ -356,7 +356,7 @@ impl Castling {
 /// Defaults to Castling rights for starting chess position, ALL.
 impl Default for Castling {
     fn default() -> Self {
-        Self::ALL
+        Self::start_position()
     }
 }
 
@@ -367,6 +367,7 @@ impl BitOr for Castling {
     }
 }
 
+/// Displays in FEN-component format.
 impl Display for Castling {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut castling_str = String::with_capacity(4);

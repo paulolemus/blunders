@@ -1,103 +1,11 @@
 //! Holds Position struct, the most important data structure for the engine.
 //! Position represents a chess position.
 
-use std::ops::{Index, IndexMut};
+use std::fmt::{self, Display};
 
-use crate::bitboard::Bitboard;
+use crate::boardrepr::PieceSets;
 use crate::coretypes::{Castling, Color, Move, MoveCount, Piece, PieceKind, Square};
 use crate::fen::Fen;
-use crate::mailbox::Mailbox;
-
-/// A Piece-Centric representation of pieces on a chessboard.
-/// A Bitboard is used to encode the squares of each chess piece.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-struct Pieces {
-    pieces: [Bitboard; Self::SIZE],
-}
-
-impl Pieces {
-    const SIZE: usize = 12; // 1 White, 1 Black BB for each piece type.
-    fn new() -> Self {
-        Pieces {
-            pieces: [Bitboard::EMPTY; Self::SIZE],
-        }
-    }
-}
-
-impl Index<&Piece> for Pieces {
-    type Output = Bitboard;
-    fn index(&self, piece: &Piece) -> &Self::Output {
-        &self.pieces[piece.color as usize + piece.piece_kind as usize]
-    }
-}
-
-impl IndexMut<&Piece> for Pieces {
-    fn index_mut(&mut self, piece: &Piece) -> &mut Self::Output {
-        &mut self.pieces[piece.color as usize + piece.piece_kind as usize]
-    }
-}
-
-/// Get a slice of all pieces of same color.
-/// ```rust
-/// # use blunders_engine::coretypes::Color;
-/// # assert!((Color::White as usize) < Color::Black as usize);
-/// ```
-impl Index<&Color> for Pieces {
-    type Output = [Bitboard];
-    fn index(&self, color: &Color) -> &Self::Output {
-        match color {
-            Color::White => &self.pieces[Color::White as usize..Color::Black as usize],
-            Color::Black => &self.pieces[Color::Black as usize..Self::SIZE],
-        }
-    }
-}
-
-impl IndexMut<&Color> for Pieces {
-    fn index_mut(&mut self, color: &Color) -> &mut Self::Output {
-        match color {
-            Color::White => &mut self.pieces[Color::White as usize..Color::Black as usize],
-            Color::Black => &mut self.pieces[Color::Black as usize..Self::SIZE],
-        }
-    }
-}
-
-impl From<&Mailbox> for Pieces {
-    fn from(mb: &Mailbox) -> Self {
-        let mut pieces = Pieces::new();
-
-        for square in Square::iter() {
-            if let Some(ref piece) = mb[square] {
-                pieces[piece].set_square(square);
-            }
-        }
-        pieces
-    }
-}
-
-impl From<&Pieces> for Mailbox {
-    fn from(pieces: &Pieces) -> Mailbox {
-        let mut mb = Mailbox::new();
-
-        for color in Color::iter() {
-            for piece_kind in PieceKind::iter() {
-                let piece = Piece::new(color, piece_kind);
-                pieces[&piece]
-                    .squares()
-                    .into_iter()
-                    .for_each(|square| mb[square] = Some(piece));
-            }
-        }
-        mb
-    }
-}
-
-/// Defaults to standard chess piece starting positions.
-impl Default for Pieces {
-    fn default() -> Self {
-        let mb: Mailbox = Mailbox::default();
-        Self::from(&mb)
-    }
-}
 
 /// struct Position
 /// A complete data set that can represent any chess position.
@@ -110,18 +18,45 @@ impl Default for Pieces {
 /// * fullmoves - Starts at 1, increments after each black player's move.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Position {
-    pieces: Pieces,
-    side_to_move: Color,
-    castling: Castling,
-    en_passant: Option<Square>,
-    halfmoves: MoveCount,
-    fullmoves: MoveCount,
+    pub(crate) pieces: PieceSets,
+    pub(crate) side_to_move: Color,
+    pub(crate) castling: Castling,
+    pub(crate) en_passant: Option<Square>,
+    pub(crate) halfmoves: MoveCount,
+    pub(crate) fullmoves: MoveCount,
 }
 
 impl Position {
     /// Standard chess start position.
     pub fn start_position() -> Self {
-        Default::default()
+        Self {
+            pieces: PieceSets::start_position(),
+            side_to_move: Color::White,
+            castling: Castling::start_position(),
+            en_passant: None,
+            halfmoves: 0,
+            fullmoves: 1,
+        }
+    }
+
+    /// Const getters.
+    pub fn pieces(&self) -> &PieceSets {
+        &self.pieces
+    }
+    pub fn side_to_move(&self) -> &Color {
+        &self.side_to_move
+    }
+    pub fn castling(&self) -> &Castling {
+        &self.castling
+    }
+    pub fn en_passant(&self) -> &Option<Square> {
+        &self.en_passant
+    }
+    pub fn halfmoves(&self) -> &MoveCount {
+        &self.halfmoves
+    }
+    pub fn fullmoves(&self) -> &MoveCount {
+        &self.fullmoves
     }
 
     /// Apply a move to self, in place.
@@ -167,7 +102,7 @@ impl Position {
         todo!()
     }
 
-    /// Generates a new Position from applying move on current move.
+    /// Generates a new Position from applying move on current Position.
     pub fn make_move(&self, move_: Move) -> Self {
         let mut position_clone: Position = self.clone();
         position_clone.do_move(move_);
@@ -199,27 +134,15 @@ impl Position {
 /// Defaults to standard chess start position.
 impl Default for Position {
     fn default() -> Self {
-        Self {
-            pieces: Default::default(),
-            side_to_move: Color::White,
-            castling: Default::default(),
-            en_passant: None,
-            halfmoves: 0,
-            fullmoves: 1,
-        }
+        Self::start_position()
     }
 }
 
-impl From<Fen> for Position {
-    fn from(fen: Fen) -> Self {
-        Self {
-            pieces: fen.placement().into(),
-            side_to_move: *fen.side_to_move(),
-            castling: *fen.castling(),
-            en_passant: *fen.en_passant(),
-            halfmoves: *fen.halfmove_clock(),
-            fullmoves: *fen.fullmove_number(),
-        }
+/// Displays pretty-printed chess board and Fen string representing Position.
+impl Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // print: position, FEN string
+        write!(f, "{}\n Fen: {}\n", self.pieces, self.to_fen())
     }
 }
 
@@ -228,10 +151,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn start_pos_equal_to_fen_start_pos() {
+    fn pretty_print_position() {
         let start_pos = Position::start_position();
-        let from_fen_start_pos = Position::from(Fen::start_position());
-        assert_eq!(start_pos, from_fen_start_pos);
+        println!("{}", start_pos);
     }
 
     #[test]

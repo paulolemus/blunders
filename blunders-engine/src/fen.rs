@@ -7,12 +7,12 @@
 //! Starting Chess FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 use std::convert::TryFrom;
-use std::fmt::{self, Display};
 use std::ops::RangeInclusive;
 use std::str::FromStr;
 
+use crate::boardrepr::{Mailbox, PieceSets};
 use crate::coretypes::{Castling, Color, File, MoveCount, Piece, Rank, Square};
-use crate::mailbox::Mailbox;
+use crate::position::Position;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ParseFenError {
@@ -25,9 +25,75 @@ pub enum ParseFenError {
     FullMoveNumber,
 }
 
+/// Implement Fen for any types which can be fully parsed from a FEN string.
+pub trait Fen: Sized {
+    /// Attempt to parse a Fen string into implementing type.
+    fn parse_fen(s: &str) -> Result<Self, ParseFenError>;
+
+    /// Returns string representation of implementing type in Fen format.
+    fn to_fen(&self) -> String;
+
+    /// HalfMove Clock is any non-negative number.
+    fn parse_halfmove_clock(s: &str) -> Result<MoveCount, ParseFenError> {
+        s.parse::<MoveCount>()
+            .map_err(|_| ParseFenError::HalfMoveClock)
+    }
+
+    /// FullMove Number starts at 1, and can increment infinitely.
+    fn parse_fullmove_number(s: &str) -> Result<MoveCount, ParseFenError> {
+        let fullmove: MoveCount = s.parse().unwrap_or(0);
+        if fullmove != 0 {
+            Ok(fullmove)
+        } else {
+            Err(ParseFenError::FullMoveNumber)
+        }
+    }
+}
+
+impl Fen for Position {
+    /// Attempt to parse a Fen string into implementing type.
+    fn parse_fen(s: &str) -> Result<Self, ParseFenError> {
+        // Ensure 6 whitespace separated components.
+        if s.split_whitespace().count() != 6 {
+            return Err(ParseFenError::IllFormed);
+        }
+        let fen_parts: Vec<&str> = s.split_whitespace().collect();
+
+        // Fen Order: Placement/Side-To-Move/Castling/En-Passant/Halfmove/Fullmove
+        let pieces: PieceSets = FenComponent::try_from_fen_str(fen_parts[0])?;
+        let side_to_move: Color = FenComponent::try_from_fen_str(fen_parts[1])?;
+        let castling: Castling = FenComponent::try_from_fen_str(fen_parts[2])?;
+        let en_passant: Option<Square> = FenComponent::try_from_fen_str(fen_parts[3])?;
+        let halfmoves: MoveCount = Self::parse_halfmove_clock(fen_parts[4])?;
+        let fullmoves: MoveCount = Self::parse_fullmove_number(fen_parts[5])?;
+
+        Ok(Self {
+            pieces,
+            side_to_move,
+            castling,
+            en_passant,
+            halfmoves,
+            fullmoves,
+        })
+    }
+
+    /// Returns string representation of implementing type in Fen format.
+    fn to_fen(&self) -> String {
+        format!(
+            "{} {} {} {} {} {}",
+            self.pieces().to_fen_str(),
+            self.side_to_move().to_fen_str(),
+            self.castling().to_fen_str(),
+            self.en_passant().to_fen_str(),
+            self.halfmoves(),
+            self.fullmoves()
+        )
+    }
+}
+
 /// Allows converting data that can be represented as a FEN sub-string
 /// to and from &str.
-trait FenComponent: Sized {
+pub trait FenComponent: Sized {
     type Error;
     fn try_from_fen_str(s: &str) -> Result<Self, Self::Error>;
     fn to_fen_str(&self) -> String;
@@ -109,6 +175,17 @@ impl FenComponent for Mailbox {
     }
 }
 
+/// Placement FenComponent.
+impl FenComponent for PieceSets {
+    type Error = ParseFenError;
+    fn try_from_fen_str(s: &str) -> Result<Self, Self::Error> {
+        Mailbox::try_from_fen_str(s).map(|mailbox| Self::from(&mailbox))
+    }
+    fn to_fen_str(&self) -> String {
+        Mailbox::from(self).to_fen_str()
+    }
+}
+
 /// Side-To-Move FenComponent.
 impl FenComponent for Color {
     type Error = ParseFenError;
@@ -164,118 +241,6 @@ impl FenComponent for Option<Square> {
     }
 }
 
-/// An intermediary structure used for converting
-/// to and from String, and to and from A Position object.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Fen {
-    placement: Mailbox,
-    side_to_move: Color,
-    castling: Castling,
-    en_passant: Option<Square>,
-    halfmove_clock: MoveCount,
-    fullmove_number: MoveCount,
-}
-
-impl Fen {
-    /// Fen representing starting chess position.
-    pub fn start_position() -> Self {
-        Self::default()
-    }
-
-    /// Immutable Getters
-    pub fn placement(&self) -> &Mailbox {
-        &self.placement
-    }
-    pub fn side_to_move(&self) -> &Color {
-        &self.side_to_move
-    }
-    pub fn castling(&self) -> &Castling {
-        &self.castling
-    }
-    pub fn en_passant(&self) -> &Option<Square> {
-        &self.en_passant
-    }
-    pub fn halfmove_clock(&self) -> &MoveCount {
-        &self.halfmove_clock
-    }
-    pub fn fullmove_number(&self) -> &MoveCount {
-        &self.fullmove_number
-    }
-
-    /// HalfMove Clock is any non-negative number.
-    fn parse_halfmove_clock(s: &str) -> Result<MoveCount, ParseFenError> {
-        s.parse::<MoveCount>()
-            .map_err(|_| ParseFenError::HalfMoveClock)
-    }
-
-    /// FullMove Number starts at 1, and can increment infinitely.
-    pub fn parse_fullmove_number(s: &str) -> Result<MoveCount, ParseFenError> {
-        let fullmove: MoveCount = s.parse().unwrap_or(0);
-        if fullmove != 0 {
-            Ok(fullmove)
-        } else {
-            Err(ParseFenError::FullMoveNumber)
-        }
-    }
-}
-
-impl Default for Fen {
-    /// Fen for starting chess position.
-    fn default() -> Self {
-        Fen {
-            placement: Mailbox::default(),
-            side_to_move: Color::White,
-            castling: Castling::default(),
-            en_passant: None,
-            halfmove_clock: 0,
-            fullmove_number: 1,
-        }
-    }
-}
-
-impl FromStr for Fen {
-    type Err = ParseFenError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Ensure 6 whitespace separated components.
-        if s.split_whitespace().count() != 6 {
-            return Err(ParseFenError::IllFormed);
-        }
-        let fen_parts: Vec<&str> = s.split_whitespace().collect();
-
-        // Fen Order: Placement/Side-To-Move/Castling/En-Passant/Halfmove/Fullmove
-        let placement: Mailbox = FenComponent::try_from_fen_str(fen_parts[0])?;
-        let side_to_move: Color = FenComponent::try_from_fen_str(fen_parts[1])?;
-        let castling: Castling = FenComponent::try_from_fen_str(fen_parts[2])?;
-        let en_passant: Option<Square> = FenComponent::try_from_fen_str(fen_parts[3])?;
-        let halfmove_clock = Fen::parse_halfmove_clock(fen_parts[4])?;
-        let fullmove_number = Fen::parse_fullmove_number(fen_parts[5])?;
-
-        Ok(Fen {
-            placement,
-            side_to_move,
-            castling,
-            en_passant,
-            halfmove_clock,
-            fullmove_number,
-        })
-    }
-}
-
-impl Display for Fen {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{} {} {} {} {} {}",
-            self.placement.to_fen_str(),
-            self.side_to_move.to_fen_str(),
-            self.castling.to_fen_str(),
-            self.en_passant.to_fen_str(),
-            self.halfmove_clock,
-            self.fullmove_number
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,13 +251,13 @@ mod tests {
         //! Assert that starting FEN string, parsed Fen object, and default Fen object
         //! are equivalent.
         const FEN_STR: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        let fen: Fen = FEN_STR.parse().unwrap();
-        let default_fen: Fen = Fen::default();
+        let pos = Position::parse_fen(FEN_STR).unwrap();
+        let start_pos = Position::start_position();
 
-        assert_eq!(fen, default_fen);
-        assert_eq!(fen.to_string(), FEN_STR);
-        assert_eq!(default_fen.to_string(), FEN_STR);
-        println!("{}", fen.to_string());
+        assert_eq!(pos, start_pos);
+        assert_eq!(pos.to_fen(), FEN_STR);
+        assert_eq!(start_pos.to_fen(), FEN_STR);
+        println!("{}", start_pos.to_fen());
     }
 
     #[test]
