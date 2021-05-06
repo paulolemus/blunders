@@ -1,5 +1,7 @@
 //! Holds Position struct, the most important data structure for the engine.
 //! Position represents a chess position.
+//! Positions and moves are assumed to be strictly legal,
+//! and have undefined behavior for illegal activity.
 
 use std::fmt::{self, Display};
 
@@ -73,10 +75,10 @@ impl Position {
 
         let pawn = Bitboard::from(move_.from());
         let to = Bitboard::from(move_.to());
-        let double_push = mg::pawn_pseudo_double_moves(&pawn, active_piece.color());
+        let double_push = mg::pawn_double_pushes(&pawn, active_piece.color());
 
         if to == double_push {
-            self.en_passant = mg::pawn_pseudo_single_moves(&pawn, active_piece.color())
+            self.en_passant = mg::pawn_single_pushes(&pawn, active_piece.color())
                 .squares()
                 .into_iter()
                 .next();
@@ -114,35 +116,33 @@ impl Position {
     /// `do_move` does not check if the move is legal or not,
     /// it simply executes it while assuming legality.
     /// Current behavior:
-    /// Does nothing if active player has no piece on from square.
     /// Removes from square from active player piece on that square.
     /// Removes to square from all passive player pieces.
+    /// Panics if from square has no active player piece.
     pub fn do_move(&mut self, move_: Move) {
-        // Find piece on `from` square for active player if exists.
-        let maybe_active_piece: Option<Piece> = PieceKind::iter()
+        // Find piece on `from` square for active player.
+        let active_piece: Piece = PieceKind::iter()
             .map(|piece_kind| Piece::new(*self.side_to_move(), piece_kind))
-            .find(|piece| self.pieces()[piece].has_square(move_.from));
+            .find(|piece| self.pieces()[piece].has_square(move_.from))
+            .unwrap();
 
-        // Only do something if we have a piece to move.
-        if let Some(active_piece) = maybe_active_piece {
-            self.update_en_passant(&move_, &active_piece);
-            self.update_move_counters(&move_, &active_piece);
+        self.update_en_passant(&move_, &active_piece);
+        self.update_move_counters(&move_, &active_piece);
 
-            self.pieces[&active_piece].clear_square(move_.from);
+        self.pieces[&active_piece].clear_square(move_.from);
 
-            // Clear all passive (non-playing) player's pieces on `to` square.
-            let passive_player = !self.side_to_move();
-            PieceKind::iter()
-                .map(|piece_kind| Piece::new(passive_player, piece_kind))
-                .for_each(|passive_piece| self.pieces[&passive_piece].clear_square(move_.to));
+        // Clear all passive (non-playing) player's pieces on `to` square.
+        let passive_player = !self.side_to_move();
+        self.pieces[&passive_player]
+            .iter_mut()
+            .for_each(|bb| bb.clear_square(move_.to));
 
-            // If promoting, set promoting piece. Otherwise set active piece.
-            if let Some(promoting_piece_kind) = move_.promotion {
-                let promoting_piece = Piece::new(*self.side_to_move(), promoting_piece_kind);
-                self.pieces[&promoting_piece].set_square(move_.to);
-            } else {
-                self.pieces[&active_piece].set_square(move_.to);
-            }
+        // If promoting, set promoting piece. Otherwise set active piece.
+        if let Some(promoting_piece_kind) = move_.promotion {
+            let promoting_piece = Piece::new(*self.side_to_move(), promoting_piece_kind);
+            self.pieces[&promoting_piece].set_square(move_.to);
+        } else {
+            self.pieces[&active_piece].set_square(move_.to);
         }
     }
 
@@ -184,10 +184,7 @@ impl Position {
 
     /// Counts and returns number of checks on current player's king.
     pub(crate) fn num_active_king_checks(&self) -> u32 {
-        let active_king = self.pieces[&(self.side_to_move, King)];
-        let king = active_king.squares()[0];
         let passive_player = !self.side_to_move();
-
         let passive_pawns = self.pieces[&(passive_player, Pawn)];
         let passive_knights = self.pieces[&(passive_player, Knight)];
         let passive_king = self.pieces[&(passive_player, King)];
@@ -196,6 +193,8 @@ impl Position {
         let passive_queens = self.pieces[&(passive_player, Queen)];
 
         let occupied = self.pieces().occupied();
+        let active_king = self.pieces[&(self.side_to_move, King)];
+        let king = active_king.squares()[0];
 
         let pawn_attackers = mg::pawn_attackers_to(&king, &passive_pawns, &passive_player);
         let knight_attackers = mg::knight_attackers_to(&king, &passive_knights);
@@ -212,16 +211,83 @@ impl Position {
             + queen_attackers.count_squares()
     }
 
-    /// Returns a list of all legal moves for active player.
+    /// Returns a list of all legal moves for active player in current position.
     /// Notes:
     /// If En-Passant, need to check for sliding piece check discovery.
     /// If king is in check, number of moves are restricted.
     /// If king is pinned, number of moves are restricted.
     /// If not pinned or
-    pub fn generate_legal_moves(&self) -> Vec<Move> {
-        let legal_moves = Vec::with_capacity(64);
+    pub fn get_legal_moves(&self) -> Vec<Move> {
+        let (single_check, double_check) = self.active_king_checks();
+
+        if double_check {
+            self.generate_legal_double_check_moves()
+        } else if single_check {
+            self.generate_legal_single_check_moves()
+        } else {
+            self.generate_legal_no_check_moves()
+        }
+    }
+
+    /// Generate king moves assuming double check.
+    /// Only the king can move when in double check.
+    fn generate_legal_double_check_moves(&self) -> Vec<Move> {
+        let king = self.pieces[(self.side_to_move, King)];
+
+        // Generate bitboard with all squares attacked by passive player.
+        let passive_player = !self.side_to_move;
+        let passive_pawns = self.pieces[(passive_player, Pawn)];
+        let passive_knights = self.pieces[(passive_player, Knight)];
+        let passive_king = self.pieces[(passive_player, King)];
+        let passive_rooks = self.pieces[(passive_player, Rook)];
+        let passive_bishops = self.pieces[(passive_player, Bishop)];
+        let passive_queens = self.pieces[(passive_player, Queen)];
+
+        // Sliding pieces x-ray king.
+        let occupied_without_king = self.pieces.occupied() & !king;
+        let attacked = mg::pawn_attacks(&passive_pawns, &passive_player)
+            | mg::knight_attacks(&passive_knights)
+            | mg::king_attacks(&passive_king)
+            | mg::rook_all_attacks(&passive_rooks, &occupied_without_king)
+            | mg::bishop_all_attacks(&passive_bishops, &occupied_without_king)
+            | mg::queen_all_attacks(&passive_queens, &occupied_without_king);
+
+        // Filter illegal moves from pseudo-legal king moves.
+        // King cannot move into attacked square, or into piece of same color.
+        let mut possible_moves = mg::king_attacks(&king);
+        possible_moves.remove(&attacked);
+        possible_moves.remove(&self.pieces.color_occupied(&self.side_to_move));
+
+        // Convert remaining move squares into Move structs.
+        let mut legal_moves = Vec::with_capacity(8); // 8 max possible moves, although unlikely.
+        let from = king.squares()[0];
+        for to in possible_moves.squares() {
+            legal_moves.push(Move::new(from, to, None));
+        }
 
         legal_moves
+    }
+
+    /// Generate moves assuming active player is in single check.
+    fn generate_legal_single_check_moves(&self) -> Vec<Move> {
+        // Can capture checking piece with non-absolute-pinned piece,
+        // move king to non-attacked squares,
+        // block checking piece with non-absolute-pinned piece
+        todo!()
+    }
+
+    /// Generate moves assuming active player is not in check.
+    fn generate_legal_no_check_moves(&self) -> Vec<Move> {
+        // moves:
+        // move absolutely-pinned piece along pin direction
+        // Castling with no pieces or attacked squares between
+        // en-passant with horizontal move test and conditionally pinned?
+
+        // king not attacked by pawns, knights, kings.
+        // For non king moves, only need to consider leaving absolute pin.
+        // For king moves, need to consider all attacked squares.
+
+        todo!()
     }
 }
 
@@ -243,6 +309,7 @@ impl Display for Position {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use Square::*;
 
     #[test]
     fn pretty_print_position() {
@@ -278,5 +345,25 @@ mod tests {
         assert_eq!(check4_1.num_active_king_checks(), 4);
         assert_eq!(check5_1.num_active_king_checks(), 5);
         assert_eq!(check5_2.num_active_king_checks(), 5);
+    }
+
+    #[test]
+    fn legal_double_check_moves() {
+        let pos0_1 = Position::parse_fen("4R2k/7p/6p1/8/8/2B5/8/1K6 b - - 0 1").unwrap();
+        let pos1_1 = Position::parse_fen("8/5K2/8/3Qk3/4R3/8/8/8 b - - 0 1").unwrap();
+        let pos3_1 = Position::parse_fen("8/2k5/8/8/4Kr2/4r3/8/8 w - - 0 1").unwrap();
+
+        let moves0_1 = pos0_1.generate_legal_double_check_moves();
+        let moves1_1 = pos1_1.generate_legal_double_check_moves();
+        let moves3_1 = pos3_1.generate_legal_double_check_moves();
+        assert_eq!(moves0_1.len(), 0);
+        assert_eq!(moves1_1.len(), 1);
+        assert_eq!(moves3_1.len(), 3);
+
+        assert!(moves1_1.contains(&Move::new(E5, D5, None)));
+
+        assert!(moves3_1.contains(&Move::new(E4, D5, None)));
+        assert!(moves3_1.contains(&Move::new(E4, E3, None)));
+        assert!(moves3_1.contains(&Move::new(E4, F4, None)));
     }
 }

@@ -45,14 +45,14 @@ pub fn queen_pattern<I: SquareIndexable>(idx: I) -> Bitboard {
 
 /// Generate pseudo-legal moves for all pawns of a color.
 /// Currently generating separately per color because moves are not symmetrical.
-pub fn pawn_pseudo_moves(pawns: &Bitboard, color: &Color) -> Bitboard {
-    let single_push_bb = pawn_pseudo_single_moves(pawns, color);
-    let double_push_bb = pawn_pseudo_double_moves(pawns, color);
+pub fn pawn_pushes(pawns: &Bitboard, color: &Color) -> Bitboard {
+    let single_push_bb = pawn_single_pushes(pawns, color);
+    let double_push_bb = pawn_double_pushes(pawns, color);
     single_push_bb | double_push_bb
 }
 
 /// Generate pseudo-legal single push moves for all pawns of a color.
-pub fn pawn_pseudo_single_moves(pawns: &Bitboard, color: &Color) -> Bitboard {
+pub fn pawn_single_pushes(pawns: &Bitboard, color: &Color) -> Bitboard {
     // Single pushes are easy to generate, by pushing 1 square forward.
     match color {
         Color::White => pawns.to_north(),
@@ -61,7 +61,7 @@ pub fn pawn_pseudo_single_moves(pawns: &Bitboard, color: &Color) -> Bitboard {
 }
 
 /// Generate pseudo-legal double push moves for all pawns of a color.
-pub fn pawn_pseudo_double_moves(pawns: &Bitboard, color: &Color) -> Bitboard {
+pub fn pawn_double_pushes(pawns: &Bitboard, color: &Color) -> Bitboard {
     // Double pushes are generated only from pawns on color's starting rank.
     match color {
         Color::White => (pawns & Bitboard::RANK_2).to_north().to_north(),
@@ -70,6 +70,7 @@ pub fn pawn_pseudo_double_moves(pawns: &Bitboard, color: &Color) -> Bitboard {
 }
 
 /// Generate attacks for all pawns in Bitboard for a color.
+/// Attacks for any number of pawns are calculated in constant time.
 pub fn pawn_attacks(pawns: &Bitboard, color: &Color) -> Bitboard {
     match color {
         Color::White => pawns.to_north().to_east() | pawns.to_north().to_west(),
@@ -84,6 +85,60 @@ pub fn pawn_double_attacks(pawns: &Bitboard, color: &Color) -> Bitboard {
         Color::White => pawns.to_north().to_east() & pawns.to_north().to_west(),
         Color::Black => pawns.to_south().to_east() & pawns.to_south().to_west(),
     }
+}
+
+/// Generate Bitboard with squares attacked by knights.
+/// Knight attacks are a pattern, so attacks for all knights are calculated in constant time.
+pub fn knight_attacks(knights: &Bitboard) -> Bitboard {
+    let mut attacks = Bitboard::EMPTY;
+
+    attacks |= knights.to_north().to_north().to_east();
+    attacks |= knights.to_north().to_east().to_east();
+    attacks |= knights.to_south().to_east().to_east();
+    attacks |= knights.to_south().to_south().to_east();
+
+    attacks |= knights.to_south().to_south().to_west();
+    attacks |= knights.to_south().to_west().to_west();
+    attacks |= knights.to_north().to_west().to_west();
+    attacks |= knights.to_north().to_north().to_west();
+
+    attacks
+}
+
+/// Generate Bitboard with squares attacked by king, assuming exactly 1 king.
+/// King attacks are found in constant time by lookup.
+pub fn king_attacks(king: &Bitboard) -> Bitboard {
+    king_pattern(king.squares()[0])
+}
+
+/// Generate and return Bitboard with squares attacked by all queens.
+/// Queen attacks are found in linear time, with 8 rays calculated per queen.
+pub fn queen_all_attacks(queens: &Bitboard, occupied: &Bitboard) -> Bitboard {
+    queens
+        .squares()
+        .into_iter()
+        .map(|square| queen_attacks(&square, occupied))
+        .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks)
+}
+
+/// Generate and return Bitboard with squares attacked by all rooks.
+/// Rook attacks are found in linear time, with 4 rays calculated per rook.
+pub fn rook_all_attacks(rooks: &Bitboard, occupied: &Bitboard) -> Bitboard {
+    rooks
+        .squares()
+        .into_iter()
+        .map(|square| rook_attacks(&square, occupied))
+        .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks)
+}
+
+/// Generate and return Bitboard with squares attacked by all bishops.
+/// Bishop attacks are found in linear time, with 4 rays calculated per bishops.
+pub fn bishop_all_attacks(bishops: &Bitboard, occupied: &Bitboard) -> Bitboard {
+    bishops
+        .squares()
+        .into_iter()
+        .map(|square| bishop_attacks(&square, occupied))
+        .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks)
 }
 
 /// Generate Bitboard containing all squares that are directly attacked by a piece at origin,
@@ -653,49 +708,49 @@ mod tests {
         {
             // B pawn at end of file has no moves.
             let a1 = Bitboard::from(A1);
-            let a1_moves = pawn_pseudo_moves(&a1, &Color::Black);
+            let a1_moves = pawn_pushes(&a1, &Color::Black);
             assert_eq!(a1_moves.count_squares(), 0);
         }
         {
             // W pawn on starting row has 2 moves, B pawn has 1.
             let a2 = Bitboard::from(A2);
-            let a2_moves = pawn_pseudo_moves(&a2, &Color::White);
+            let a2_moves = pawn_pushes(&a2, &Color::White);
             assert_eq!(a2_moves.count_squares(), 2);
             assert!(a2_moves.has_square(A3));
             assert!(a2_moves.has_square(A4));
-            let a2_moves = pawn_pseudo_moves(&a2, &Color::Black);
+            let a2_moves = pawn_pushes(&a2, &Color::Black);
             assert_eq!(a2_moves.count_squares(), 1);
             assert!(a2_moves.has_square(A1));
         }
         {
             let f3 = Bitboard::from(F3);
-            let f3_moves = pawn_pseudo_moves(&f3, &Color::White);
+            let f3_moves = pawn_pushes(&f3, &Color::White);
             assert_eq!(f3_moves.count_squares(), 1);
             assert!(f3_moves.has_square(F4));
-            let f3_moves = pawn_pseudo_moves(&f3, &Color::Black);
+            let f3_moves = pawn_pushes(&f3, &Color::Black);
             assert_eq!(f3_moves.count_squares(), 1);
             assert!(f3_moves.has_square(F2));
         }
         {
             let h7 = Bitboard::from(H7);
-            let h7_moves = pawn_pseudo_moves(&h7, &Color::White);
+            let h7_moves = pawn_pushes(&h7, &Color::White);
             assert_eq!(h7_moves.count_squares(), 1);
             assert!(h7_moves.has_square(H8));
-            let h7_moves = pawn_pseudo_moves(&h7, &Color::Black);
+            let h7_moves = pawn_pushes(&h7, &Color::Black);
             assert_eq!(h7_moves.count_squares(), 2);
             assert!(h7_moves.has_square(H6));
             assert!(h7_moves.has_square(H5));
         }
         {
             let pawns = Bitboard::from(vec![B2, C3, F7, H8].as_slice());
-            let w_pawn_moves = pawn_pseudo_moves(&pawns, &Color::White);
+            let w_pawn_moves = pawn_pushes(&pawns, &Color::White);
             assert_eq!(w_pawn_moves.count_squares(), 4);
             assert!(w_pawn_moves.has_square(B3));
             assert!(w_pawn_moves.has_square(B4));
             assert!(w_pawn_moves.has_square(C4));
             assert!(w_pawn_moves.has_square(F8));
 
-            let b_pawn_moves = pawn_pseudo_moves(&pawns, &Color::Black);
+            let b_pawn_moves = pawn_pushes(&pawns, &Color::Black);
             assert_eq!(b_pawn_moves.count_squares(), 5);
             assert!(b_pawn_moves.has_square(B1));
             assert!(b_pawn_moves.has_square(C2));
@@ -706,8 +761,8 @@ mod tests {
         // Does not attack own square.
         for square in Square::iter() {
             let pawn = Bitboard::from(square);
-            assert!(!pawn_pseudo_moves(&pawn, &Color::Black).has_square(square));
-            assert!(!pawn_pseudo_moves(&pawn, &Color::White).has_square(square));
+            assert!(!pawn_pushes(&pawn, &Color::Black).has_square(square));
+            assert!(!pawn_pushes(&pawn, &Color::White).has_square(square));
         }
     }
     #[test]

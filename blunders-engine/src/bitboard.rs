@@ -37,7 +37,7 @@
 //! Pass Pawns
 //!
 
-use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 use crate::coretypes::{Square, Square::*, SquareIndexable};
 
@@ -96,6 +96,11 @@ impl Bitboard {
     /// Toggles bit index. 0 -> 1, 1 -> 0.
     pub fn toggle_square<I: SquareIndexable>(&mut self, idx: I) {
         self.0 ^= idx.shift();
+    }
+
+    /// Remove all squares in other from self.
+    pub fn remove(&mut self, other: &Bitboard) {
+        *self &= !other
     }
 
     /// Returns true if other is a subset of self.
@@ -165,6 +170,13 @@ impl Not for Bitboard {
     }
 }
 
+impl Not for &Bitboard {
+    type Output = Bitboard;
+    fn not(self) -> Self::Output {
+        Bitboard(!self.0)
+    }
+}
+
 impl BitOr for Bitboard {
     type Output = Self;
     fn bitor(self, rhs: Self) -> Self::Output {
@@ -209,6 +221,12 @@ impl BitAnd<Bitboard> for &Bitboard {
     type Output = Bitboard;
     fn bitand(self, rhs: Bitboard) -> Self::Output {
         Bitboard(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for Bitboard {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0
     }
 }
 

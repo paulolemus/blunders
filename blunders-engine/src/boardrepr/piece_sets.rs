@@ -62,6 +62,13 @@ impl IndexMut<&Piece> for PieceSets {
     }
 }
 
+impl Index<(Color, PieceKind)> for PieceSets {
+    type Output = Bitboard;
+    fn index(&self, (color, piece_kind): (Color, PieceKind)) -> &Self::Output {
+        &self.pieces[color as usize + piece_kind as usize]
+    }
+}
+
 impl Index<&(Color, PieceKind)> for PieceSets {
     type Output = Bitboard;
     fn index(&self, (color, piece_kind): &(Color, PieceKind)) -> &Self::Output {
