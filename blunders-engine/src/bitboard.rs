@@ -37,7 +37,7 @@
 //! Pass Pawns
 //!
 
-use std::ops::{BitAnd, BitOr, Not};
+use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
 
 use crate::coretypes::{Square, Square::*, SquareIndexable};
 
@@ -96,6 +96,12 @@ impl Bitboard {
     /// Toggles bit index. 0 -> 1, 1 -> 0.
     pub fn toggle_square<I: SquareIndexable>(&mut self, idx: I) {
         self.0 ^= idx.shift();
+    }
+
+    /// Returns true if other is a subset of self.
+    /// If all squares of other are in self, then other is a subset of self.
+    pub fn contains(&self, other: &Bitboard) -> bool {
+        self & *other == *other
     }
 
     /// Returns new Bitboard with all squares shifted 1 square north (ex: D4 -> D5).
@@ -177,6 +183,18 @@ impl BitOr<Bitboard> for &Bitboard {
     type Output = Bitboard;
     fn bitor(self, rhs: Bitboard) -> Self::Output {
         Bitboard(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for Bitboard {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0
+    }
+}
+
+impl BitOrAssign<&Bitboard> for Bitboard {
+    fn bitor_assign(&mut self, rhs: &Bitboard) {
+        self.0 |= rhs.0
     }
 }
 

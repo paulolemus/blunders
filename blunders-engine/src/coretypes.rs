@@ -171,6 +171,16 @@ impl Not for Color {
     }
 }
 
+impl Not for &Color {
+    type Output = Color;
+    fn not(self) -> Self::Output {
+        match self {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }
+    }
+}
+
 impl From<&Color> for char {
     fn from(color: &Color) -> Self {
         color.to_char()

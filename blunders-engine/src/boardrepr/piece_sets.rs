@@ -5,7 +5,7 @@ use std::ops::{Index, IndexMut};
 
 use crate::bitboard::Bitboard;
 use crate::boardrepr::Mailbox;
-use crate::coretypes::{Color, Piece, Square};
+use crate::coretypes::{Color, Piece, PieceKind, Square};
 
 /// A Piece-Centric representation of pieces on a chessboard.
 /// A Bitboard is used to encode the squares of each chess piece.
@@ -32,6 +32,16 @@ impl PieceSets {
         Self::from(&mb)
     }
 
+    /// Return a bitboard representing the set of squares occupied by any piece.
+    pub fn occupied(&self) -> Bitboard {
+        self.pieces.iter().fold(Bitboard::EMPTY, |acc, bb| acc | bb)
+    }
+
+    /// Return a bitboard representing the set of squares occupied by piece of color.
+    pub fn color_occupied(&self, color: &Color) -> Bitboard {
+        self[color].iter().fold(Bitboard::EMPTY, |acc, bb| acc | bb)
+    }
+
     /// Returns pretty-printed chess board representation of Self.
     /// Uses Mailbox pretty.
     pub fn pretty(&self) -> String {
@@ -49,6 +59,19 @@ impl Index<&Piece> for PieceSets {
 impl IndexMut<&Piece> for PieceSets {
     fn index_mut(&mut self, piece: &Piece) -> &mut Self::Output {
         &mut self.pieces[piece.color as usize + piece.piece_kind as usize]
+    }
+}
+
+impl Index<&(Color, PieceKind)> for PieceSets {
+    type Output = Bitboard;
+    fn index(&self, (color, piece_kind): &(Color, PieceKind)) -> &Self::Output {
+        &self.pieces[(*color) as usize + (*piece_kind) as usize]
+    }
+}
+
+impl IndexMut<&(Color, PieceKind)> for PieceSets {
+    fn index_mut(&mut self, (color, piece_kind): &(Color, PieceKind)) -> &mut Self::Output {
+        &mut self.pieces[(*color) as usize + (*piece_kind) as usize]
     }
 }
 

@@ -2,7 +2,7 @@ pub mod bitboard;
 pub mod boardrepr;
 pub mod coretypes;
 pub mod fen;
-pub mod movegen;
+pub(crate) mod movegen;
 pub mod position;
 
 #[cfg(test)]
