@@ -273,18 +273,18 @@ impl Iterator for PieceKindIterator {
 }
 
 impl Piece {
-    pub fn new(color: Color, piece_kind: PieceKind) -> Self {
+    pub const fn new(color: Color, piece_kind: PieceKind) -> Self {
         Piece { color, piece_kind }
     }
     /// Immutable Getters.
-    pub fn color(&self) -> &Color {
+    pub const fn color(&self) -> &Color {
         &self.color
     }
-    pub fn piece_kind(&self) -> &PieceKind {
+    pub const fn piece_kind(&self) -> &PieceKind {
         &self.piece_kind
     }
 
-    pub fn to_char(&self) -> char {
+    pub const fn to_char(&self) -> char {
         match self.color {
             Color::White => self.piece_kind.to_char(),
             Color::Black => self.piece_kind.to_char().to_ascii_lowercase(),
@@ -331,7 +331,7 @@ impl Display for Piece {
 
 impl Castling {
     /// Make new Castling with all rights of initial chess position.
-    pub fn start_position() -> Self {
+    pub const fn start_position() -> Self {
         Self::ALL
     }
 
@@ -342,7 +342,7 @@ impl Castling {
     }
 
     /// Returns true if there are no castling rights.
-    pub fn is_none(&self) -> bool {
+    pub const fn is_none(&self) -> bool {
         self.0 == 0u8
     }
 
@@ -358,7 +358,7 @@ impl Castling {
         self.0 &= !rights.0;
     }
 
-    fn is_mask_valid(rights: Castling) -> bool {
+    const fn is_mask_valid(rights: Castling) -> bool {
         rights.0 <= Self::ALL.0
     }
 }
@@ -521,7 +521,7 @@ pub struct SquareIterator {
 }
 
 impl SquareIterator {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             square_discriminant: Square::A1 as u8,
         }
@@ -550,7 +550,7 @@ impl Square {
     pub fn from_idx<I: SquareIndexable>(indexable: I) -> Option<Square> {
         Self::from_u8(indexable.idx() as u8)
     }
-    pub fn iter() -> SquareIterator {
+    pub const fn iter() -> SquareIterator {
         SquareIterator::new()
     }
 
@@ -668,7 +668,7 @@ impl SquareIndexable for Square {
 }
 
 impl Move {
-    pub fn new(from: Square, to: Square, promotion: Option<PieceKind>) -> Self {
+    pub const fn new(from: Square, to: Square, promotion: Option<PieceKind>) -> Self {
         Self {
             from,
             to,
@@ -676,13 +676,13 @@ impl Move {
         }
     }
     // Getters
-    pub fn from(&self) -> &Square {
+    pub const fn from(&self) -> &Square {
         &self.from
     }
-    pub fn to(&self) -> &Square {
+    pub const fn to(&self) -> &Square {
         &self.to
     }
-    pub fn promotion(&self) -> &Option<PieceKind> {
+    pub const fn promotion(&self) -> &Option<PieceKind> {
         &self.promotion
     }
 }
