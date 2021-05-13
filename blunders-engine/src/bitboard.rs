@@ -66,6 +66,12 @@ impl Bitboard {
     pub const RANK_8: Bitboard = bb_from_shifts!(A8, B8, C8, D8, E8, F8, G8, H8);
     pub const FILE_A: Bitboard = bb_from_shifts!(A1, A2, A3, A4, A5, A6, A7, A8);
     pub const FILE_H: Bitboard = bb_from_shifts!(H1, H2, H3, H4, H5, H6, H7, H8);
+    // Squares between king and kingside rook. Useful for checking castling.
+    pub const KINGSIDE_BETWEEN: Bitboard = bb_from_shifts!(F1, G1, F8, G8);
+    pub const QUEENSIDE_BETWEEN: Bitboard = bb_from_shifts!(B1, C1, D1, B8, C8, D8);
+    // Squares that king passes through during castling.
+    pub const KINGSIDE_PASS: Bitboard = bb_from_shifts!(E1, F1, G1, E8, F8, G8);
+    pub const QUEENSIDE_PASS: Bitboard = bb_from_shifts!(C1, D1, E1, C8, D8, E8);
 }
 
 /// Bitboard is a wrapper for a u64.
@@ -73,6 +79,11 @@ impl Bitboard {
 impl Bitboard {
     pub const fn bits(&self) -> &u64 {
         &self.0
+    }
+
+    /// Returns true if there are no squares in self, false otherwise.
+    pub const fn is_empty(&self) -> bool {
+        self.0 == 0
     }
 
     /// Returns number of squares present.
@@ -107,6 +118,12 @@ impl Bitboard {
     /// If all squares of other are in self, then other is a subset of self.
     pub fn contains(&self, other: &Bitboard) -> bool {
         self & *other == *other
+    }
+
+    /// Returns true if self has any squares that are in other.
+    /// In other words, if there is any overlap, return true.
+    pub fn has_any(&self, other: &Bitboard) -> bool {
+        self & *other != Self::EMPTY
     }
 
     /// Returns new Bitboard with all squares shifted 1 square north (ex: D4 -> D5).

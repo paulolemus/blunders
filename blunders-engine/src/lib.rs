@@ -3,7 +3,10 @@ pub mod boardrepr;
 pub mod coretypes;
 pub mod fen;
 pub(crate) mod movegen;
+pub mod perft;
 pub mod position;
+
+pub use position::Position;
 
 #[cfg(test)]
 mod tests {

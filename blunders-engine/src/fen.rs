@@ -202,7 +202,7 @@ impl FenComponent for Color {
 /// Castling FenComponent.
 impl FenComponent for Castling {
     type Error = ParseFenError;
-    /// Castling is either '-' or [K][Q][k][q]
+    /// Castling is either '-' or `[K][Q][k][q]`
     fn try_from_fen_str(s: &str) -> Result<Self, Self::Error> {
         Castling::from_str(s).map_err(|_| ParseFenError::Castling)
     }

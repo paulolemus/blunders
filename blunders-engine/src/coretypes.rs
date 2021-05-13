@@ -63,6 +63,8 @@ impl Castling {
     pub const B_QUEEN: Castling = Castling(0b00001000);
     pub const W_SIDE: Castling = Castling(Self::W_KING.0 | Self::W_QUEEN.0);
     pub const B_SIDE: Castling = Castling(Self::B_KING.0 | Self::B_QUEEN.0);
+    pub const KING_SIDE: Castling = Castling(Self::W_KING.0 | Self::B_KING.0);
+    pub const QUEEN_SIDE: Castling = Castling(Self::W_QUEEN.0 | Self::B_QUEEN.0);
     pub const ALL: Castling = Castling(Self::W_SIDE.0 | Self::B_SIDE.0);
     pub const NONE: Castling = Castling(0u8);
 }
@@ -240,6 +242,16 @@ impl PieceKind {
         }
     }
 
+    /// Returns true if PieceKind can slide, false otherwise.
+    /// Sliding piece_kinds are Rooks, Bishops, and Queens.
+    pub const fn is_sliding(&self) -> bool {
+        use PieceKind::*;
+        match self {
+            Rook | Bishop | Queen => true,
+            _ => false,
+        }
+    }
+
     pub const fn iter() -> PieceKindIterator {
         PieceKindIterator::new()
     }
@@ -341,6 +353,12 @@ impl Castling {
         self.0 & rights.0 == rights.0
     }
 
+    /// Returns true if self has any of the provided bits.
+    pub fn has_any(&self, rights: Castling) -> bool {
+        assert!(Self::is_mask_valid(rights));
+        self.0 & rights.0 != 0
+    }
+
     /// Returns true if there are no castling rights.
     pub const fn is_none(&self) -> bool {
         self.0 == 0u8
@@ -356,6 +374,14 @@ impl Castling {
     pub fn clear(&mut self, rights: Castling) {
         assert!(Self::is_mask_valid(rights));
         self.0 &= !rights.0;
+    }
+
+    /// Removes all castling rights for a color.
+    pub fn clear_color(&mut self, color: &Color) {
+        match color {
+            Color::White => self.clear(Self::W_SIDE),
+            Color::Black => self.clear(Self::B_SIDE),
+        }
     }
 
     const fn is_mask_valid(rights: Castling) -> bool {
@@ -684,6 +710,20 @@ impl Move {
     }
     pub const fn promotion(&self) -> &Option<PieceKind> {
         &self.promotion
+    }
+}
+
+/// # Example
+/// Move { from: A7, to: B8, promotion: Some(Queen) } -> `a7b8q`.
+impl Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut s = String::with_capacity(5);
+        s.push_str(&self.from.to_string());
+        s.push_str(&self.to.to_string());
+        if let Some(piece_kind) = self.promotion {
+            s.push(piece_kind.to_char().to_ascii_lowercase());
+        }
+        write!(f, "{}", s)
     }
 }
 
