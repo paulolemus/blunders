@@ -61,7 +61,7 @@ impl Fen for Position {
 
         // Fen Order: Placement/Side-To-Move/Castling/En-Passant/Halfmove/Fullmove
         let pieces: PieceSets = FenComponent::try_from_fen_str(fen_parts[0])?;
-        let side_to_move: Color = FenComponent::try_from_fen_str(fen_parts[1])?;
+        let player: Color = FenComponent::try_from_fen_str(fen_parts[1])?;
         let castling: Castling = FenComponent::try_from_fen_str(fen_parts[2])?;
         let en_passant: Option<Square> = FenComponent::try_from_fen_str(fen_parts[3])?;
         let halfmoves: MoveCount = Self::parse_halfmove_clock(fen_parts[4])?;
@@ -69,7 +69,7 @@ impl Fen for Position {
 
         Ok(Self {
             pieces,
-            side_to_move,
+            player,
             castling,
             en_passant,
             halfmoves,
@@ -82,7 +82,7 @@ impl Fen for Position {
         format!(
             "{} {} {} {} {} {}",
             self.pieces().to_fen_str(),
-            self.side_to_move().to_fen_str(),
+            self.player().to_fen_str(),
             self.castling().to_fen_str(),
             self.en_passant().to_fen_str(),
             self.halfmoves(),

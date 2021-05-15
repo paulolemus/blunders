@@ -16,7 +16,7 @@ use crate::movegen as mg;
 /// A complete data set that can represent any chess position.
 /// # Members:
 /// * pieces - a piece-centric setwise container of all basic chess piece positions.
-/// * side_to_move - Color of player whose turn it is.
+/// * player - Color of player whose turn it is. AKA: "side_to_move".
 /// * castling - Castling rights for both players.
 /// * en_passant - Indicates if en passant is possible, and for which square.
 /// * halfmoves - Tracker for 50 move draw rule. Resets after capture/pawn move.
@@ -24,7 +24,7 @@ use crate::movegen as mg;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Position {
     pub(crate) pieces: PieceSets,
-    pub(crate) side_to_move: Color,
+    pub(crate) player: Color,
     pub(crate) castling: Castling,
     pub(crate) en_passant: Option<Square>,
     pub(crate) halfmoves: MoveCount,
@@ -36,7 +36,7 @@ impl Position {
     pub fn start_position() -> Self {
         Self {
             pieces: PieceSets::start_position(),
-            side_to_move: Color::White,
+            player: Color::White,
             castling: Castling::start_position(),
             en_passant: None,
             halfmoves: 0,
@@ -48,8 +48,8 @@ impl Position {
     pub fn pieces(&self) -> &PieceSets {
         &self.pieces
     }
-    pub fn side_to_move(&self) -> &Color {
-        &self.side_to_move
+    pub fn player(&self) -> &Color {
+        &self.player
     }
     pub fn castling(&self) -> &Castling {
         &self.castling
@@ -138,16 +138,16 @@ impl Position {
         use Square::*;
         // Find piece on `from` square for active player.
         let active_piece: Piece = PieceKind::iter()
-            .map(|piece_kind| Piece::new(*self.side_to_move(), piece_kind))
+            .map(|piece_kind| Piece::new(*self.player(), piece_kind))
             .find(|piece| self.pieces()[piece].has_square(move_.from))
             .expect("No piece on moving square.");
 
         // These always get updated, regardless of move.
-        // Note: Do not use self.side_to_move, instead refer to active_piece.color.
+        // Note: Do not use self.player, instead refer to active_piece.color.
         self.update_en_passant(&move_, &active_piece);
         self.update_move_counters(&move_, &active_piece);
         self.pieces[&active_piece].clear_square(move_.from);
-        self.side_to_move = !self.side_to_move;
+        self.player = !self.player;
 
         // If promoting, place promoting piece. Otherwise place active piece.
         if let Some(promoting_piece_kind) = move_.promotion {
@@ -237,9 +237,9 @@ impl Position {
     }
 
     pub fn num_active_king_checks(&self) -> u32 {
-        let king_bb = self.pieces[&(self.side_to_move, King)];
+        let king_bb = self.pieces[&(self.player, King)];
         let king_square = king_bb.squares()[0];
-        let king_attackers = self.attackers_to(&king_square, &!self.side_to_move);
+        let king_attackers = self.attackers_to(&king_square, &!self.player);
         king_attackers.count_squares()
     }
 
@@ -307,11 +307,11 @@ impl Position {
     /// Generate king moves assuming double check.
     /// Only the king can move when in double check.
     fn generate_legal_double_check_moves(&self) -> Vec<Move> {
-        let king = self.pieces[(self.side_to_move, King)];
+        let king = self.pieces[(self.player, King)];
 
         // Generate bitboard with all squares attacked by passive player.
         // Sliding pieces x-ray king.
-        let passive_player = !self.side_to_move;
+        let passive_player = !self.player;
         let occupied_without_king = self.pieces.occupied() & !king;
         let attacked = self.attacks(&passive_player, &occupied_without_king);
 
@@ -319,7 +319,7 @@ impl Position {
         // King cannot move into attacked square, or into piece of same color.
         let mut possible_moves = mg::king_attacks(&king);
         possible_moves.remove(&attacked);
-        possible_moves.remove(&self.pieces.color_occupied(&self.side_to_move));
+        possible_moves.remove(&self.pieces.color_occupied(&self.player));
 
         // Convert remaining move squares into Move structs.
         let mut legal_moves = Vec::with_capacity(8); // 8 max possible moves.
@@ -338,10 +338,10 @@ impl Position {
         // block checking piece with non-absolute-pinned piece
         let mut legal_moves: Vec<Move> = Vec::new();
 
-        let king = self.pieces[(self.side_to_move, King)];
+        let king = self.pieces[(self.player, King)];
         let king_square = king.squares()[0];
-        let passive_player = !self.side_to_move;
-        let us = self.pieces.color_occupied(&self.side_to_move);
+        let passive_player = !self.player;
+        let us = self.pieces.color_occupied(&self.player);
         let them = self.pieces.color_occupied(&passive_player);
         let occupied = self.pieces.occupied();
 
@@ -367,11 +367,11 @@ impl Position {
         // Sliding checker can be blocked or captured with non-pinned piece.
         // If not sliding, then checker can be captured with non-pinned piece.
         // TODO: Make more efficient (change from verifying by making move).
-        let queens = self.pieces[&(self.side_to_move, Queen)];
-        let rooks = self.pieces[&(self.side_to_move, Rook)];
-        let bishops = self.pieces[&(self.side_to_move, Bishop)];
-        let knights = self.pieces[&(self.side_to_move, Knight)];
-        let pawns = self.pieces[&(self.side_to_move, Pawn)];
+        let queens = self.pieces[&(self.player, Queen)];
+        let rooks = self.pieces[&(self.player, Rook)];
+        let bishops = self.pieces[&(self.player, Bishop)];
+        let knights = self.pieces[&(self.player, Knight)];
+        let pawns = self.pieces[&(self.player, Pawn)];
 
         let mut pseudo_moves = Vec::new();
         mg::queen_pseudo_moves(&mut pseudo_moves, queens, occupied, us);
@@ -381,7 +381,7 @@ impl Position {
         mg::pawn_pseudo_moves(
             &mut pseudo_moves,
             pawns,
-            self.side_to_move,
+            self.player,
             occupied,
             them,
             self.en_passant,
@@ -411,10 +411,10 @@ impl Position {
         // Most positions will have fewer moves than this capacity.
         let mut legal_moves = Vec::with_capacity(128);
 
-        let king = self.pieces[(self.side_to_move, King)];
+        let king = self.pieces[(self.player, King)];
         let king_square = king.squares()[0];
-        let passive_player = !self.side_to_move;
-        let us = self.pieces.color_occupied(&self.side_to_move);
+        let passive_player = !self.player;
+        let us = self.pieces.color_occupied(&self.player);
         let them = self.pieces.color_occupied(&passive_player);
         let occupied = us | them;
         let attacked = self.attacks(&passive_player, &occupied);
@@ -429,11 +429,11 @@ impl Position {
 
         // Generate all normal Queen, Rook, Bishop, Knight moves.
         // Generate all normal and special Pawn moves (single/double push, attacks, ep).
-        let queens = self.pieces[&(self.side_to_move, Queen)];
-        let rooks = self.pieces[&(self.side_to_move, Rook)];
-        let bishops = self.pieces[&(self.side_to_move, Bishop)];
-        let knights = self.pieces[&(self.side_to_move, Knight)];
-        let pawns = self.pieces[&(self.side_to_move, Pawn)];
+        let queens = self.pieces[&(self.player, Queen)];
+        let rooks = self.pieces[&(self.player, Rook)];
+        let bishops = self.pieces[&(self.player, Bishop)];
+        let knights = self.pieces[&(self.player, Knight)];
+        let pawns = self.pieces[&(self.player, Pawn)];
 
         let mut pseudo_moves = Vec::with_capacity(128);
         mg::queen_pseudo_moves(&mut pseudo_moves, queens, occupied, us);
@@ -443,7 +443,7 @@ impl Position {
         mg::pawn_pseudo_moves(
             &mut pseudo_moves,
             pawns,
-            self.side_to_move,
+            self.player,
             occupied,
             them,
             self.en_passant,
@@ -463,7 +463,7 @@ impl Position {
         // check if king will pass through an attacked square.
         mg::legal_castling_moves(
             &mut legal_moves,
-            self.side_to_move,
+            self.player,
             self.castling,
             occupied,
             attacked,
