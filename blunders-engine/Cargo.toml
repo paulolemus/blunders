@@ -14,6 +14,7 @@ version = "0.1.0"
 
 [dev-dependencies]
 criterion = "0.3"
+num_cpus = "1.13"
 
 [[bench]]
 name = "perft"

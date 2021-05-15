@@ -7,14 +7,16 @@ use blunders_engine::fen::Fen;
 use blunders_engine::perft::*;
 use blunders_engine::*;
 
+const NUM_THREADS: usize = 1;
+
 #[test]
 fn perft_starting_position() {
     let position = Position::start_position();
-    let ply0 = perft(position, 0);
-    let ply1 = perft(position, 1);
-    let ply2 = perft(position, 2);
-    let ply3 = perft(position, 3);
-    let ply4 = perft(position, 4);
+    let ply0 = perft(position, 0, NUM_THREADS);
+    let ply1 = perft(position, 1, NUM_THREADS);
+    let ply2 = perft(position, 2, NUM_THREADS);
+    let ply3 = perft(position, 3, NUM_THREADS);
+    let ply4 = perft(position, 4, NUM_THREADS);
 
     println!("perft(0): {:?}", ply0);
     println!("perft(1): {:?}", ply1);
@@ -33,7 +35,7 @@ fn perft_starting_position() {
 #[ignore]
 fn perft_starting_position_expensive() {
     let position = Position::start_position();
-    let ply5 = perft(position, 5);
+    let ply5 = perft(position, 5, NUM_THREADS);
     //let ply6 = perft(position, 6);
 
     println!("perft(5): {:?}", ply5);
@@ -53,10 +55,10 @@ fn kiwipete_position() -> Position {
 fn perft_kiwipete_position() {
     // https://www.chessprogramming.org/Perft_Results#Position_2
     let position = kiwipete_position();
-    let ply0 = perft(position, 0);
-    let ply1 = perft(position, 1);
-    let ply2 = perft(position, 2);
-    let ply3 = perft(position, 3);
+    let ply0 = perft(position, 0, NUM_THREADS);
+    let ply1 = perft(position, 1, NUM_THREADS);
+    let ply2 = perft(position, 2, NUM_THREADS);
+    let ply3 = perft(position, 3, NUM_THREADS);
 
     println!("perft(0): {:?}", ply0);
     println!("perft(1): {:?}", ply1);
@@ -75,7 +77,7 @@ fn perft_kiwipete_position() {
 fn perft_kiwipete_position_expensive() {
     let position = kiwipete_position();
 
-    let ply4 = perft(position, 4);
+    let ply4 = perft(position, 4, NUM_THREADS);
     println!("perft(4): {:?}", ply4);
     assert_eq!(ply4.nodes, 4_085_603);
 }
@@ -89,11 +91,11 @@ fn position_3() -> Position {
 fn perft_test_position_3() {
     // https://www.chessprogramming.org/Perft_Results#Position_3
     let position = position_3();
-    let ply0 = perft(position, 0);
-    let ply1 = perft(position, 1);
-    let ply2 = perft(position, 2);
-    let ply3 = perft(position, 3);
-    let ply4 = perft(position, 4);
+    let ply0 = perft(position, 0, NUM_THREADS);
+    let ply1 = perft(position, 1, NUM_THREADS);
+    let ply2 = perft(position, 2, NUM_THREADS);
+    let ply3 = perft(position, 3, NUM_THREADS);
+    let ply4 = perft(position, 4, NUM_THREADS);
 
     println!("perft(0): {:?}", ply0);
     println!("perft(1): {:?}", ply1);
@@ -114,8 +116,8 @@ fn perft_test_position_3() {
 fn perft_test_position_3_expensive() {
     let position = position_3();
 
-    let ply5 = perft(position, 5);
-    let ply6 = perft(position, 6);
+    let ply5 = perft(position, 5, NUM_THREADS);
+    let ply6 = perft(position, 6, NUM_THREADS);
     println!("perft(5): {:?}", ply5);
     println!("perft(6): {:?}", ply6);
     assert_eq!(ply5.nodes, 674_624);
@@ -131,11 +133,11 @@ fn position_4() -> Position {
 fn perft_test_position_4() {
     // https://www.chessprogramming.org/Perft_Results#Position_4
     let position = position_4();
-    let ply0 = perft(position, 0);
-    let ply1 = perft(position, 1);
-    let ply2 = perft(position, 2);
-    let ply3 = perft(position, 3);
-    let ply4 = perft(position, 4);
+    let ply0 = perft(position, 0, NUM_THREADS);
+    let ply1 = perft(position, 1, NUM_THREADS);
+    let ply2 = perft(position, 2, NUM_THREADS);
+    let ply3 = perft(position, 3, NUM_THREADS);
+    let ply4 = perft(position, 4, NUM_THREADS);
 
     println!("perft(0): {:?}", ply0);
     println!("perft(1): {:?}", ply1);
@@ -160,10 +162,10 @@ fn position_5() -> Position {
 fn perft_test_position_5() {
     // https://www.chessprogramming.org/Perft_Results#Position_5
     let position = position_5();
-    let ply0 = perft(position, 0);
-    let ply1 = perft(position, 1);
-    let ply2 = perft(position, 2);
-    let ply3 = perft(position, 3);
+    let ply0 = perft(position, 0, NUM_THREADS);
+    let ply1 = perft(position, 1, NUM_THREADS);
+    let ply2 = perft(position, 2, NUM_THREADS);
+    let ply3 = perft(position, 3, NUM_THREADS);
 
     println!("perft(0): {:?}", ply0);
     println!("perft(1): {:?}", ply1);
@@ -181,7 +183,7 @@ fn perft_test_position_5() {
 #[ignore]
 fn perft_test_position_5_expensive() {
     let position = position_5();
-    let ply4 = perft(position, 4);
+    let ply4 = perft(position, 4, NUM_THREADS);
     println!("perft(4): {:?}", ply4);
     assert_eq!(ply4.nodes, 2_103_487);
 }
@@ -196,10 +198,10 @@ fn position_6() -> Position {
 fn perft_test_position_6() {
     // https://www.chessprogramming.org/Perft_Results#Position_6
     let position = position_6();
-    let ply0 = perft(position, 0);
-    let ply1 = perft(position, 1);
-    let ply2 = perft(position, 2);
-    let ply3 = perft(position, 3);
+    let ply0 = perft(position, 0, NUM_THREADS);
+    let ply1 = perft(position, 1, NUM_THREADS);
+    let ply2 = perft(position, 2, NUM_THREADS);
+    let ply3 = perft(position, 3, NUM_THREADS);
 
     println!("perft(0): {:?}", ply0);
     println!("perft(1): {:?}", ply1);
@@ -218,7 +220,7 @@ fn perft_test_position_6() {
 fn perft_test_position_6_expensive() {
     let position = position_6();
 
-    let ply4 = perft(position, 4);
+    let ply4 = perft(position, 4, NUM_THREADS);
     println!("perft(4): {:?}", ply4);
     assert_eq!(ply4.nodes, 3_894_594);
 }
