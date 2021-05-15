@@ -6,6 +6,7 @@ use std::ops::{Index, IndexMut};
 use crate::bitboard::Bitboard;
 use crate::boardrepr::Mailbox;
 use crate::coretypes::{Color, Piece, PieceKind, Square};
+use crate::coretypes::{Color::*, PieceKind::*};
 
 /// A Piece-Centric representation of pieces on a chessboard.
 /// A Bitboard is used to encode the squares of each chess piece.
@@ -47,6 +48,37 @@ impl PieceSets {
     pub fn pretty(&self) -> String {
         Mailbox::from(self).pretty()
     }
+
+    /// Returns true if all sets in self are disjoint (mutually exclusive).
+    /// In other words, there is no more than 1 piece per square. If a square is in one set, it is in no other.
+    /// PieceSets should be disjoint at all times.
+    pub fn is_disjoint(&self) -> bool {
+        let occupied_sum = self.occupied().count_squares();
+        let individual_sum = self
+            .pieces
+            .iter()
+            .fold(0, |acc, bb| acc + bb.count_squares());
+
+        occupied_sum == individual_sum
+    }
+
+    /// Returns true if Self is valid.
+    /// A valid PieceSets has the following properties:
+    /// * Has a single king per side.
+    /// * Each bitboard is disjoint (mutually exclusive) meaning a square cannot have more than one piece.
+    pub fn is_valid(&self) -> bool {
+        if self[(White, King)].count_squares() != 1 {
+            return false;
+        }
+        if self[(Black, King)].count_squares() != 1 {
+            return false;
+        }
+        if !self.is_disjoint() {
+            return false;
+        }
+
+        true
+    }
 }
 
 impl Index<&Piece> for PieceSets {
@@ -66,6 +98,12 @@ impl Index<(Color, PieceKind)> for PieceSets {
     type Output = Bitboard;
     fn index(&self, (color, piece_kind): (Color, PieceKind)) -> &Self::Output {
         &self.pieces[color as usize + piece_kind as usize]
+    }
+}
+
+impl IndexMut<(Color, PieceKind)> for PieceSets {
+    fn index_mut(&mut self, (color, piece_kind): (Color, PieceKind)) -> &mut Self::Output {
+        &mut self.pieces[color as usize + piece_kind as usize]
     }
 }
 
@@ -96,8 +134,8 @@ impl Index<&Color> for PieceSets {
     type Output = [Bitboard];
     fn index(&self, color: &Color) -> &Self::Output {
         match color {
-            Color::White => &self.pieces[Color::White as usize..Color::Black as usize],
-            Color::Black => &self.pieces[Color::Black as usize..Self::SIZE],
+            White => &self.pieces[White as usize..Black as usize],
+            Black => &self.pieces[Black as usize..Self::SIZE],
         }
     }
 }
@@ -105,8 +143,27 @@ impl Index<&Color> for PieceSets {
 impl IndexMut<&Color> for PieceSets {
     fn index_mut(&mut self, color: &Color) -> &mut Self::Output {
         match color {
-            Color::White => &mut self.pieces[Color::White as usize..Color::Black as usize],
-            Color::Black => &mut self.pieces[Color::Black as usize..Self::SIZE],
+            White => &mut self.pieces[White as usize..Black as usize],
+            Black => &mut self.pieces[Black as usize..Self::SIZE],
+        }
+    }
+}
+
+impl Index<Color> for PieceSets {
+    type Output = [Bitboard];
+    fn index(&self, color: Color) -> &Self::Output {
+        match color {
+            White => &self.pieces[White as usize..Black as usize],
+            Black => &self.pieces[Black as usize..Self::SIZE],
+        }
+    }
+}
+
+impl IndexMut<Color> for PieceSets {
+    fn index_mut(&mut self, color: Color) -> &mut Self::Output {
+        match color {
+            White => &mut self.pieces[White as usize..Black as usize],
+            Black => &mut self.pieces[Black as usize..Self::SIZE],
         }
     }
 }
@@ -140,12 +197,11 @@ impl Display for PieceSets {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coretypes::PieceKind;
     use Square::*;
     #[test]
     fn piece_indexing() {
         let pieces = PieceSets::start_position();
-        let w_king = &pieces[&Piece::new(Color::White, PieceKind::King)];
+        let w_king = &pieces[&Piece::new(White, King)];
         assert_eq!(w_king.count_squares(), 1);
         assert!(w_king.has_square(E1));
     }
@@ -153,7 +209,7 @@ mod tests {
     #[test]
     fn color_indexing() {
         let pieces = PieceSets::start_position();
-        let white_pieces = &pieces[&Color::White];
+        let white_pieces = &pieces[White];
         let w_occupancy = white_pieces
             .iter()
             .fold(Bitboard::EMPTY, |acc, piece| acc | piece);
@@ -165,7 +221,7 @@ mod tests {
             assert!(w_occupancy.has_square(square));
         }
 
-        let black_pieces = &pieces[&Color::Black];
+        let black_pieces = &pieces[Black];
         let b_occupancy = black_pieces
             .iter()
             .fold(Bitboard::EMPTY, |acc, piece| acc | piece);
@@ -176,5 +232,14 @@ mod tests {
         for &square in &[A8, B8, C8, D8, E8, F8, G8, H8] {
             assert!(b_occupancy.has_square(square));
         }
+    }
+
+    #[test]
+    fn check_is_valid() {
+        let mut set = PieceSets::start_position();
+        assert!(set.is_valid());
+
+        set[(White, Pawn)].set_square(H8);
+        assert!(!set.is_valid());
     }
 }

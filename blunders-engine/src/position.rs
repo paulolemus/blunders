@@ -7,8 +7,10 @@ use std::fmt::{self, Display};
 
 use crate::bitboard::Bitboard;
 use crate::boardrepr::PieceSets;
-use crate::coretypes::{Castling, Color, Move, MoveCount, Piece, PieceKind, Square};
-use crate::coretypes::{Color::*, PieceKind::*};
+use crate::coretypes::{
+    Castling, Color, Move, MoveCount, MoveInfo, MoveKind, Piece, PieceKind, Square,
+};
+use crate::coretypes::{Color::*, PieceKind::*, Square::*};
 use crate::fen::Fen;
 use crate::movegen as mg;
 
@@ -66,7 +68,7 @@ impl Position {
 
     /// Updates the En-Passant position square, and handles any en-passant capture.
     /// En Passant square is set after any double pawn push.
-    fn update_en_passant(&mut self, move_: &Move, active_piece: &Piece) {
+    fn update_en_passant(&mut self, move_: &Move, active_piece: &Piece, move_info: &mut MoveInfo) {
         // Non-pawn pushes set to None.
         if active_piece.piece_kind != Pawn {
             self.en_passant = None;
@@ -80,9 +82,10 @@ impl Position {
         // only possible in en-passant capture.
         if let Some(ep_square) = self.en_passant() {
             if move_.to == *ep_square {
+                move_info.move_kind = MoveKind::EnPassant;
                 let passive_player = !active_piece.color;
                 let captured_pawn = mg::pawn_single_pushes(&to, &passive_player);
-                self.pieces[&(passive_player, Pawn)].remove(&captured_pawn);
+                self.pieces[(passive_player, Pawn)].remove(&captured_pawn);
             }
         }
 
@@ -134,17 +137,26 @@ impl Position {
     /// Removes from square from active player piece on that square.
     /// Removes to square from all passive player pieces.
     /// Panics if from square has no active player piece.
-    pub fn do_move(&mut self, move_: Move) {
-        use Square::*;
+    pub fn do_move(&mut self, move_: Move) -> MoveInfo {
         // Find piece on `from` square for active player.
         let active_piece: Piece = PieceKind::iter()
             .map(|piece_kind| Piece::new(*self.player(), piece_kind))
             .find(|piece| self.pieces()[piece].has_square(move_.from))
             .expect("No piece on moving square.");
 
+        // Store info on current position, before applying move.
+        let mut move_info = MoveInfo::new(
+            move_,
+            active_piece.piece_kind,
+            MoveKind::Quiet,
+            *self.castling(),
+            *self.en_passant(),
+            *self.halfmoves(),
+        );
+
         // These always get updated, regardless of move.
         // Note: Do not use self.player, instead refer to active_piece.color.
-        self.update_en_passant(&move_, &active_piece);
+        self.update_en_passant(&move_, &active_piece, &mut move_info);
         self.update_move_counters(&move_, &active_piece);
         self.pieces[&active_piece].clear_square(move_.from);
         self.player = !self.player;
@@ -167,10 +179,11 @@ impl Position {
                 (E8, C8) => Some((A8, D8)), // Black Queenside
                 _ => None,
             };
-            let active_rooks = Piece::new(active_piece.color, Rook);
             if let Some((clear, set)) = castling_rook_squares {
-                self.pieces[&active_rooks].clear_square(clear);
-                self.pieces[&active_rooks].set_square(set);
+                move_info.move_kind = MoveKind::Castle;
+                let active_rooks = (active_piece.color, Rook);
+                self.pieces[active_rooks].clear_square(clear);
+                self.pieces[active_rooks].set_square(set);
             }
             self.castling.clear_color(&active_piece.color);
         }
@@ -193,16 +206,79 @@ impl Position {
         };
         self.castling.clear(moved_rights | captured_rights);
 
-        // Clear all passive (non-playing) player's pieces on `to` square.
+        // Clear passive (non-playing) player's piece on `to` square if exists.
         let passive_player = !active_piece.color;
-        self.pieces[&passive_player]
-            .iter_mut()
-            .for_each(|bb| bb.clear_square(move_.to));
+        PieceKind::iter()
+            .find(|piece_kind| self.pieces()[(passive_player, *piece_kind)].has_square(move_.to))
+            .into_iter()
+            .for_each(|piece_kind| {
+                move_info.move_kind = MoveKind::Capture(piece_kind);
+                self.pieces[(passive_player, piece_kind)].clear_square(move_.to);
+            });
+
+        debug_assert!(self.pieces().is_valid());
+        move_info
     }
 
     /// Undo the application of a move, in place.
-    pub fn undo_move(&mut self, _move_: Move) {
-        todo!()
+    pub fn undo_move(&mut self, move_info: MoveInfo) {
+        // Fullmoves increments after Black move, so decrements before White move.
+        // It starts at 1, so cannot go below that.
+        if *self.player() == White && *self.fullmoves() > 1 {
+            self.fullmoves -= 1;
+        }
+        self.player = !self.player();
+        self.castling = move_info.castling;
+        self.en_passant = move_info.en_passant;
+        self.halfmoves = move_info.halfmoves;
+
+        // Side-to-move of self is currently set to player who made original move.
+        // If the player captured a piece, need to restore captured piece.
+        // If player did en-passant, need to restore captured piece.
+        // If player castled, need to restore king and rook positions.
+        // If player promoted, need to remove promoted piece on to square, add original piece to from square.
+        let player = *self.player();
+
+        // Restore explicitly moved piece of move's active player.
+        let moved_piece = Piece::new(player, move_info.piece_kind);
+        self.pieces[&moved_piece].set_square(move_info.move_.from);
+        self.pieces[&moved_piece].clear_square(move_info.move_.to);
+        if let Some(promoted) = move_info.move_.promotion {
+            self.pieces[(player, promoted)].clear_square(move_info.move_.to);
+        }
+
+        // Handle special MoveKind cases.
+        match move_info.move_kind {
+            MoveKind::Capture(piece_kind) => {
+                self.pieces[(!player, piece_kind)].set_square(move_info.move_.to);
+            }
+
+            MoveKind::Castle => {
+                // Identify what kind of castle.
+                let (rook_from, rook_to) = match move_info.move_.to {
+                    C1 => (A1, D1), // White Queenside
+                    G1 => (H1, F1), // White Kingside
+                    C8 => (A8, D8), // Black Queenside
+                    G8 => (H8, F8), // Black Kingside
+                    _ => panic!("MoveKind is Castle but Move is not a castling move."),
+                };
+                // Restore Rook position before castling.
+                self.pieces[(player, Rook)].set_square(rook_from);
+                self.pieces[(player, Rook)].clear_square(rook_to);
+            }
+
+            MoveKind::EnPassant => {
+                let ep_square = move_info
+                    .en_passant
+                    .expect("MoveKind is EnPassant, but en_passant square is not set.");
+                let ep_bb = Bitboard::from(ep_square);
+                let original_bb = mg::pawn_single_pushes(&ep_bb, &!player);
+                self.pieces[(!player, Pawn)] |= original_bb;
+            }
+
+            MoveKind::Quiet => (),
+        }
+        debug_assert!(self.pieces().is_valid());
     }
 
     /// Checks if move is legal before applying it.
@@ -237,7 +313,7 @@ impl Position {
     }
 
     pub fn num_active_king_checks(&self) -> u32 {
-        let king_bb = self.pieces[&(self.player, King)];
+        let king_bb = self.pieces[(self.player, King)];
         let king_square = king_bb.squares()[0];
         let king_attackers = self.attackers_to(&king_square, &!self.player);
         king_attackers.count_squares()
@@ -246,12 +322,12 @@ impl Position {
     /// Returns bitboard with positions of all pieces of a player attacking a square.
     /// Assumes there is no overlap for pieces of a color.
     pub fn attackers_to(&self, target: &Square, attacking: &Color) -> Bitboard {
-        let pawns = self.pieces[&(*attacking, Pawn)];
-        let knights = self.pieces[&(*attacking, Knight)];
-        let king = self.pieces[&(*attacking, King)];
-        let bishops = self.pieces[&(*attacking, Bishop)];
-        let rooks = self.pieces[&(*attacking, Rook)];
-        let queens = self.pieces[&(*attacking, Queen)];
+        let pawns = self.pieces[(*attacking, Pawn)];
+        let knights = self.pieces[(*attacking, Knight)];
+        let king = self.pieces[(*attacking, King)];
+        let bishops = self.pieces[(*attacking, Bishop)];
+        let rooks = self.pieces[(*attacking, Rook)];
+        let queens = self.pieces[(*attacking, Queen)];
 
         let occupied = self.pieces().occupied();
 
@@ -280,9 +356,7 @@ impl Position {
         mg::pawn_attacks(&pawns, &attacking)
             | mg::knight_attacks(&knights)
             | mg::king_attacks(&king)
-            | mg::rook_attacks(&rooks, &occupied)
-            | mg::bishop_attacks(&bishops, &occupied)
-            | mg::queen_attacks(&queens, &occupied)
+            | mg::slide_attacks(&queens, &rooks, &bishops, &occupied)
     }
 
     /// Returns a list of all legal moves for active player in current position.
@@ -367,11 +441,11 @@ impl Position {
         // Sliding checker can be blocked or captured with non-pinned piece.
         // If not sliding, then checker can be captured with non-pinned piece.
         // TODO: Make more efficient (change from verifying by making move).
-        let queens = self.pieces[&(self.player, Queen)];
-        let rooks = self.pieces[&(self.player, Rook)];
-        let bishops = self.pieces[&(self.player, Bishop)];
-        let knights = self.pieces[&(self.player, Knight)];
-        let pawns = self.pieces[&(self.player, Pawn)];
+        let queens = self.pieces[(self.player, Queen)];
+        let rooks = self.pieces[(self.player, Rook)];
+        let bishops = self.pieces[(self.player, Bishop)];
+        let knights = self.pieces[(self.player, Knight)];
+        let pawns = self.pieces[(self.player, Pawn)];
 
         let mut pseudo_moves = Vec::new();
         mg::queen_pseudo_moves(&mut pseudo_moves, queens, occupied, us);
@@ -387,12 +461,14 @@ impl Position {
             self.en_passant,
         );
 
+        let mut position = self.clone();
         pseudo_moves
             .into_iter()
             .filter(|pseudo_move| {
-                !self
-                    .make_move(*pseudo_move)
-                    .is_attacked_by(&king_square, &passive_player)
+                let move_info = position.do_move(*pseudo_move);
+                let is_legal = !position.is_attacked_by(&king_square, &passive_player);
+                position.undo_move(move_info);
+                is_legal
             })
             .for_each(|legal_move| legal_moves.push(legal_move));
 
@@ -429,11 +505,11 @@ impl Position {
 
         // Generate all normal Queen, Rook, Bishop, Knight moves.
         // Generate all normal and special Pawn moves (single/double push, attacks, ep).
-        let queens = self.pieces[&(self.player, Queen)];
-        let rooks = self.pieces[&(self.player, Rook)];
-        let bishops = self.pieces[&(self.player, Bishop)];
-        let knights = self.pieces[&(self.player, Knight)];
-        let pawns = self.pieces[&(self.player, Pawn)];
+        let queens = self.pieces[(self.player, Queen)];
+        let rooks = self.pieces[(self.player, Rook)];
+        let bishops = self.pieces[(self.player, Bishop)];
+        let knights = self.pieces[(self.player, Knight)];
+        let pawns = self.pieces[(self.player, Pawn)];
 
         let mut pseudo_moves = Vec::with_capacity(128);
         mg::queen_pseudo_moves(&mut pseudo_moves, queens, occupied, us);
@@ -448,12 +524,15 @@ impl Position {
             them,
             self.en_passant,
         );
+
+        let mut position = self.clone();
         pseudo_moves
             .into_iter()
             .filter(|pseudo_move| {
-                !self
-                    .make_move(*pseudo_move)
-                    .is_attacked_by(&king_square, &passive_player)
+                let move_info = position.do_move(*pseudo_move);
+                let is_legal = !position.is_attacked_by(&king_square, &passive_player);
+                position.undo_move(move_info);
+                is_legal
             })
             .for_each(|legal_move| legal_moves.push(legal_move));
 
@@ -491,7 +570,6 @@ impl Display for Position {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use Square::*;
 
     #[test]
     fn pretty_print_position() {
@@ -501,12 +579,64 @@ mod tests {
 
     #[test]
     fn do_move_with_legal_move() {
-        let move1 = Move::new(Square::E2, Square::E4, None);
-        let move1_piece = Piece::new(Color::White, PieceKind::Pawn);
+        let move1 = Move::new(E2, E4, None);
+        let move1_piece = Piece::new(White, Pawn);
         let mut position = Position::start_position();
         position.do_move(move1);
-        assert!(position.pieces[&move1_piece].has_square(Square::E4));
-        assert!(!position.pieces[&move1_piece].has_square(Square::E2));
+        assert!(position.pieces[&move1_piece].has_square(E4));
+        assert!(!position.pieces[&move1_piece].has_square(E2));
+    }
+
+    #[test]
+    fn undo_move_with_legal_move() {
+        {
+            // Start position
+            let pos = Position::start_position();
+            let mut pos_moved = pos.clone();
+            let move_ = Move::new(E2, E4, None);
+            let move_info = pos_moved.do_move(move_);
+            pos_moved.undo_move(move_info);
+            assert_eq!(pos, pos_moved);
+            assert_eq!(move_info.move_, move_);
+            assert_eq!(move_info.piece_kind, Pawn);
+            assert_eq!(move_info.move_kind, MoveKind::Quiet);
+            assert_eq!(move_info.castling, Castling::ALL);
+            assert_eq!(move_info.en_passant, None);
+        }
+        {
+            // En passant
+            let pos = Position::parse_fen(
+                "rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3",
+            )
+            .unwrap();
+            let mut pos_moved = pos.clone();
+            let move_ = Move::new(E5, F6, None);
+            let move_info = pos_moved.do_move(move_);
+            pos_moved.undo_move(move_info);
+            assert_eq!(pos, pos_moved);
+            assert_eq!(move_info.move_, move_);
+            assert_eq!(move_info.piece_kind, Pawn);
+            assert_eq!(move_info.move_kind, MoveKind::EnPassant);
+            assert_eq!(move_info.castling, Castling::ALL);
+            assert_eq!(move_info.en_passant, Some(F6));
+        }
+        {
+            // Kingside Castling
+            let pos = Position::parse_fen(
+                "rn1qkbnr/ppp3pp/5p2/8/2Bp2b1/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 6",
+            )
+            .unwrap();
+            let mut pos_moved = pos.clone();
+            let move_ = Move::new(E1, G1, None);
+            let move_info = pos_moved.do_move(move_);
+            pos_moved.undo_move(move_info);
+            assert_eq!(pos, pos_moved);
+            assert_eq!(move_info.move_, move_);
+            assert_eq!(move_info.piece_kind, King);
+            assert_eq!(move_info.move_kind, MoveKind::Castle);
+            assert_eq!(move_info.castling, Castling::ALL);
+            assert_eq!(move_info.en_passant, None);
+        }
     }
 
     #[test]

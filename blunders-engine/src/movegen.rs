@@ -307,6 +307,31 @@ pub fn bishop_attacks(bishops: &Bitboard, occupied: &Bitboard) -> Bitboard {
         .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks)
 }
 
+/// Generate and return Bitboard with squares attacked by all sliding pieces.
+/// This may be a little more efficient than checking for each sliding piece individually.
+pub fn slide_attacks(
+    queens: &Bitboard,
+    rooks: &Bitboard,
+    bishops: &Bitboard,
+    occupied: &Bitboard,
+) -> Bitboard {
+    let orthogonals = queens | *rooks;
+    let diagonals = queens | *bishops;
+
+    let orthogonal_attacks = orthogonals
+        .squares()
+        .into_iter()
+        .map(|square| solo_rook_attacks(&square, &occupied))
+        .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks);
+
+    let diagonal_attacks = diagonals
+        .squares()
+        .into_iter()
+        .map(|square| solo_bishop_attacks(&square, &occupied))
+        .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks);
+    orthogonal_attacks | diagonal_attacks
+}
+
 /// Generate Bitboard containing all squares that are directly attacked by a piece at origin,
 /// in all 8 orthogonal and diagonal directions.
 /// Directly attacked squares are all empty squares along ray up to first any piece, inclusive.

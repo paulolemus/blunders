@@ -110,12 +110,31 @@ pub enum Square {
 /// Move
 /// Long Algebraic form of moving a single chess piece.
 /// Equivalent to a chess "half move", or "ply".
-/// TODO: Store data to allow for unmake_move on position.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Move {
     pub(crate) from: Square,
     pub(crate) to: Square,
     pub(crate) promotion: Option<PieceKind>,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum MoveKind {
+    Capture(PieceKind), // Normal capture move
+    Quiet,              // Special moves or captures, simply moved to empty square
+    Castle,             // Castled
+    EnPassant,          // En passant capture
+}
+
+/// MoveInfo stores data about a position before a move, and data generated from making a Move.
+/// This allows preventing some recalculations and providing enough data to reverse the made move.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct MoveInfo {
+    pub(crate) move_: Move,
+    pub(crate) piece_kind: PieceKind,
+    pub(crate) move_kind: MoveKind,
+    pub(crate) castling: Castling,
+    pub(crate) en_passant: Option<Square>,
+    pub(crate) halfmoves: MoveCount,
 }
 
 ////////////
@@ -710,6 +729,46 @@ impl Move {
     }
     pub const fn promotion(&self) -> &Option<PieceKind> {
         &self.promotion
+    }
+}
+
+impl MoveInfo {
+    pub const fn new(
+        move_: Move,
+        moved_piece_kind: PieceKind,
+        move_kind: MoveKind,
+        castling: Castling,
+        en_passant: Option<Square>,
+        halfmoves: MoveCount,
+    ) -> Self {
+        Self {
+            move_,
+            piece_kind: moved_piece_kind,
+            move_kind,
+            castling,
+            en_passant,
+            halfmoves,
+        }
+    }
+
+    // Immutable Getters
+    pub const fn move_(&self) -> &Move {
+        &self.move_
+    }
+    pub const fn piece_kind(&self) -> &PieceKind {
+        &self.piece_kind
+    }
+    pub const fn move_kind(&self) -> &MoveKind {
+        &self.move_kind
+    }
+    pub const fn castling(&self) -> &Castling {
+        &self.castling
+    }
+    pub const fn en_passant(&self) -> &Option<Square> {
+        &self.en_passant
+    }
+    pub const fn halfmoves(&self) -> &MoveCount {
+        &self.halfmoves
     }
 }
 

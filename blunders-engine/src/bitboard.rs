@@ -172,8 +172,7 @@ impl Bitboard {
             let square_value = bits.trailing_zeros() as u8;
             bits ^= 1u64 << square_value;
             let square = Square::from_u8(square_value);
-            debug_assert!(square_value < 64u8);
-            debug_assert!(square.is_some());
+            debug_assert!(square_value < 64u8 && square.is_some());
             vec.push(square.unwrap());
         }
         vec
