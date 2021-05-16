@@ -469,45 +469,45 @@ fn ray_attack_we(origin: &Square, occupancy: &Bitboard) -> Bitboard {
 }
 /// Return all squares attacked in NorthEast-direction ray, stopping on first attacked piece.
 fn ray_attack_noea(origin: &Square, occupancy: &Bitboard) -> Bitboard {
-    let mut ray = Bitboard::from(origin).to_north().to_east();
+    let mut ray = Bitboard::from(origin).to_north_east();
     for _ in 0..6 {
         if occupancy.has_any(&ray) {
             return ray;
         }
-        ray |= ray.to_north().to_east();
+        ray |= ray.to_north_east();
     }
     ray
 }
 /// Return all squares attacked in SouthEast-direction ray, stopping on first attacked piece.
 fn ray_attack_soea(origin: &Square, occupancy: &Bitboard) -> Bitboard {
-    let mut ray = Bitboard::from(origin).to_south().to_east();
+    let mut ray = Bitboard::from(origin).to_south_east();
     for _ in 0..6 {
         if occupancy.has_any(&ray) {
             return ray;
         }
-        ray |= ray.to_south().to_east();
+        ray |= ray.to_south_east();
     }
     ray
 }
 /// Return all squares attacked in SouthWest-direction ray, stopping on first attacked piece.
 fn ray_attack_sowe(origin: &Square, occupancy: &Bitboard) -> Bitboard {
-    let mut ray = Bitboard::from(origin).to_south().to_west();
+    let mut ray = Bitboard::from(origin).to_south_west();
     for _ in 0..6 {
         if occupancy.has_any(&ray) {
             return ray;
         }
-        ray |= ray.to_south().to_west();
+        ray |= ray.to_south_west();
     }
     ray
 }
 /// Return all squares attacked in NorthWest-direction ray, stopping on first attacked piece.
 fn ray_attack_nowe(origin: &Square, occupancy: &Bitboard) -> Bitboard {
-    let mut ray = Bitboard::from(origin).to_north().to_west();
+    let mut ray = Bitboard::from(origin).to_north_west();
     for _ in 0..6 {
         if occupancy.has_any(&ray) {
             return ray;
         }
-        ray |= ray.to_north().to_west();
+        ray |= ray.to_north_west();
     }
     ray
 }

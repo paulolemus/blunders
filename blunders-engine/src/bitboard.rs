@@ -66,6 +66,8 @@ impl Bitboard {
     pub const RANK_8: Bitboard = bb_from_shifts!(A8, B8, C8, D8, E8, F8, G8, H8);
     pub const FILE_A: Bitboard = bb_from_shifts!(A1, A2, A3, A4, A5, A6, A7, A8);
     pub const FILE_H: Bitboard = bb_from_shifts!(H1, H2, H3, H4, H5, H6, H7, H8);
+    pub const NOT_FILE_A: Bitboard = Self(!Self::FILE_A.0);
+    pub const NOT_FILE_H: Bitboard = Self(!Self::FILE_H.0);
     // Squares between king and kingside rook. Useful for checking castling.
     pub const KINGSIDE_BETWEEN: Bitboard = bb_from_shifts!(F1, G1, F8, G8);
     pub const QUEENSIDE_BETWEEN: Bitboard = bb_from_shifts!(B1, C1, D1, B8, C8, D8);
@@ -82,69 +84,114 @@ impl Bitboard {
     }
 
     /// Returns true if there are no squares in self, false otherwise.
+    #[inline(always)]
     pub const fn is_empty(&self) -> bool {
         self.0 == 0
     }
 
     /// Returns number of squares present.
     /// Equivalent to number of bits in binary representation that are '1'.
+    /// When compiled for targets with BMI1 popcnt instruction, should resolve to a single instruction.
+    #[inline(always)]
     pub const fn count_squares(&self) -> u32 {
         self.0.count_ones()
     }
 
     /// Returns true if index is populated.
+    #[inline(always)]
     pub fn has_square<I: SquareIndexable>(&self, idx: I) -> bool {
         self.0 & idx.shift() != 0
     }
     /// Sets bit index to 1.
+    #[inline(always)]
     pub fn set_square<I: SquareIndexable>(&mut self, idx: I) {
         self.0 |= idx.shift();
     }
     /// Sets bit index to 0.
+    #[inline(always)]
     pub fn clear_square<I: SquareIndexable>(&mut self, idx: I) {
         self.0 &= !idx.shift();
     }
     /// Toggles bit index. 0 -> 1, 1 -> 0.
+    #[inline(always)]
     pub fn toggle_square<I: SquareIndexable>(&mut self, idx: I) {
         self.0 ^= idx.shift();
     }
 
+    /// Clears the lowest square from self. If there are no squares, does nothing.
+    /// When compiled for targets that support BMI1 BLSR (reset lowest set bit),
+    /// should resolve to a single instruction and a move.
+    #[inline(always)]
+    pub fn clear_lowest_square(&mut self) {
+        self.0 &= self.0 - 1;
+    }
+
     /// Remove all squares in other from self.
+    #[inline(always)]
     pub fn remove(&mut self, other: &Bitboard) {
         *self &= !other
     }
 
     /// Returns true if other is a subset of self.
     /// If all squares of other are in self, then other is a subset of self.
+    #[inline(always)]
     pub fn contains(&self, other: &Bitboard) -> bool {
         self & *other == *other
     }
 
     /// Returns true if self has any squares that are in other.
     /// In other words, if there is any overlap, return true.
+    #[inline(always)]
     pub fn has_any(&self, other: &Bitboard) -> bool {
         self & *other != Self::EMPTY
     }
 
     /// Returns new Bitboard with all squares shifted 1 square north (ex: D4 -> D5).
+    #[inline(always)]
     pub const fn to_north(&self) -> Self {
         Self(self.0 << 8)
     }
     /// Returns new Bitboard with all squares shifted 1 square south (ex: D4 -> D3).
+    #[inline(always)]
     pub const fn to_south(&self) -> Self {
         Self(self.0 >> 8)
     }
     /// Returns new Bitboard with all squares shifted 1 square east (ex: D4 -> E4).
     /// To prevent wrapping of bit to other rank, bits are removed on FILE_A.
+    #[inline(always)]
     pub const fn to_east(&self) -> Self {
-        const NOT_FILE_A: u64 = !Bitboard::FILE_A.0;
-        Self((self.0 << 1) & NOT_FILE_A)
+        Self((self.0 << 1) & Self::NOT_FILE_A.0)
     }
     /// Returns new Bitboard with all squares shifted 1 square west (ex: D4 -> C4).
     /// To prevent wrapping of bit to other rank, bits are removed on FILE_H.
+    #[inline(always)]
     pub const fn to_west(&self) -> Self {
-        const NOT_FILE_H: u64 = !Bitboard::FILE_H.0;
-        Self((self.0 >> 1) & NOT_FILE_H)
+        Self((self.0 >> 1) & Self::NOT_FILE_H.0)
+    }
+
+    /// Returns new Bitboard with all squares shifted 1 square north east (ex: D4 -> E5).
+    /// To prevent wrapping of bit to other rank, bits are removed on FILE_A.
+    #[inline(always)]
+    pub const fn to_north_east(&self) -> Self {
+        Self((self.0 << 9) & Self::NOT_FILE_A.0)
+    }
+    /// Returns new Bitboard with all squares shifted 1 square north west (ex: D4 -> C5).
+    /// To prevent wrapping of bit to other rank, bits are removed on FILE_H.
+    #[inline(always)]
+    pub const fn to_north_west(&self) -> Self {
+        Self((self.0 << 7) & Self::NOT_FILE_H.0)
+    }
+    /// Returns new Bitboard with all squares shifted 1 square south east (ex: D4 -> E3).
+    /// To prevent wrapping of bit to other rank, bits are removed on FILE_A.
+    #[inline(always)]
+    pub const fn to_south_east(&self) -> Self {
+        Self((self.0 >> 7) & Self::NOT_FILE_A.0)
+    }
+    /// Returns new Bitboard with all squares shifted 1 square south west (ex: D4 -> C3).
+    /// To prevent wrapping of bit to other rank, bits are removed on FILE_H.
+    #[inline(always)]
+    pub const fn to_south_west(&self) -> Self {
+        Self((self.0 >> 9) & Self::NOT_FILE_H.0)
     }
 
     /// Returns a vector of all the Squares represented in the Bitboard.
@@ -164,13 +211,13 @@ impl Bitboard {
     /// * Use shift index to remove bit from Bitboard.
     /// * Convert square index to a Square and add to list.
     pub fn squares(&self) -> Vec<Square> {
-        let mut bits: u64 = self.0;
-        let num_ones = bits.count_ones() as usize;
+        let mut bits = self.clone();
+        let num_ones = self.count_squares() as usize;
         let mut vec = Vec::with_capacity(num_ones);
 
         for _ in 0..num_ones {
-            let square_value = bits.trailing_zeros() as u8;
-            bits ^= 1u64 << square_value;
+            let square_value = bits.0.trailing_zeros() as u8;
+            bits.clear_lowest_square();
             let square = Square::from_u8(square_value);
             debug_assert!(square_value < 64u8 && square.is_some());
             vec.push(square.unwrap());

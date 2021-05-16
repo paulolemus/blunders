@@ -9,6 +9,7 @@ use std::ops::{Add, AddAssign};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use crate::coretypes::Move;
 use crate::position::Position;
 
 /// Debugging information about results of perft test.
@@ -51,16 +52,16 @@ pub fn perft(mut position: Position, ply: u32, threads: usize) -> PerftInfo {
         // Simple enough to not require threads, or single threaded.
         return perft_recurse(&mut position, ply);
     }
-    debug_assert!(ply >= 3);
-    debug_assert!(threads >= 2);
+    debug_assert!(ply > 2);
+    debug_assert!(threads > 1);
 
-    let legal_moves = Arc::new(Mutex::new(position.get_legal_moves()));
-    {
-        let legal_moves = legal_moves.lock().unwrap();
-        if legal_moves.len() == 0 {
-            return PerftInfo::new(0);
-        }
+    let legal_moves = position.get_legal_moves();
+    // Guard no moves to search.
+    if legal_moves.len() == 0 {
+        return PerftInfo::new(0);
     }
+
+    let legal_moves = Arc::new(Mutex::new(legal_moves));
     let total_perft_info = Arc::new(Mutex::new(PerftInfo::new(0)));
     let num_new_threads = threads - 1;
     let mut handles = Vec::new();
@@ -72,37 +73,53 @@ pub fn perft(mut position: Position, ply: u32, threads: usize) -> PerftInfo {
         let total_perft_info = total_perft_info.clone();
 
         let handle = thread::spawn(move || {
-            let mut perft_info = PerftInfo::new(0);
-            let mut maybe_move = { legal_moves.lock().unwrap().pop() };
-            while let Some(legal_move) = maybe_move {
-                let move_info = position.do_move(legal_move);
-                perft_info += perft_recurse(&mut position, ply - 1);
-                position.undo_move(move_info);
-                maybe_move = legal_moves.lock().unwrap().pop();
-            }
-            *total_perft_info.lock().unwrap() += perft_info;
+            perft_executor(position, ply, legal_moves, total_perft_info);
         });
 
         handles.push(handle);
     }
 
     // Process on local thread.
-    let mut perft_info = PerftInfo::new(0);
-    let mut maybe_move = { legal_moves.lock().unwrap().pop() };
-    while let Some(legal_move) = maybe_move {
-        let move_info = position.do_move(legal_move);
-        perft_info += perft_recurse(&mut position, ply - 1);
-        position.undo_move(move_info);
-        maybe_move = legal_moves.lock().unwrap().pop();
-    }
+    perft_executor(position, ply, legal_moves, total_perft_info.clone());
 
     // Wait for all handles to finish.
     for handle in handles {
         handle.join().unwrap();
     }
 
-    let total_perft_info = *total_perft_info.lock().unwrap();
-    total_perft_info + perft_info
+    // Move out of Mutex, moved out of arc.
+    Arc::try_unwrap(total_perft_info)
+        .unwrap()
+        .into_inner()
+        .unwrap()
+}
+
+/// perft_executor works by stealing one move at a time from given moves list and running perft on that move.
+/// When there are no moves left to steal, this function stores the data it has collected so far and returns.
+/// params:
+/// position - position to evaluate moves on.
+/// ply - ply of provided position. Must be greater than 1.
+/// moves - synchronous access to list of moves to steal from. Moves must be valid for given position.
+/// perft_info - place to store information post execution.
+#[inline(always)]
+fn perft_executor(
+    mut position: Position,
+    ply: u32,
+    moves: Arc<Mutex<Vec<Move>>>,
+    total_perft_info: Arc<Mutex<PerftInfo>>,
+) {
+    debug_assert!(ply > 1);
+    let mut perft_info = PerftInfo::new(0);
+    let mut maybe_move = { moves.lock().unwrap().pop() };
+
+    while let Some(move_) = maybe_move {
+        let move_info = position.do_move(move_);
+        perft_info += perft_recurse(&mut position, ply - 1);
+        position.undo_move(move_info);
+        maybe_move = moves.lock().unwrap().pop();
+    }
+
+    *total_perft_info.lock().unwrap() += perft_info;
 }
 
 /// Ply must be non-zero.
