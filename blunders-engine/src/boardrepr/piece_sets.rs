@@ -1,12 +1,52 @@
 //! Piece-Centric representation of a chess board.
 
 use std::fmt::{self, Display};
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Range};
 
 use crate::bitboard::Bitboard;
 use crate::boardrepr::Mailbox;
 use crate::coretypes::{Color, Piece, PieceKind, Square};
 use crate::coretypes::{Color::*, PieceKind::*};
+
+// These offset impls are used to index their corresponding place in PieceSets.
+// PieceSets contains an array with one index for each kind of piece.
+// Optionally, Color and PieceKind discriminants could directly be these values
+// however they will stay decoupled for now to decrease dependency on enum ordering
+// until order is stabilized.
+
+impl Color {
+    /// Get the position of the start of the block for a color.
+    /// There are 6 piece_kinds per color, so one should start at 0, and the other at 6.
+    #[inline(always)]
+    const fn offset_block(&self) -> usize {
+        match self {
+            White => 0,
+            Black => 6,
+        }
+    }
+}
+impl PieceKind {
+    /// Get the offset of a piece_kind within a block.
+    /// Values must cover all numbers of [0, 1, 2, 3, 4, 5].
+    #[inline(always)]
+    const fn offset_pk(&self) -> usize {
+        match self {
+            King => 0,
+            Pawn => 1,
+            Knight => 2,
+            Queen => 3,
+            Rook => 4,
+            Bishop => 5,
+        }
+    }
+}
+impl Piece {
+    /// Get the completely qualified index for a piece.
+    #[inline(always)]
+    const fn offset(&self) -> usize {
+        self.color.offset_block() + self.piece_kind.offset_pk()
+    }
+}
 
 /// A Piece-Centric representation of pieces on a chessboard.
 /// A Bitboard is used to encode the squares of each chess piece.
@@ -34,6 +74,8 @@ impl PieceSets {
     }
 
     /// Return a bitboard representing the set of squares occupied by any piece.
+    /// Note: Compiler can auto-vectorize, however looking at assembly on godbolt
+    /// may be limited to avx128. Does not seem to use avx512 on supported cpus.
     pub fn occupied(&self) -> Bitboard {
         self.pieces.iter().fold(Bitboard::EMPTY, |acc, bb| acc | bb)
     }
@@ -84,46 +126,45 @@ impl PieceSets {
 impl Index<&Piece> for PieceSets {
     type Output = Bitboard;
     fn index(&self, piece: &Piece) -> &Self::Output {
-        &self.pieces[piece.color as usize + piece.piece_kind as usize]
+        &self.pieces[piece.offset()]
     }
 }
 
 impl IndexMut<&Piece> for PieceSets {
     fn index_mut(&mut self, piece: &Piece) -> &mut Self::Output {
-        &mut self.pieces[piece.color as usize + piece.piece_kind as usize]
+        &mut self.pieces[piece.offset()]
     }
 }
 
 impl Index<(Color, PieceKind)> for PieceSets {
     type Output = Bitboard;
     fn index(&self, (color, piece_kind): (Color, PieceKind)) -> &Self::Output {
-        &self.pieces[color as usize + piece_kind as usize]
+        &self.pieces[color.offset_block() + piece_kind.offset_pk()]
     }
 }
 
 impl IndexMut<(Color, PieceKind)> for PieceSets {
     fn index_mut(&mut self, (color, piece_kind): (Color, PieceKind)) -> &mut Self::Output {
-        &mut self.pieces[color as usize + piece_kind as usize]
+        &mut self.pieces[color.offset_block() + piece_kind.offset_pk()]
     }
 }
 
 impl Index<&(Color, PieceKind)> for PieceSets {
     type Output = Bitboard;
     fn index(&self, (color, piece_kind): &(Color, PieceKind)) -> &Self::Output {
-        &self.pieces[(*color) as usize + (*piece_kind) as usize]
+        &self.pieces[color.offset_block() + piece_kind.offset_pk()]
     }
 }
 
 impl IndexMut<&(Color, PieceKind)> for PieceSets {
     fn index_mut(&mut self, (color, piece_kind): &(Color, PieceKind)) -> &mut Self::Output {
-        &mut self.pieces[(*color) as usize + (*piece_kind) as usize]
+        &mut self.pieces[color.offset_block() + piece_kind.offset_pk()]
     }
 }
 
 /// Get a slice of all pieces of same color.
 /// ```rust
 /// # use blunders_engine::{coretypes::Color, boardrepr::PieceSets, bitboard::Bitboard};
-/// # assert!((Color::White as usize) < Color::Black as usize);
 /// let ps = PieceSets::start_position();
 /// let w_slice = &ps[&Color::White];
 /// let b_slice = &ps[&Color::Black];
@@ -133,18 +174,20 @@ impl IndexMut<&(Color, PieceKind)> for PieceSets {
 impl Index<&Color> for PieceSets {
     type Output = [Bitboard];
     fn index(&self, color: &Color) -> &Self::Output {
+        const RANGES: (Range<usize>, Range<usize>) = color_ranges();
         match color {
-            White => &self.pieces[White as usize..Black as usize],
-            Black => &self.pieces[Black as usize..Self::SIZE],
+            White => &self.pieces[RANGES.0],
+            Black => &self.pieces[RANGES.1],
         }
     }
 }
 
 impl IndexMut<&Color> for PieceSets {
     fn index_mut(&mut self, color: &Color) -> &mut Self::Output {
+        const RANGES: (Range<usize>, Range<usize>) = color_ranges();
         match color {
-            White => &mut self.pieces[White as usize..Black as usize],
-            Black => &mut self.pieces[Black as usize..Self::SIZE],
+            White => &mut self.pieces[RANGES.0],
+            Black => &mut self.pieces[RANGES.1],
         }
     }
 }
@@ -152,20 +195,35 @@ impl IndexMut<&Color> for PieceSets {
 impl Index<Color> for PieceSets {
     type Output = [Bitboard];
     fn index(&self, color: Color) -> &Self::Output {
+        const RANGES: (Range<usize>, Range<usize>) = color_ranges();
         match color {
-            White => &self.pieces[White as usize..Black as usize],
-            Black => &self.pieces[Black as usize..Self::SIZE],
+            White => &self.pieces[RANGES.0],
+            Black => &self.pieces[RANGES.1],
         }
     }
 }
 
 impl IndexMut<Color> for PieceSets {
     fn index_mut(&mut self, color: Color) -> &mut Self::Output {
+        const RANGES: (Range<usize>, Range<usize>) = color_ranges();
         match color {
-            White => &mut self.pieces[White as usize..Black as usize],
-            Black => &mut self.pieces[Black as usize..Self::SIZE],
+            White => &mut self.pieces[RANGES.0],
+            Black => &mut self.pieces[RANGES.1],
         }
     }
+}
+
+/// Used in 4 Index<Color> traits above to get correct ranges to represent each color's block.
+const fn color_ranges() -> (Range<usize>, Range<usize>) {
+    const W_RANGE: Range<usize> = match White.offset_block() < Black.offset_block() {
+        true => White.offset_block()..Black.offset_block(),
+        false => White.offset_block()..PieceSets::SIZE,
+    };
+    const B_RANGE: Range<usize> = match White.offset_block() < Black.offset_block() {
+        true => Black.offset_block()..PieceSets::SIZE,
+        false => Black.offset_block()..White.offset_block(),
+    };
+    (W_RANGE, B_RANGE)
 }
 
 impl From<&Mailbox> for PieceSets {

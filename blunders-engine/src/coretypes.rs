@@ -13,8 +13,6 @@ use std::str::FromStr;
 pub const NUM_FILES: usize = 8; // A, B, C, D, E, F, G, H
 pub const NUM_RANKS: usize = 8; // 1, 2, 3, 4, 5, 6, 7, 8
 pub const NUM_SQUARES: usize = NUM_FILES * NUM_RANKS;
-const WHITE_ARRAY_OFFSET: u8 = 0;
-const BLACK_ARRAY_OFFSET: u8 = 6;
 
 /////////////////////////
 // Data and Structures //
@@ -27,22 +25,21 @@ pub type MoveCount = u32;
 /// Color's set discriminant is used in position.rs to index without branching.
 /// First 6 are for each piece_kind as white, last 6 are for each piece_kind as black.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-#[repr(u8)]
 pub enum Color {
-    White = WHITE_ARRAY_OFFSET,
-    Black = BLACK_ARRAY_OFFSET,
+    White,
+    Black,
 }
 
 /// Enum variant order and discriminant are important.
 /// Must be contiguous and start from 0.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum PieceKind {
+    King,
     Pawn,
-    Rook,
     Knight,
-    Bishop,
+    Rook,
     Queen,
-    King = 5,
+    Bishop,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
