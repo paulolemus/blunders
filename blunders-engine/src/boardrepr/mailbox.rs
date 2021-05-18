@@ -136,7 +136,6 @@ impl From<&PieceSets> for Mailbox {
             for piece_kind in PieceKind::iter() {
                 let piece = Piece::new(color, piece_kind);
                 pieces[&piece]
-                    .squares()
                     .into_iter()
                     .for_each(|square| mb[square] = Some(piece));
             }

@@ -91,10 +91,8 @@ impl Position {
 
         // Set en passant square.
         if to == double_push {
-            self.en_passant = mg::pawn_single_pushes(&pawn, &active_piece.color)
-                .squares()
-                .into_iter()
-                .next();
+            self.en_passant =
+                mg::pawn_single_pushes(&pawn, &active_piece.color).get_lowest_square();
         } else {
             self.en_passant = None;
         }
@@ -314,7 +312,7 @@ impl Position {
 
     pub fn num_active_king_checks(&self) -> u32 {
         let king_bb = self.pieces[(self.player, King)];
-        let king_square = king_bb.squares()[0];
+        let king_square = king_bb.get_lowest_square().unwrap();
         let king_attackers = self.attackers_to(&king_square, &!self.player);
         king_attackers.count_squares()
     }
@@ -397,8 +395,8 @@ impl Position {
 
         // Convert remaining move squares into Move structs.
         let mut legal_moves = Vec::with_capacity(8); // 8 max possible moves.
-        let from = king.squares()[0];
-        for to in possible_moves.squares() {
+        let from = king.get_lowest_square().unwrap();
+        for to in possible_moves {
             legal_moves.push(Move::new(from, to, None));
         }
 
@@ -413,7 +411,7 @@ impl Position {
         let mut legal_moves: Vec<Move> = Vec::new();
 
         let king = self.pieces[(self.player, King)];
-        let king_square = king.squares()[0];
+        let king_square = king.get_lowest_square().unwrap();
         let passive_player = !self.player;
         let us = self.pieces.color_occupied(&self.player);
         let them = self.pieces.color_occupied(&passive_player);
@@ -425,7 +423,7 @@ impl Position {
         let mut possible_moves = mg::king_attacks(&king);
         possible_moves.remove(&attacked_xray_king);
         possible_moves.remove(&us);
-        for to in possible_moves.squares() {
+        for to in possible_moves {
             legal_moves.push(Move::new(king_square, to, None));
         }
 
@@ -488,18 +486,26 @@ impl Position {
         let mut legal_moves = Vec::with_capacity(128);
 
         let king = self.pieces[(self.player, King)];
-        let king_square = king.squares()[0];
+        let king_square = king.get_lowest_square().unwrap();
         let passive_player = !self.player;
         let us = self.pieces.color_occupied(&self.player);
         let them = self.pieces.color_occupied(&passive_player);
         let occupied = us | them;
         let attacked = self.attacks(&passive_player, &occupied);
 
+        let (absolute_pins, _pinned_moves) = {
+            let queens = self.pieces[(passive_player, Queen)];
+            let rooks = self.pieces[(passive_player, Rook)];
+            let bishops = self.pieces[(passive_player, Bishop)];
+
+            mg::absolute_pins(king_square, us, them, queens | rooks, queens | bishops)
+        };
+
         // Generate all normal legal king moves.
         let mut king_tos = mg::king_attacks(&king);
         king_tos.remove(&us);
         king_tos.remove(&attacked);
-        for to in king_tos.squares() {
+        for to in king_tos {
             legal_moves.push(Move::new(king_square, to, None));
         }
 
@@ -511,11 +517,25 @@ impl Position {
         let knights = self.pieces[(self.player, Knight)];
         let pawns = self.pieces[(self.player, Pawn)];
 
+        // Generate strictly legal moves using pinned data.
+        let knights_free = knights & !absolute_pins;
+        let bishops_free = bishops & !absolute_pins;
+        let rooks_free = rooks & !absolute_pins;
+        let queens_free = queens & !absolute_pins;
+        mg::knight_pseudo_moves(&mut legal_moves, knights_free, us);
+        mg::bishop_pseudo_moves(&mut legal_moves, bishops_free, occupied, us);
+        mg::rook_pseudo_moves(&mut legal_moves, rooks_free, occupied, us);
+        mg::queen_pseudo_moves(&mut legal_moves, queens_free, occupied, us);
+
+        // Generate pseudo moves and check for legality with "do/undo".
         let mut pseudo_moves = Vec::with_capacity(128);
-        mg::queen_pseudo_moves(&mut pseudo_moves, queens, occupied, us);
-        mg::rook_pseudo_moves(&mut pseudo_moves, rooks, occupied, us);
-        mg::bishop_pseudo_moves(&mut pseudo_moves, bishops, occupied, us);
-        mg::knight_pseudo_moves(&mut pseudo_moves, knights, us);
+        let bishops_pinned = bishops & absolute_pins;
+        let rooks_pinned = rooks & absolute_pins;
+        let queens_pinned = queens & absolute_pins;
+
+        mg::queen_pseudo_moves(&mut pseudo_moves, queens_pinned, occupied, us);
+        mg::rook_pseudo_moves(&mut pseudo_moves, rooks_pinned, occupied, us);
+        mg::bishop_pseudo_moves(&mut pseudo_moves, bishops_pinned, occupied, us);
         mg::pawn_pseudo_moves(
             &mut pseudo_moves,
             pawns,

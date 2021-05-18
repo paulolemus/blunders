@@ -37,7 +37,7 @@
 //! Pass Pawns
 //!
 
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, Not};
 
 use crate::coretypes::{Square, Square::*, SquareIndexable};
 
@@ -123,7 +123,14 @@ impl Bitboard {
     /// should resolve to a single instruction and a move.
     #[inline(always)]
     pub fn clear_lowest_square(&mut self) {
-        self.0 &= self.0 - 1;
+        // self.0 &= self.0 - 1 is same as below, but wrapping_sub doesn't panic for 0.
+        self.0 &= self.0.wrapping_sub(1);
+    }
+
+    /// Returns the lowest square that exists in bitboard, or None if bitboard has no squares.
+    #[inline(always)]
+    pub fn get_lowest_square(&self) -> Option<Square> {
+        Square::from_u8(self.0.trailing_zeros() as u8)
     }
 
     /// Remove all squares in other from self.
@@ -293,6 +300,13 @@ impl BitAndAssign for Bitboard {
     }
 }
 
+impl BitXor for Bitboard {
+    type Output = Self;
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Self(self.0 ^ rhs.0)
+    }
+}
+
 impl<I: SquareIndexable> From<I> for Bitboard {
     fn from(square_index: I) -> Self {
         Self(square_index.shift())
@@ -306,6 +320,34 @@ impl<I: SquareIndexable> From<&[I]> for Bitboard {
             .iter()
             .for_each(|square| bb.set_square(square));
         bb
+    }
+}
+
+// Iterator type that yields each square in a bitboard.
+pub struct BitboardSquareIterator {
+    bb: Bitboard,
+}
+
+impl Iterator for BitboardSquareIterator {
+    type Item = Square;
+    fn next(&mut self) -> Option<Self::Item> {
+        let maybe_square = self.bb.get_lowest_square();
+        self.bb.clear_lowest_square();
+        maybe_square
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let size = self.bb.count_squares() as usize;
+        (size, Some(size))
+    }
+}
+impl ExactSizeIterator for BitboardSquareIterator {}
+
+/// Allow the squares of a Bitboard to be iterated directly and cheaply.
+impl IntoIterator for Bitboard {
+    type Item = Square;
+    type IntoIter = BitboardSquareIterator;
+    fn into_iter(self) -> Self::IntoIter {
+        BitboardSquareIterator { bb: self }
     }
 }
 
@@ -397,5 +439,21 @@ mod tests {
         let rank_8: u64 = 0xFF00000000000000;
         assert_eq!(Bitboard::RANK_1.0, rank_1);
         assert_eq!(Bitboard::RANK_8.0, rank_8);
+    }
+
+    #[test]
+    fn iterate_bitboard() {
+        let bb = Bitboard::FILE_A;
+        let vec: Vec<Square> = bb.into_iter().collect();
+        for square in &[A1, A2, A3, A4, A5, A6, A7, A8] {
+            assert!(vec.contains(square));
+        }
+
+        let mut empty = Bitboard::EMPTY.into_iter();
+        assert_eq!(empty.len(), 0);
+        assert_eq!(empty.next(), None);
+
+        let empty_vec: Vec<Square> = empty.into_iter().collect();
+        assert_eq!(empty_vec.len(), 0);
     }
 }

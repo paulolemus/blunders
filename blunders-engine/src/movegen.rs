@@ -47,6 +47,81 @@ pub fn queen_pattern<I: SquareIndexable>(idx: I) -> Bitboard {
     ROOK_PATTERN[idx.idx()] | BISHOP_PATTERN[idx.idx()]
 }
 
+/// Absolute pins are where a piece is pinned to its same color king.
+/// Finding absolute pins are necessary to legal move generation.
+/// An absolutely pinned piece may only move along its pin direction.
+/// # Parameters
+/// * king: Square of king to get for pins against.
+/// * us: Bitboard with occupancy of pieces of king's color.
+/// * them: Bitboard with occupancy of pinning player's color.
+/// * queens_rooks: Bitboard with positions of pinning player's queens and rooks.
+/// * queens_bishops: Bitboard with positions of pinning player's queens and bishops.
+/// Return value: (pinned, pinned_square_moves)
+/// pinned -> A Bitboard with all the pinned pieces.
+/// pinned_square_moves -> A mapping of a pinned_square to squares along its pin direction.
+pub fn absolute_pins(
+    king: Square,
+    us: Bitboard,
+    them: Bitboard,
+    queens_rooks: Bitboard,
+    queens_bishops: Bitboard,
+) -> (Bitboard, [Option<(Square, Bitboard)>; 8]) {
+    // There can be a maximum of 8 pins at a time.
+    // Squares that an absolutely pinned piece can move to are squares
+    // up to and including the pinning piece, and up to the king.
+    // Algorithm:
+    // Treat the king as both a rook and a bishop.
+    // For orthogonal and then diagonal directions, send out a ray attack stopping at first piece hit.
+    // If a same color piece was hit, it could potentially be absolutely pinned. If opposite color, no pins.
+    // For each potentially pinned piece, remove it from occupancy, and then send a ray again.
+    // If this new ray hits a piece in the enemy sliding piece bb, then that initial piece is pinned.
+    let mut pinned = Bitboard::EMPTY;
+    let mut pinned_between: [Option<(Square, Bitboard)>; 8] = [None; 8];
+    let mut index = 0;
+    let occupied = us | them;
+
+    for ortho_ray in &[ray_attack_no, ray_attack_ea, ray_attack_so, ray_attack_we] {
+        let maybe_pinned = ortho_ray(&king, &occupied) & us; // Bb of single own piece (potentially pinned), or empty.
+        if !maybe_pinned.is_empty() {
+            let ray_without_pinned = ortho_ray(&king, &(occupied ^ maybe_pinned));
+            let hits_queen_rook = ray_without_pinned & queens_rooks;
+            if !hits_queen_rook.is_empty() {
+                // Piece is pinned, store piece and its legal moves.
+                pinned |= maybe_pinned;
+                let pinned_square = maybe_pinned.get_lowest_square().unwrap();
+                let potential_moves_bb = ray_without_pinned ^ maybe_pinned;
+                pinned_between[index] = Some((pinned_square, potential_moves_bb));
+                index += 1;
+            }
+        }
+    }
+
+    for diag_ray in &[
+        ray_attack_noea,
+        ray_attack_nowe,
+        ray_attack_soea,
+        ray_attack_sowe,
+    ] {
+        let maybe_pinned = diag_ray(&king, &occupied) & us; // Bb of possible single own piece (potentially pinned).
+        if !maybe_pinned.is_empty() {
+            let ray_without_pinned = diag_ray(&king, &(occupied ^ maybe_pinned));
+            let hits_queen_bishop = ray_without_pinned & queens_bishops;
+            if !hits_queen_bishop.is_empty() {
+                // Piece is pinned, store piece and its legal moves.
+                pinned |= maybe_pinned;
+                let pinned_square = maybe_pinned.get_lowest_square().unwrap();
+                let potential_moves_bb = ray_without_pinned ^ maybe_pinned;
+                pinned_between[index] = Some((pinned_square, potential_moves_bb));
+                index += 1;
+            }
+        }
+    }
+    // Check that for each pinned piece, there exists a mapping to it's in between squares.
+    debug_assert_eq!(pinned.count_squares() as usize, index);
+
+    (pinned, pinned_between)
+}
+
 /// Generate castling moves and append to move list.
 /// Castling is legal is there are no pieces between rook and king,
 /// the king does not pass through check, and has appropriate castling rights.
@@ -127,7 +202,7 @@ pub fn pawn_pseudo_moves(
     };
 
     // Consider pushes, attacks, promotions for each pawn individually.
-    for from in pawns.squares() {
+    for from in pawns {
         let pawn = Bitboard::from(from);
         let single_push = pawn_single_pushes(&pawn, &color) & !occupied;
         let double_push = pawn_double_pushes(&pawn, &color) & !occupied;
@@ -135,10 +210,7 @@ pub fn pawn_pseudo_moves(
         let pushes = single_push | valid_double_push;
         let attacks = pawn_attacks(&pawn, &color) & them_with_ep;
 
-        let tos = pushes
-            .squares()
-            .into_iter()
-            .chain(attacks.squares().into_iter());
+        let tos = pushes.into_iter().chain(attacks.into_iter());
 
         for to in tos {
             if Bitboard::RANK_1.has_square(to) || Bitboard::RANK_8.has_square(to) {
@@ -159,9 +231,9 @@ pub fn pawn_pseudo_moves(
 /// knights - Bitboard with squares of all knights to generate moves for.
 /// us - Bitboard with occupancy of moving player.
 pub fn knight_pseudo_moves(moves: &mut Vec<Move>, knights: Bitboard, us: Bitboard) {
-    for from in knights.squares() {
+    for from in knights {
         let tos = knight_pattern(from) & !us;
-        for to in tos.squares() {
+        for to in tos {
             moves.push(Move::new(from, to, None));
         }
     }
@@ -174,9 +246,9 @@ pub fn queen_pseudo_moves(
     occupied: Bitboard,
     us: Bitboard,
 ) {
-    for from in queens.squares() {
+    for from in queens {
         let tos = solo_queen_attacks(&from, &occupied) & !us;
-        for to in tos.squares() {
+        for to in tos {
             moves.push(Move::new(from, to, None));
         }
     }
@@ -184,9 +256,9 @@ pub fn queen_pseudo_moves(
 
 /// Generate all pseudo-legal rook moves and append to move list.
 pub fn rook_pseudo_moves(moves: &mut Vec<Move>, rooks: Bitboard, occupied: Bitboard, us: Bitboard) {
-    for from in rooks.squares() {
+    for from in rooks {
         let tos = solo_rook_attacks(&from, &occupied) & !us;
-        for to in tos.squares() {
+        for to in tos {
             moves.push(Move::new(from, to, None));
         }
     }
@@ -199,9 +271,9 @@ pub fn bishop_pseudo_moves(
     occupied: Bitboard,
     us: Bitboard,
 ) {
-    for from in bishops.squares() {
+    for from in bishops {
         let tos = solo_bishop_attacks(&from, &occupied) & !us;
-        for to in tos.squares() {
+        for to in tos {
             moves.push(Move::new(from, to, None));
         }
     }
@@ -274,14 +346,13 @@ pub fn knight_attacks(knights: &Bitboard) -> Bitboard {
 /// Generate Bitboard with squares attacked by king, assuming exactly 1 king.
 /// King attacks are found in constant time by lookup.
 pub fn king_attacks(king: &Bitboard) -> Bitboard {
-    king_pattern(king.squares()[0])
+    king_pattern(king.get_lowest_square().unwrap())
 }
 
 /// Generate and return Bitboard with squares attacked by all queens.
 /// Queen attacks are found in linear time, with 8 rays calculated per queen.
 pub fn queen_attacks(queens: &Bitboard, occupied: &Bitboard) -> Bitboard {
     queens
-        .squares()
         .into_iter()
         .map(|square| solo_queen_attacks(&square, occupied))
         .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks)
@@ -291,7 +362,6 @@ pub fn queen_attacks(queens: &Bitboard, occupied: &Bitboard) -> Bitboard {
 /// Rook attacks are found in linear time, with 4 rays calculated per rook.
 pub fn rook_attacks(rooks: &Bitboard, occupied: &Bitboard) -> Bitboard {
     rooks
-        .squares()
         .into_iter()
         .map(|square| solo_rook_attacks(&square, occupied))
         .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks)
@@ -301,7 +371,6 @@ pub fn rook_attacks(rooks: &Bitboard, occupied: &Bitboard) -> Bitboard {
 /// Bishop attacks are found in linear time, with 4 rays calculated per bishops.
 pub fn bishop_attacks(bishops: &Bitboard, occupied: &Bitboard) -> Bitboard {
     bishops
-        .squares()
         .into_iter()
         .map(|square| solo_bishop_attacks(&square, occupied))
         .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks)
@@ -319,13 +388,11 @@ pub fn slide_attacks(
     let diagonals = queens | *bishops;
 
     let orthogonal_attacks = orthogonals
-        .squares()
         .into_iter()
         .map(|square| solo_rook_attacks(&square, &occupied))
         .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks);
 
     let diagonal_attacks = diagonals
-        .squares()
         .into_iter()
         .map(|square| solo_bishop_attacks(&square, &occupied))
         .fold(Bitboard::EMPTY, |acc, attacks| acc | attacks);
@@ -364,7 +431,7 @@ pub fn solo_bishop_attacks(origin: &Square, occupancy: &Bitboard) -> Bitboard {
 /// color: Color of pawns in pawns Bitboard.
 pub fn pawn_attackers_to(target: &Square, pawns: &Bitboard, color: &Color) -> Bitboard {
     let mut attackers = Bitboard::EMPTY;
-    for pawn_square in pawns.squares() {
+    for pawn_square in pawns.into_iter() {
         let pawn = Bitboard::from(pawn_square);
         if pawn_attacks(&pawn, color).has_square(target) {
             attackers.set_square(pawn_square);
@@ -375,15 +442,14 @@ pub fn pawn_attackers_to(target: &Square, pawns: &Bitboard, color: &Color) -> Bi
 /// Return Bitboard with Squares of all knights from occupancy that attack target square.
 pub fn knight_attackers_to(target: &Square, knights: &Bitboard) -> Bitboard {
     knights
-        .squares()
-        .iter()
+        .into_iter()
         .filter(|square| knight_pattern(square).has_square(target))
         .fold(Bitboard::EMPTY, |acc, square| acc | Bitboard::from(square))
 }
 /// Return Bitboard with Squares of all kings from occupancy that attack target square.
 pub fn king_attackers_to(target: &Square, kings: &Bitboard) -> Bitboard {
     let mut attackers = Bitboard::EMPTY;
-    for king_square in kings.squares() {
+    for king_square in kings.into_iter() {
         if king_pattern(king_square).has_square(target) {
             attackers.set_square(king_square);
         }
@@ -393,7 +459,7 @@ pub fn king_attackers_to(target: &Square, kings: &Bitboard) -> Bitboard {
 /// Returns Bitboard with all queens that attack target square, considering occupied squares.
 pub fn queen_attackers_to(target: &Square, queens: &Bitboard, occupied: &Bitboard) -> Bitboard {
     let mut attackers = Bitboard::EMPTY;
-    for queen_square in queens.squares() {
+    for queen_square in queens.into_iter() {
         if solo_queen_attacks(&queen_square, occupied).has_square(target) {
             attackers.set_square(queen_square);
         }
@@ -403,7 +469,7 @@ pub fn queen_attackers_to(target: &Square, queens: &Bitboard, occupied: &Bitboar
 /// Returns Bitboard with all rooks that attack target square, considering occupied squares.
 pub fn rook_attackers_to(target: &Square, rooks: &Bitboard, occupied: &Bitboard) -> Bitboard {
     let mut attackers = Bitboard::EMPTY;
-    for rook_square in rooks.squares() {
+    for rook_square in rooks.into_iter() {
         if solo_rook_attacks(&rook_square, occupied).has_square(target) {
             attackers.set_square(rook_square);
         }
@@ -413,7 +479,7 @@ pub fn rook_attackers_to(target: &Square, rooks: &Bitboard, occupied: &Bitboard)
 /// Returns Bitboard with all bishops that attack target square, considering occupied squares.
 pub fn bishop_attackers_to(target: &Square, bishops: &Bitboard, occupied: &Bitboard) -> Bitboard {
     let mut attackers = Bitboard::EMPTY;
-    for bishop_square in bishops.squares() {
+    for bishop_square in bishops.into_iter() {
         if solo_bishop_attacks(&bishop_square, occupied).has_square(target) {
             attackers.set_square(bishop_square);
         }
