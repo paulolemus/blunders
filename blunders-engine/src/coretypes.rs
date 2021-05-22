@@ -280,7 +280,7 @@ pub struct PieceKindIterator {
 impl PieceKindIterator {
     pub const fn new() -> Self {
         Self {
-            maybe_piece_kind: Some(PieceKind::Pawn),
+            maybe_piece_kind: Some(PieceKind::King),
         }
     }
 }
@@ -289,14 +289,24 @@ impl Iterator for PieceKindIterator {
     type Item = PieceKind;
     fn next(&mut self) -> Option<Self::Item> {
         let value = match self.maybe_piece_kind {
-            Some(PieceKind::Pawn) => Some(PieceKind::Rook),
-            Some(PieceKind::Rook) => Some(PieceKind::Knight),
-            Some(PieceKind::Knight) => Some(PieceKind::Bishop),
-            Some(PieceKind::Bishop) => Some(PieceKind::Queen),
-            Some(PieceKind::Queen) => Some(PieceKind::King),
-            Some(PieceKind::King) | None => None,
+            Some(PieceKind::King) => Some(PieceKind::Pawn),
+            Some(PieceKind::Pawn) => Some(PieceKind::Knight),
+            Some(PieceKind::Knight) => Some(PieceKind::Rook),
+            Some(PieceKind::Rook) => Some(PieceKind::Queen),
+            Some(PieceKind::Queen) => Some(PieceKind::Bishop),
+            Some(PieceKind::Bishop) | None => None,
         };
         replace(&mut self.maybe_piece_kind, value)
+    }
+}
+
+impl IntoIterator for PieceKind {
+    type Item = Self;
+    type IntoIter = PieceKindIterator;
+    fn into_iter(self) -> Self::IntoIter {
+        PieceKindIterator {
+            maybe_piece_kind: Some(self),
+        }
     }
 }
 
@@ -476,6 +486,22 @@ impl FromStr for Castling {
 }
 
 impl File {
+    /// File enum variants cover all u8 values from 0-7 inclusive.
+    pub const fn from_u8(value: u8) -> Option<Self> {
+        use File::*;
+        match value {
+            0 => Some(A),
+            1 => Some(B),
+            2 => Some(C),
+            3 => Some(D),
+            4 => Some(E),
+            5 => Some(F),
+            6 => Some(G),
+            7 => Some(H),
+            _ => None,
+        }
+    }
+    /// Get the character representation of File, in lowercase.
     pub const fn to_char(&self) -> char {
         match self {
             Self::A => 'a',
@@ -488,9 +514,52 @@ impl File {
             Self::H => 'h',
         }
     }
+    /// Get the File after the current file, or None if at the end.
+    pub const fn after(self) -> Option<Self> {
+        use File::*;
+        match self {
+            A => Some(B),
+            B => Some(C),
+            C => Some(D),
+            D => Some(E),
+            E => Some(F),
+            F => Some(G),
+            G => Some(H),
+            H => None,
+        }
+    }
+    /// Get the File before the current file, or None if at the start.
+    pub const fn before(self) -> Option<Self> {
+        use File::*;
+        match self {
+            H => Some(G),
+            G => Some(F),
+            F => Some(E),
+            E => Some(D),
+            D => Some(C),
+            C => Some(B),
+            B => Some(A),
+            A => None,
+        }
+    }
 }
 
 impl Rank {
+    /// Rank enum variants cover all u8 values from 0-7 inclusive.
+    pub const fn from_u8(value: u8) -> Option<Self> {
+        use Rank::*;
+        match value {
+            0 => Some(R1),
+            1 => Some(R2),
+            2 => Some(R3),
+            3 => Some(R4),
+            4 => Some(R5),
+            5 => Some(R6),
+            6 => Some(R7),
+            7 => Some(R8),
+            _ => None,
+        }
+    }
     pub const fn to_char(&self) -> char {
         match self {
             Self::R1 => '1',
@@ -501,6 +570,20 @@ impl Rank {
             Self::R6 => '6',
             Self::R7 => '7',
             Self::R8 => '8',
+        }
+    }
+    /// Flips the orientation of the board.
+    pub const fn flip(&self) -> Self {
+        use Rank::*;
+        match self {
+            R1 => R8,
+            R2 => R7,
+            R3 => R6,
+            R4 => R5,
+            R5 => R4,
+            R6 => R3,
+            R7 => R2,
+            R8 => R1,
         }
     }
 }
@@ -562,25 +645,6 @@ pub struct SquareIterator {
     square_discriminant: u8,
 }
 
-impl SquareIterator {
-    const fn new() -> Self {
-        Self {
-            square_discriminant: Square::A1 as u8,
-        }
-    }
-}
-
-impl Iterator for SquareIterator {
-    type Item = Square;
-    fn next(&mut self) -> Option<Self::Item> {
-        let maybe_item = Square::from_u8(self.square_discriminant);
-        if self.square_discriminant <= Square::H8 as u8 {
-            self.square_discriminant += 1;
-        }
-        return maybe_item;
-    }
-}
-
 impl Square {
     /// Square enum variants cover all u8 values from 0-63 inclusive.
     /// WARNING: Uses `unsafe`.
@@ -632,6 +696,38 @@ impl Square {
     /// Returns 0-based rank (0,1,2,3,4,5,6,7), not 1-based chess rank.
     pub const fn rank_u8(&self) -> u8 {
         *self as u8 / NUM_FILES as u8
+    }
+}
+
+impl SquareIterator {
+    const fn new() -> Self {
+        Self {
+            square_discriminant: Square::A1 as u8,
+        }
+    }
+    const fn from_square(square: Square) -> Self {
+        Self {
+            square_discriminant: square as u8,
+        }
+    }
+}
+
+impl Iterator for SquareIterator {
+    type Item = Square;
+    fn next(&mut self) -> Option<Self::Item> {
+        let maybe_item = Square::from_u8(self.square_discriminant);
+        if self.square_discriminant <= Square::H8 as u8 {
+            self.square_discriminant += 1;
+        }
+        return maybe_item;
+    }
+}
+
+impl IntoIterator for Square {
+    type Item = Square;
+    type IntoIter = SquareIterator;
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter::from_square(self)
     }
 }
 
@@ -952,5 +1048,30 @@ mod tests {
         assert_eq!(e4.rank(), R4);
         assert_eq!(e4.file_u8(), E as u8);
         assert_eq!(e4.rank_u8(), R4 as u8);
+    }
+
+    #[test]
+    fn file_is_contiguous() {
+        use File::*;
+        assert_eq!(A as u8, 0);
+        assert_eq!(B as u8, 1);
+        assert_eq!(C as u8, 2);
+        assert_eq!(D as u8, 3);
+        assert_eq!(E as u8, 4);
+        assert_eq!(F as u8, 5);
+        assert_eq!(G as u8, 6);
+        assert_eq!(H as u8, 7);
+    }
+    #[test]
+    fn rank_is_contiguous() {
+        use Rank::*;
+        assert_eq!(R1 as u8, 0);
+        assert_eq!(R2 as u8, 1);
+        assert_eq!(R3 as u8, 2);
+        assert_eq!(R4 as u8, 3);
+        assert_eq!(R5 as u8, 4);
+        assert_eq!(R6 as u8, 5);
+        assert_eq!(R7 as u8, 6);
+        assert_eq!(R8 as u8, 7);
     }
 }

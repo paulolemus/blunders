@@ -39,7 +39,9 @@
 
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, Not};
 
-use crate::coretypes::{Square, Square::*, SquareIndexable};
+use crate::coretypes::{File, Rank, Square, Square::*, SquareIndexable};
+
+pub type Kind = u64;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Bitboard(pub(crate) u64);
@@ -60,12 +62,25 @@ impl Bitboard {
     pub const EMPTY: Bitboard = Self(0x0);
     pub const BLACK_SQUARES: Bitboard = Self(0xAA55AA55AA55AA55);
     pub const WHITE_SQUARES: Bitboard = Self(!Self::BLACK_SQUARES.0);
+    // Ranks
     pub const RANK_1: Bitboard = bb_from_shifts!(A1, B1, C1, D1, E1, F1, G1, H1);
     pub const RANK_2: Bitboard = bb_from_shifts!(A2, B2, C2, D2, E2, F2, G2, H2);
+    pub const RANK_3: Bitboard = bb_from_shifts!(A3, B3, C3, D3, E3, F3, G3, H3);
+    pub const RANK_4: Bitboard = bb_from_shifts!(A4, B4, C4, D4, E4, F4, G4, H4);
+    pub const RANK_5: Bitboard = bb_from_shifts!(A5, B5, C5, D5, E5, F5, G5, H5);
+    pub const RANK_6: Bitboard = bb_from_shifts!(A6, B6, C6, D6, E6, F6, G6, H6);
     pub const RANK_7: Bitboard = bb_from_shifts!(A7, B7, C7, D7, E7, F7, G7, H7);
     pub const RANK_8: Bitboard = bb_from_shifts!(A8, B8, C8, D8, E8, F8, G8, H8);
+    // Files
     pub const FILE_A: Bitboard = bb_from_shifts!(A1, A2, A3, A4, A5, A6, A7, A8);
+    pub const FILE_B: Bitboard = bb_from_shifts!(B1, B2, B3, B4, B5, B6, B7, B8);
+    pub const FILE_C: Bitboard = bb_from_shifts!(C1, C2, C3, C4, C5, C6, C7, C8);
+    pub const FILE_D: Bitboard = bb_from_shifts!(D1, D2, D3, D4, D5, D6, D7, D8);
+    pub const FILE_E: Bitboard = bb_from_shifts!(E1, E2, E3, E4, E5, E6, E7, E8);
+    pub const FILE_F: Bitboard = bb_from_shifts!(F1, F2, F3, F4, F5, F6, F7, F8);
+    pub const FILE_G: Bitboard = bb_from_shifts!(G1, G2, G3, G4, G5, G6, G7, G8);
     pub const FILE_H: Bitboard = bb_from_shifts!(H1, H2, H3, H4, H5, H6, H7, H8);
+
     pub const NOT_FILE_A: Bitboard = Self(!Self::FILE_A.0);
     pub const NOT_FILE_H: Bitboard = Self(!Self::FILE_H.0);
     // Squares between king and kingside rook. Useful for checking castling.
@@ -79,6 +94,7 @@ impl Bitboard {
 /// Bitboard is a wrapper for a u64.
 /// Each bit represents the presence of something in that bit position.
 impl Bitboard {
+    #[inline(always)]
     pub const fn bits(&self) -> &u64 {
         &self.0
     }
@@ -118,6 +134,23 @@ impl Bitboard {
         self.0 ^= idx.shift();
     }
 
+    /// Clears squares including and above target square.
+    /// TODO:
+    /// There is a BMI2 instruction BZHI to zero high hits starting at position,
+    /// however the instruction is not used with &mut self, only self.
+    /// Figure out how to get get compiler to use BZHI.
+    #[inline(always)]
+    pub fn clear_square_and_above<I: SquareIndexable>(&mut self, idx: I) {
+        self.0 &= idx.shift() - 1;
+    }
+
+    /// Clears squares including and below target square.
+    /// TODO:
+    /// Find a BMI instruction, if applicable. Maybe BLSMSK.
+    pub fn clear_square_and_below<I: SquareIndexable>(&mut self, idx: I) {
+        self.0 &= !(idx.shift() ^ (idx.shift() - 1));
+    }
+
     /// Clears the lowest square from self. If there are no squares, does nothing.
     /// When compiled for targets that support BMI1 BLSR (reset lowest set bit),
     /// should resolve to a single instruction and a move.
@@ -142,15 +175,15 @@ impl Bitboard {
     /// Returns true if other is a subset of self.
     /// If all squares of other are in self, then other is a subset of self.
     #[inline(always)]
-    pub fn contains(&self, other: &Bitboard) -> bool {
-        self & *other == *other
+    pub const fn contains(&self, other: &Bitboard) -> bool {
+        self.0 & other.0 == other.0
     }
 
     /// Returns true if self has any squares that are in other.
     /// In other words, if there is any overlap, return true.
     #[inline(always)]
-    pub fn has_any(&self, other: &Bitboard) -> bool {
-        self & *other != Self::EMPTY
+    pub const fn has_any(&self, other: &Bitboard) -> bool {
+        self.0 & other.0 != Self::EMPTY.0
     }
 
     /// Returns new Bitboard with all squares shifted 1 square north (ex: D4 -> D5).
@@ -320,6 +353,38 @@ impl<I: SquareIndexable> From<&[I]> for Bitboard {
             .iter()
             .for_each(|square| bb.set_square(square));
         bb
+    }
+}
+
+impl From<File> for Bitboard {
+    fn from(file: File) -> Self {
+        use File::*;
+        match file {
+            A => Self::FILE_A,
+            B => Self::FILE_B,
+            C => Self::FILE_C,
+            D => Self::FILE_D,
+            E => Self::FILE_E,
+            F => Self::FILE_F,
+            G => Self::FILE_G,
+            H => Self::FILE_H,
+        }
+    }
+}
+
+impl From<Rank> for Bitboard {
+    fn from(rank: Rank) -> Self {
+        use Rank::*;
+        match rank {
+            R1 => Self::RANK_1,
+            R2 => Self::RANK_2,
+            R3 => Self::RANK_3,
+            R4 => Self::RANK_4,
+            R5 => Self::RANK_5,
+            R6 => Self::RANK_6,
+            R7 => Self::RANK_7,
+            R8 => Self::RANK_8,
+        }
     }
 }
 
