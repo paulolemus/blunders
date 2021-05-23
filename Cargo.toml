@@ -16,3 +16,4 @@ version = "0.1.0"
 members = ["blunders-engine"]
 
 [dependencies]
+blunders-engine = { path = "blunders-engine" }

@@ -865,6 +865,33 @@ impl MoveInfo {
     }
 }
 
+/// Parses `Pure Algebraic Coordinate Notation`.
+impl FromStr for Move {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let from_str: String = s.chars().take(2).collect();
+        let from: Square = from_str.parse()?;
+
+        let to_str: String = s.chars().skip(2).take(2).collect();
+        let to: Square = to_str.parse()?;
+
+        let maybe_promotion = s.chars().nth(4);
+        let promotion = match maybe_promotion {
+            Some('q') => Some(PieceKind::Queen),
+            Some('r') => Some(PieceKind::Rook),
+            Some('b') => Some(PieceKind::Bishop),
+            Some('n') => Some(PieceKind::Knight),
+            _ => None,
+        };
+
+        Ok(Self {
+            from,
+            to,
+            promotion,
+        })
+    }
+}
+
 /// # Example
 /// Move { from: A7, to: B8, promotion: Some(Queen) } -> `a7b8q`.
 impl Display for Move {
@@ -882,6 +909,8 @@ impl Display for Move {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use PieceKind::*;
+    use Square::*;
 
     #[test]
     fn logical_not_color() {
@@ -1048,6 +1077,19 @@ mod tests {
         assert_eq!(e4.rank(), R4);
         assert_eq!(e4.file_u8(), E as u8);
         assert_eq!(e4.rank_u8(), R4 as u8);
+    }
+
+    #[test]
+    fn parse_move_from_str() {
+        let move_: Move = "a1b2".parse().unwrap();
+        assert_eq!(*move_.from(), A1);
+        assert_eq!(*move_.to(), B2);
+        assert_eq!(*move_.promotion(), None);
+
+        let move_: Move = "h7h8q".parse().unwrap();
+        assert_eq!(*move_.from(), H7);
+        assert_eq!(*move_.to(), H8);
+        assert_eq!(*move_.promotion(), Some(Queen));
     }
 
     #[test]

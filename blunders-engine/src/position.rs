@@ -280,8 +280,39 @@ impl Position {
     }
 
     /// Checks if move is legal before applying it.
-    pub fn do_legal_move(&mut self, _move_: Move) -> Result<(), &'static str> {
-        todo!()
+    /// If move is legal, the move is applied and returns true.
+    /// Otherwise, no action is taken and returns false.
+    /// This is best used as a CLI function, not in the engine.
+    pub fn do_legal_move(&mut self, move_: Move) -> bool {
+        let legal_moves = self.get_legal_moves();
+        if legal_moves.contains(&move_) {
+            self.do_move(move_);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Check if the current position is checkmated.
+    /// Returns true if it is mate, false otherwise.
+    pub fn is_checkmate(&self) -> bool {
+        let legal_moves = self.get_legal_moves();
+        if legal_moves.len() == 0 && self.is_in_check() {
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Check if the current position is stalemated.
+    /// Returns true if it is stalemate, false otherwise.
+    pub fn is_stalemate(&self) -> bool {
+        let legal_moves = self.get_legal_moves();
+        if legal_moves.len() == 0 && !self.is_in_check() {
+            true
+        } else {
+            false
+        }
     }
 
     /// Generates a new Position from applying move on current Position.

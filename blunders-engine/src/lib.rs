@@ -6,6 +6,7 @@ pub mod fen;
 pub(crate) mod movegen;
 pub mod perft;
 pub mod position;
+pub mod search;
 
 pub use position::Position;
 

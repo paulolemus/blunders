@@ -4,7 +4,7 @@ use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 
 use crate::bitboard::{self, Bitboard};
 use crate::coretypes::{Color::*, PieceKind::*};
-use crate::coretypes::{Piece, PieceKind, Rank, NUM_RANKS, NUM_SQUARES};
+use crate::coretypes::{PieceKind, Rank, NUM_RANKS, NUM_SQUARES};
 use crate::movegen as mg;
 use crate::position::Position;
 
@@ -12,7 +12,7 @@ use crate::position::Position;
 /// A positive centipawn value represent an advantage for White,
 /// and a negative value represents an advantage for Black.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
-pub struct Cp(CpKind);
+pub struct Cp(pub(crate) CpKind);
 
 // Type alias to make changing type easy if needed.
 type CpKind = i32;
@@ -21,8 +21,13 @@ type CpKind = i32;
 impl Cp {
     pub const MIN: Cp = Self(CpKind::MIN);
     pub const MAX: Cp = Self(CpKind::MAX);
+
     pub const fn new(value: CpKind) -> Self {
         Self(value)
+    }
+
+    pub const fn signum(&self) -> CpKind {
+        self.0.signum()
     }
 }
 
@@ -76,24 +81,28 @@ impl PieceKind {
     }
 }
 
-impl Piece {
-    const fn centipawns(&self) -> Cp {
-        Cp(match self.color {
-            White => self.piece_kind.centipawns().0,
-            Black => -self.piece_kind.centipawns().0,
-        })
-    }
-}
+//impl Piece {
+//    const fn centipawns(&self) -> Cp {
+//        Cp(match self.color {
+//            White => self.piece_kind.centipawns().0,
+//            Black => -self.piece_kind.centipawns().0,
+//        })
+//    }
+//}
+
+// Evaluation Constants
+const CHECKMATE: Cp = Cp(Cp::MAX.0 / 2 - 1);
 
 // Evaluation Functions
 
 /// Primary evaluate function for engine.
-pub fn evaluate(position: &Position) -> Cp {
+pub fn static_evaluate(position: &Position, num_moves: usize) -> Cp {
     let cp_material = material(position);
     let cp_pass_pawns = pass_pawns(position);
     let cp_xray_king = xray_king_attacks(position);
+    let cp_mobility = mobility(position, num_moves);
 
-    let cp_total = cp_material + cp_pass_pawns + cp_xray_king;
+    let cp_total = cp_material + cp_pass_pawns + cp_xray_king + cp_mobility;
     cp_total
 }
 
@@ -113,8 +122,18 @@ pub fn material(position: &Position) -> Cp {
 }
 
 /// Return value of number of moves that can be made from a position.
-pub fn mobility(position: &Position) -> Cp {
-    Cp(0)
+/// This function handles checkmates and stalemates.
+/// Currently treats stalemates as as losses.
+pub fn mobility(position: &Position, num_moves: usize) -> Cp {
+    let mut cp = Cp(0);
+    if num_moves == 0 {
+        // Checkmate or stalemate.
+        cp = match position.player {
+            White => -CHECKMATE,
+            Black => CHECKMATE,
+        };
+    }
+    cp
 }
 
 /// Returns Centipawn difference for passed pawns.
@@ -229,8 +248,8 @@ fn b_pass_pawns(position: &Position) -> Bitboard {
 // Const Data Generation
 
 /// Warning: Do not use, unfinished.
-const PASS_PAWN_SIZE: usize = (NUM_SQUARES - 24) * 2;
-const PASS_PAWN_PATTERN: [Bitboard; PASS_PAWN_SIZE] = generate_pass_pawn_pattern();
+pub const PASS_PAWN_SIZE: usize = (NUM_SQUARES - 24) * 2;
+pub const PASS_PAWN_PATTERN: [Bitboard; PASS_PAWN_SIZE] = generate_pass_pawn_pattern();
 
 // Repeats the form: array[num] = func[num];
 // where $array and $func are identifiers, followed by 1 or more literals to repeat on.
