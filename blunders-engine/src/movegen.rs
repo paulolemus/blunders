@@ -6,6 +6,7 @@
 use crate::bitboard::Bitboard;
 use crate::coretypes::{Castling, Color, Move, Square, SquareIndexable, NUM_SQUARES};
 use crate::coretypes::{Color::*, PieceKind::*, Square::*};
+use crate::movelist::MoveList;
 
 //////////////////////////////////////
 // Pre-generated move/attack Lookup //
@@ -132,7 +133,7 @@ pub fn absolute_pins(
 /// occupied - All occupied squares on chess board.
 /// attacked - All Squares directly attacked by opposite player.
 pub fn legal_castling_moves(
-    moves: &mut Vec<Move>,
+    moves: &mut MoveList,
     player: Color,
     castling: Castling,
     occupied: Bitboard,
@@ -188,7 +189,7 @@ pub fn legal_castling_moves(
 /// them - All squares occupied by opposing player.
 /// en_passant - Optional en-passant target square.
 pub fn pawn_pseudo_moves(
-    moves: &mut Vec<Move>,
+    moves: &mut MoveList,
     pawns: Bitboard,
     color: Color,
     occupied: Bitboard,
@@ -230,7 +231,7 @@ pub fn pawn_pseudo_moves(
 /// moves - move list to add new moves to.
 /// knights - Bitboard with squares of all knights to generate moves for.
 /// us - Bitboard with occupancy of moving player.
-pub fn knight_pseudo_moves(moves: &mut Vec<Move>, knights: Bitboard, us: Bitboard) {
+pub fn knight_pseudo_moves(moves: &mut MoveList, knights: Bitboard, us: Bitboard) {
     for from in knights {
         let tos = knight_pattern(from) & !us;
         for to in tos {
@@ -241,7 +242,7 @@ pub fn knight_pseudo_moves(moves: &mut Vec<Move>, knights: Bitboard, us: Bitboar
 
 /// Generate all pseudo-legal queen moves and append to move list.
 pub fn queen_pseudo_moves(
-    moves: &mut Vec<Move>,
+    moves: &mut MoveList,
     queens: Bitboard,
     occupied: Bitboard,
     us: Bitboard,
@@ -255,7 +256,7 @@ pub fn queen_pseudo_moves(
 }
 
 /// Generate all pseudo-legal rook moves and append to move list.
-pub fn rook_pseudo_moves(moves: &mut Vec<Move>, rooks: Bitboard, occupied: Bitboard, us: Bitboard) {
+pub fn rook_pseudo_moves(moves: &mut MoveList, rooks: Bitboard, occupied: Bitboard, us: Bitboard) {
     for from in rooks {
         let tos = solo_rook_attacks(&from, &occupied) & !us;
         for to in tos {
@@ -266,7 +267,7 @@ pub fn rook_pseudo_moves(moves: &mut Vec<Move>, rooks: Bitboard, occupied: Bitbo
 
 /// Generate all pseudo-legal bishop moves and append to move list.
 pub fn bishop_pseudo_moves(
-    moves: &mut Vec<Move>,
+    moves: &mut MoveList,
     bishops: Bitboard,
     occupied: Bitboard,
     us: Bitboard,

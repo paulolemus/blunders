@@ -13,6 +13,7 @@ use crate::coretypes::{
 use crate::coretypes::{Color::*, PieceKind::*, Square::*};
 use crate::fen::Fen;
 use crate::movegen as mg;
+use crate::movelist::MoveList;
 
 /// struct Position
 /// A complete data set that can represent any chess position.
@@ -283,13 +284,12 @@ impl Position {
     /// If move is legal, the move is applied and returns true.
     /// Otherwise, no action is taken and returns false.
     /// This is best used as a CLI function, not in the engine.
-    pub fn do_legal_move(&mut self, move_: Move) -> bool {
+    pub fn do_legal_move(&mut self, move_: Move) -> (bool, Option<MoveInfo>) {
         let legal_moves = self.get_legal_moves();
         if legal_moves.contains(&move_) {
-            self.do_move(move_);
-            true
+            (true, Some(self.do_move(move_)))
         } else {
-            false
+            (false, None)
         }
     }
 
@@ -395,7 +395,7 @@ impl Position {
     /// If king is in check, number of moves are restricted.
     /// If king is pinned, number of moves are restricted.
     /// If not pinned or
-    pub fn get_legal_moves(&self) -> Vec<Move> {
+    pub fn get_legal_moves(&self) -> MoveList {
         let (single_check, double_check) = self.active_king_checks();
 
         if double_check {
@@ -409,7 +409,7 @@ impl Position {
 
     /// Generate king moves assuming double check.
     /// Only the king can move when in double check.
-    fn generate_legal_double_check_moves(&self) -> Vec<Move> {
+    fn generate_legal_double_check_moves(&self) -> MoveList {
         let king = self.pieces[(self.player, King)];
 
         // Generate bitboard with all squares attacked by passive player.
@@ -425,7 +425,7 @@ impl Position {
         possible_moves.remove(&self.pieces.color_occupied(&self.player));
 
         // Convert remaining move squares into Move structs.
-        let mut legal_moves = Vec::with_capacity(8); // 8 max possible moves.
+        let mut legal_moves = MoveList::new(); // Eight max possible moves.
         let from = king.get_lowest_square().unwrap();
         for to in possible_moves {
             legal_moves.push(Move::new(from, to, None));
@@ -435,11 +435,11 @@ impl Position {
     }
 
     /// Generate moves assuming active player is in single check.
-    fn generate_legal_single_check_moves(&self) -> Vec<Move> {
+    fn generate_legal_single_check_moves(&self) -> MoveList {
         // Can capture checking piece with non-absolute-pinned piece,
         // move king to non-attacked squares,
         // block checking piece with non-absolute-pinned piece
-        let mut legal_moves: Vec<Move> = Vec::new();
+        let mut legal_moves: MoveList = MoveList::new();
 
         let king = self.pieces[(self.player, King)];
         let king_square = king.get_lowest_square().unwrap();
@@ -476,7 +476,7 @@ impl Position {
         let knights = self.pieces[(self.player, Knight)];
         let pawns = self.pieces[(self.player, Pawn)];
 
-        let mut pseudo_moves = Vec::new();
+        let mut pseudo_moves = MoveList::new();
         mg::queen_pseudo_moves(&mut pseudo_moves, queens, occupied, us);
         mg::rook_pseudo_moves(&mut pseudo_moves, rooks, occupied, us);
         mg::bishop_pseudo_moves(&mut pseudo_moves, bishops, occupied, us);
@@ -505,7 +505,7 @@ impl Position {
     }
 
     /// Generate moves assuming active player is not in check.
-    fn generate_legal_no_check_moves(&self) -> Vec<Move> {
+    fn generate_legal_no_check_moves(&self) -> MoveList {
         // moves:
         // move absolutely-pinned piece along pin direction
         // Castling with no pieces or attacked squares between
@@ -514,7 +514,7 @@ impl Position {
         // For non king moves, only need to consider leaving absolute pin.
         // For king moves, need to consider all attacked squares.
         // Most positions will have fewer moves than this capacity.
-        let mut legal_moves = Vec::with_capacity(128);
+        let mut legal_moves = MoveList::new();
 
         let king = self.pieces[(self.player, King)];
         let king_square = king.get_lowest_square().unwrap();
@@ -559,7 +559,7 @@ impl Position {
         mg::queen_pseudo_moves(&mut legal_moves, queens_free, occupied, us);
 
         // Generate pseudo moves and check for legality with "do/undo".
-        let mut pseudo_moves = Vec::with_capacity(128);
+        let mut pseudo_moves = MoveList::new();
         let bishops_pinned = bishops & absolute_pins;
         let rooks_pinned = rooks & absolute_pins;
         let queens_pinned = queens & absolute_pins;

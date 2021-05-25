@@ -1,5 +1,6 @@
 //! Evaluation functions that return a centipawn.
 
+use std::fmt::{self, Display};
 use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 
 use crate::bitboard::{self, Bitboard};
@@ -66,6 +67,11 @@ impl Neg for Cp {
         Self(-self.0)
     }
 }
+impl Display for Cp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:+}", self.0)
+    }
+}
 
 impl PieceKind {
     /// Default, color independent value per piece.
@@ -92,6 +98,8 @@ impl PieceKind {
 
 // Evaluation Constants
 const CHECKMATE: Cp = Cp(Cp::MAX.0 / 2 - 1);
+const STALEMATE: Cp = Cp(0);
+const MOBILITY_CP: Cp = Cp(5);
 
 // Evaluation Functions
 
@@ -101,8 +109,9 @@ pub fn static_evaluate(position: &Position, num_moves: usize) -> Cp {
     let cp_pass_pawns = pass_pawns(position);
     let cp_xray_king = xray_king_attacks(position);
     let cp_mobility = mobility(position, num_moves);
+    let cp_king_safety = king_safety(position);
 
-    let cp_total = cp_material + cp_pass_pawns + cp_xray_king + cp_mobility;
+    let cp_total = cp_material + cp_pass_pawns + cp_xray_king + cp_mobility + cp_king_safety;
     cp_total
 }
 
@@ -121,18 +130,63 @@ pub fn material(position: &Position) -> Cp {
     w_piece_cp - b_piece_cp
 }
 
+pub fn king_safety(position: &Position) -> Cp {
+    let mut cp = Cp(0);
+
+    let occupied = position.pieces.occupied();
+    // Virtual mobility: treat king as a queen and the less squares it can attack the better.
+    let w_sliding = position.pieces[(White, Queen)]
+        | position.pieces[(White, Rook)]
+        | position.pieces[(White, Bishop)];
+    let b_sliding = position.pieces[(Black, Queen)]
+        | position.pieces[(Black, Rook)]
+        | position.pieces[(Black, Bishop)];
+    let w_num_sliding = w_sliding.count_squares();
+    let b_num_sliding = b_sliding.count_squares();
+    let w_king = position.pieces[(White, King)];
+    let b_king = position.pieces[(Black, King)];
+
+    let w_king_open_squares = mg::queen_attacks(&w_king, &occupied).count_squares();
+    let b_king_open_squares = mg::queen_attacks(&b_king, &occupied).count_squares();
+
+    // The more sliding pieces the enemy has, the more value each open square has.
+    let w_value = b_king_open_squares * w_num_sliding / 2;
+    let b_value = w_king_open_squares * b_num_sliding / 2;
+
+    let value_diff = Cp(w_value as i32 - b_value as i32);
+    cp += value_diff;
+
+    cp
+}
+
 /// Return value of number of moves that can be made from a position.
 /// This function handles checkmates and stalemates.
 /// Currently treats stalemates as as losses.
 pub fn mobility(position: &Position, num_moves: usize) -> Cp {
     let mut cp = Cp(0);
     if num_moves == 0 {
-        // Checkmate or stalemate.
-        cp = match position.player {
-            White => -CHECKMATE,
-            Black => CHECKMATE,
+        // Checkmate is good for opposite player, stalemate is bad for engine.
+        // Need to figure out a stalemate pattern.
+        cp = if position.is_checkmate() {
+            match position.player {
+                White => -CHECKMATE,
+                Black => CHECKMATE,
+            }
+        } else {
+            match position.player {
+                White => STALEMATE,
+                Black => STALEMATE,
+            }
         };
     }
+
+    let w_attacks = position.attacks(&White, &position.pieces().occupied());
+    let b_attacks = position.attacks(&Black, &position.pieces().occupied());
+
+    let attack_surface_area_diff =
+        w_attacks.count_squares() as i32 - b_attacks.count_squares() as i32;
+    cp += Cp(attack_surface_area_diff) * MOBILITY_CP;
+
     cp
 }
 

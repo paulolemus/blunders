@@ -109,13 +109,22 @@ impl PieceSets {
     /// * Has a single king per side.
     /// * Each bitboard is disjoint (mutually exclusive) meaning a square cannot have more than one piece.
     pub fn is_valid(&self) -> bool {
+        // Illegal if no White King.
         if self[(White, King)].count_squares() != 1 {
             return false;
         }
+        // Illegal if no Black King.
         if self[(Black, King)].count_squares() != 1 {
             return false;
         }
+        // Illegal if more than one piece per any square.
         if !self.is_disjoint() {
+            return false;
+        }
+        // Illegal if any white pawn on first rank or black pawn on eighth rank.
+        let w_pawns_first_rank = self[(White, Pawn)] & Bitboard::RANK_1;
+        let b_pawns_eighth_rank = self[(Black, Pawn)] & Bitboard::RANK_8;
+        if !w_pawns_first_rank.is_empty() || !b_pawns_eighth_rank.is_empty() {
             return false;
         }
 

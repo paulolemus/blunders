@@ -9,7 +9,7 @@ use std::ops::{Add, AddAssign};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::coretypes::Move;
+use crate::movelist::MoveList;
 use crate::position::Position;
 
 /// Debugging information about results of perft test.
@@ -63,11 +63,10 @@ pub fn perft(mut position: Position, ply: u32, threads: usize) -> PerftInfo {
 
     let legal_moves = Arc::new(Mutex::new(legal_moves));
     let total_perft_info = Arc::new(Mutex::new(PerftInfo::new(0)));
-    let num_new_threads = threads - 1;
     let mut handles = Vec::new();
 
     // Create threads to process partitioned moves.
-    for _ in 0..num_new_threads {
+    for _ in 0..threads {
         // Arcs
         let legal_moves = legal_moves.clone();
         let total_perft_info = total_perft_info.clone();
@@ -78,9 +77,6 @@ pub fn perft(mut position: Position, ply: u32, threads: usize) -> PerftInfo {
 
         handles.push(handle);
     }
-
-    // Process on local thread.
-    perft_executor(position, ply, legal_moves, total_perft_info.clone());
 
     // Wait for all handles to finish.
     for handle in handles {
@@ -105,7 +101,7 @@ pub fn perft(mut position: Position, ply: u32, threads: usize) -> PerftInfo {
 fn perft_executor(
     mut position: Position,
     ply: u32,
-    moves: Arc<Mutex<Vec<Move>>>,
+    moves: Arc<Mutex<MoveList>>,
     total_perft_info: Arc<Mutex<PerftInfo>>,
 ) {
     debug_assert!(ply > 1);

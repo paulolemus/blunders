@@ -1,17 +1,9 @@
 # Blunders
 
-Chess Engine.
+UCI Chess engine Blunders is a current WIP.
 
 ## Components
 
-1. Headless chess engine binary.
-2. Stand-alone chess engine lib.
-3. GUI binary using chess engine lib.
-
-## TODO
-
-* Find or make gui
-* figure out UCI protocol
-* Generate legal moves from position
-* Static evaluation of position
-* Integrated GUI vs UCI gui?
+1. Blunders CLI binary application - WIP
+2. Blunders Engine library -> WIP
+3. Blunders integrated GUI application -> Todo

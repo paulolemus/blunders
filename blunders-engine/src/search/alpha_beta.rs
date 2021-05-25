@@ -11,7 +11,7 @@ use crate::Position;
 /// is the engine.
 /// It returns the best move and score for the position in the search tree.
 pub fn alpha_beta(position: Position, ply: u32) -> (Cp, Move) {
-    assert_ne!(ply, 0);
+    debug_assert_ne!(ply, 0);
     alpha_beta_root(position, ply)
 }
 
@@ -25,8 +25,8 @@ pub fn alpha_beta(position: Position, ply: u32) -> (Cp, Move) {
 /// so no pruning can occur.
 fn alpha_beta_root(mut position: Position, ply: u32) -> (Cp, Move) {
     let legal_moves = position.get_legal_moves();
-    assert_ne!(ply, 0);
-    assert!(legal_moves.len() > 0);
+    debug_assert_ne!(ply, 0);
+    debug_assert!(legal_moves.len() > 0);
 
     if position.player == White {
         let mut best_move = Move::new(Square::D2, Square::D4, None);
