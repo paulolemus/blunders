@@ -510,8 +510,8 @@ mod tests {
     fn iterate_bitboard() {
         let bb = Bitboard::FILE_A;
         let vec: Vec<Square> = bb.into_iter().collect();
-        for square in &[A1, A2, A3, A4, A5, A6, A7, A8] {
-            assert!(vec.contains(square));
+        for square in [A1, A2, A3, A4, A5, A6, A7, A8] {
+            assert!(vec.contains(&square));
         }
 
         let mut empty = Bitboard::EMPTY.into_iter();

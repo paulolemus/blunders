@@ -52,7 +52,7 @@ impl Mailbox {
         mb[F1] = Some(Piece::new(White, Bishop));
         mb[G1] = Some(Piece::new(White, Knight));
         mb[H1] = Some(Piece::new(White, Rook));
-        for &square in &[A2, B2, C2, D2, E2, F2, G2, H2] {
+        for square in [A2, B2, C2, D2, E2, F2, G2, H2] {
             mb[square] = Some(Piece::new(White, Pawn));
         }
         mb[A8] = Some(Piece::new(Black, Rook));
@@ -63,7 +63,7 @@ impl Mailbox {
         mb[F8] = Some(Piece::new(Black, Bishop));
         mb[G8] = Some(Piece::new(Black, Knight));
         mb[H8] = Some(Piece::new(Black, Rook));
-        for &square in &[A7, B7, C7, D7, E7, F7, G7, H7] {
+        for square in [A7, B7, C7, D7, E7, F7, G7, H7] {
             mb[square] = Some(Piece::new(Black, Pawn));
         }
 

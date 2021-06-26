@@ -4,8 +4,8 @@ use std::fmt::{self, Display};
 use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 
 use crate::bitboard::{self, Bitboard};
+use crate::coretypes::{Color, PieceKind, Rank, NUM_RANKS, NUM_SQUARES};
 use crate::coretypes::{Color::*, PieceKind::*};
-use crate::coretypes::{PieceKind, Rank, NUM_RANKS, NUM_SQUARES};
 use crate::movegen as mg;
 use crate::position::Position;
 
@@ -27,8 +27,18 @@ impl Cp {
         Self(value)
     }
 
+    /// Returns the sign of Centipawn value, either 1, -1, or 0.
     pub const fn signum(&self) -> CpKind {
         self.0.signum()
+    }
+
+    /// Returns currently leading player, or None is position is equal.
+    pub const fn leading(&self) -> Option<Color> {
+        match self.signum() {
+            1 => Some(White),
+            -1 => Some(Black),
+            _ => None,
+        }
     }
 }
 
@@ -203,14 +213,14 @@ pub fn pass_pawns(position: &Position) -> Cp {
 
     let w_rank_bonus = {
         let mut bonus = Cp(0);
-        for &rank in &[Rank::R4, Rank::R5, Rank::R6, Rank::R7] {
+        for rank in [Rank::R4, Rank::R5, Rank::R6, Rank::R7] {
             bonus += RANK_CP[rank as usize] * (w_passed & Bitboard::from(rank)).count_squares();
         }
         bonus
     };
     let b_rank_bonus = {
         let mut bonus = Cp(0);
-        for &rank in &[Rank::R4, Rank::R5, Rank::R6, Rank::R7] {
+        for rank in [Rank::R4, Rank::R5, Rank::R6, Rank::R7] {
             bonus += RANK_CP[rank as usize] * (b_passed & Bitboard::from(rank)).count_squares();
         }
         bonus
@@ -245,11 +255,10 @@ pub fn xray_king_attacks(position: &Position) -> Cp {
 
 #[inline]
 fn w_pass_pawns(position: &Position) -> Bitboard {
-    let w_pawns = position.pieces[(White, Pawn)];
     let b_pawns = position.pieces[(Black, Pawn)];
     let mut w_passed = Bitboard::EMPTY;
 
-    for w_pawn in w_pawns {
+    for w_pawn in position.pieces[(White, Pawn)] {
         let pawn_file = w_pawn.file();
         let mut passed_mask = Bitboard::from(pawn_file)
             | pawn_file
@@ -273,11 +282,10 @@ fn w_pass_pawns(position: &Position) -> Bitboard {
 
 #[inline]
 fn b_pass_pawns(position: &Position) -> Bitboard {
-    let b_pawns = position.pieces[(Black, Pawn)];
     let w_pawns = position.pieces[(White, Pawn)];
     let mut b_passed = Bitboard::EMPTY;
 
-    for b_pawn in b_pawns {
+    for b_pawn in position.pieces[(Black, Pawn)] {
         let pawn_file = b_pawn.file();
         let mut passed_mask = Bitboard::from(pawn_file)
             | pawn_file

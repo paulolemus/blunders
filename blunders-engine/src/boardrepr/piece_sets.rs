@@ -281,11 +281,11 @@ mod tests {
             .iter()
             .fold(Bitboard::EMPTY, |acc, piece| acc | piece);
         assert_eq!(w_occupancy.count_squares(), 16);
-        for &square in &[A1, B1, C1, D1, E1, F1, G1, H1] {
-            assert!(w_occupancy.has_square(square));
+        for square in [A1, B1, C1, D1, E1, F1, G1, H1] {
+            assert!(w_occupancy.has_square(&square));
         }
-        for &square in &[A2, B2, C2, D2, E2, F2, G2, H2] {
-            assert!(w_occupancy.has_square(square));
+        for square in [A2, B2, C2, D2, E2, F2, G2, H2] {
+            assert!(w_occupancy.has_square(&square));
         }
 
         let black_pieces = &pieces[Black];
@@ -293,11 +293,11 @@ mod tests {
             .iter()
             .fold(Bitboard::EMPTY, |acc, piece| acc | piece);
         assert_eq!(b_occupancy.count_squares(), 16);
-        for &square in &[A7, B7, C7, D7, E7, F7, G7, H7] {
-            assert!(b_occupancy.has_square(square));
+        for square in [A7, B7, C7, D7, E7, F7, G7, H7] {
+            assert!(b_occupancy.has_square(&square));
         }
-        for &square in &[A8, B8, C8, D8, E8, F8, G8, H8] {
-            assert!(b_occupancy.has_square(square));
+        for square in [A8, B8, C8, D8, E8, F8, G8, H8] {
+            assert!(b_occupancy.has_square(&square));
         }
     }
 

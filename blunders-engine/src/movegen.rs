@@ -81,7 +81,7 @@ pub fn absolute_pins(
     let mut index = 0;
     let occupied = us | them;
 
-    for ortho_ray in &[ray_attack_no, ray_attack_ea, ray_attack_so, ray_attack_we] {
+    for ortho_ray in [ray_attack_no, ray_attack_ea, ray_attack_so, ray_attack_we] {
         let maybe_pinned = ortho_ray(&king, &occupied) & us; // Bb of single own piece (potentially pinned), or empty.
         if !maybe_pinned.is_empty() {
             let ray_without_pinned = ortho_ray(&king, &(occupied ^ maybe_pinned));
@@ -97,7 +97,7 @@ pub fn absolute_pins(
         }
     }
 
-    for diag_ray in &[
+    for diag_ray in [
         ray_attack_noea,
         ray_attack_nowe,
         ray_attack_soea,
@@ -805,8 +805,8 @@ mod tests {
 
         let d4 = KNIGHT_PATTERN[D4.idx()];
         assert_eq!(d4.count_squares(), 8);
-        for &square in &[E6, F5, F3, E2, C2, B3, B5, C6] {
-            assert!(d4.has_square(square));
+        for square in [E6, F5, F3, E2, C2, B3, B5, C6] {
+            assert!(d4.has_square(&square));
         }
 
         // Does not attack own square.
@@ -848,8 +848,8 @@ mod tests {
         {
             let d6 = KING_PATTERN[D6.idx()];
             assert_eq!(d6.count_squares(), 8);
-            for &square in &[C5, C6, C7, D5, D7, E5, E6, E7] {
-                assert!(d6.has_square(square));
+            for square in [C5, C6, C7, D5, D7, E5, E6, E7] {
+                assert!(d6.has_square(&square));
             }
         }
         // Does not attack own square.
@@ -863,22 +863,22 @@ mod tests {
         {
             let a1 = ROOK_PATTERN[A1.idx()];
             assert_eq!(a1.count_squares(), 14);
-            for &square in &[A2, A3, A4, A5, A6, A7, A8, B1, C1, D1, E1, F1, G1, H1] {
-                assert!(a1.has_square(square));
+            for square in [A2, A3, A4, A5, A6, A7, A8, B1, C1, D1, E1, F1, G1, H1] {
+                assert!(a1.has_square(&square));
             }
         }
         {
             let h8 = ROOK_PATTERN[H8.idx()];
             assert_eq!(h8.count_squares(), 14);
-            for &square in &[A8, B8, C8, D8, E8, F8, G8, H1, H2, H3, H4, H5, H6, H7] {
-                assert!(h8.has_square(square));
+            for square in [A8, B8, C8, D8, E8, F8, G8, H1, H2, H3, H4, H5, H6, H7] {
+                assert!(h8.has_square(&square));
             }
         }
         {
             let f3 = ROOK_PATTERN[F3.idx()];
             assert_eq!(f3.count_squares(), 14);
-            for &square in &[A3, B3, C3, D3, E3, G3, H3, F1, F2, F4, F5, F6, F7, F8] {
-                assert!(f3.has_square(square));
+            for square in [A3, B3, C3, D3, E3, G3, H3, F1, F2, F4, F5, F6, F7, F8] {
+                assert!(f3.has_square(&square));
             }
         }
         // Does not attack own square.
@@ -892,29 +892,29 @@ mod tests {
         {
             let a1 = BISHOP_PATTERN[A1.idx()];
             assert_eq!(a1.count_squares(), 7);
-            for &square in &[B2, C3, D4, E5, F6, G7, H8] {
-                assert!(a1.has_square(square));
+            for square in [B2, C3, D4, E5, F6, G7, H8] {
+                assert!(a1.has_square(&square));
             }
         }
         {
             let h1 = BISHOP_PATTERN[H1.idx()];
             assert_eq!(h1.count_squares(), 7);
-            for &square in &[A8, B7, C6, D5, E4, F3, G2] {
-                assert!(h1.has_square(square));
+            for square in [A8, B7, C6, D5, E4, F3, G2] {
+                assert!(h1.has_square(&square));
             }
         }
         {
             let h8 = BISHOP_PATTERN[H8.idx()];
             assert_eq!(h8.count_squares(), 7);
-            for &square in &[A1, B2, C3, D4, E5, F6, G7] {
-                assert!(h8.has_square(square));
+            for square in [A1, B2, C3, D4, E5, F6, G7] {
+                assert!(h8.has_square(&square));
             }
         }
         {
             let c6 = BISHOP_PATTERN[C6.idx()];
             assert_eq!(c6.count_squares(), 11);
-            for &square in &[A4, B5, D7, E8, A8, B7, D5, E4, F3, G2, H1] {
-                assert!(c6.has_square(square));
+            for square in [A4, B5, D7, E8, A8, B7, D5, E4, F3, G2, H1] {
+                assert!(c6.has_square(&square));
             }
         }
         // Does not attack own square.
@@ -927,31 +927,31 @@ mod tests {
         {
             let a1 = QUEEN_PATTERN[A1.idx()];
             assert_eq!(a1.count_squares(), 21);
-            for &square in &[B1, C1, D1, E1, F1, G1, H1, A2, A3, A4, A5, A6, A7, A8] {
-                assert!(a1.has_square(square)); // Orthogonal squares.
+            for square in [B1, C1, D1, E1, F1, G1, H1, A2, A3, A4, A5, A6, A7, A8] {
+                assert!(a1.has_square(&square)); // Orthogonal squares.
             }
-            for &square in &[B2, C3, D4, E5, F6, G7, H8] {
-                assert!(a1.has_square(square)); // Diagonal squares.
+            for square in [B2, C3, D4, E5, F6, G7, H8] {
+                assert!(a1.has_square(&square)); // Diagonal squares.
             }
         }
         {
             let h1 = QUEEN_PATTERN[H1.idx()];
             assert_eq!(h1.count_squares(), 21);
-            for &square in &[A1, B1, C1, D1, E1, F1, G1, H2, H3, H4, H5, H6, H7, H8] {
-                assert!(h1.has_square(square)); // Orthogonal squares.
+            for square in [A1, B1, C1, D1, E1, F1, G1, H2, H3, H4, H5, H6, H7, H8] {
+                assert!(h1.has_square(&square)); // Orthogonal squares.
             }
-            for &square in &[A8, B7, C6, D5, E4, F3, G2] {
-                assert!(h1.has_square(square)); // Diagonal squares.
+            for square in [A8, B7, C6, D5, E4, F3, G2] {
+                assert!(h1.has_square(&square)); // Diagonal squares.
             }
         }
         {
             let c6 = QUEEN_PATTERN[C6.idx()];
             assert_eq!(c6.count_squares(), 25);
-            for &square in &[C1, C2, C3, C4, C5, C7, C8, A6, B6, D6, E6, F6, G6, H6] {
-                assert!(c6.has_square(square)); // Orthogonal squares.
+            for square in [C1, C2, C3, C4, C5, C7, C8, A6, B6, D6, E6, F6, G6, H6] {
+                assert!(c6.has_square(&square)); // Orthogonal squares.
             }
-            for &square in &[A4, B5, D7, E8, A8, B7, D5, E4, F3, G2, H1] {
-                assert!(c6.has_square(square)); // Diagonal squares.
+            for square in [A4, B5, D7, E8, A8, B7, D5, E4, F3, G2, H1] {
+                assert!(c6.has_square(&square)); // Diagonal squares.
             }
         }
         // Does not attack own square.

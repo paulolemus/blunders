@@ -149,10 +149,10 @@ impl FenComponent for Mailbox {
         use Rank::*;
         let mut fen_str = String::new();
 
-        for &rank in &[R8, R7, R6, R5, R4, R3, R2, R1] {
+        for rank in [R8, R7, R6, R5, R4, R3, R2, R1] {
             let mut empty_counter = 0u8;
 
-            for &file in &[A, B, C, D, E, F, G, H] {
+            for file in [A, B, C, D, E, F, G, H] {
                 match self[(file, rank)] {
                     Some(piece) => {
                         if empty_counter != 0 {

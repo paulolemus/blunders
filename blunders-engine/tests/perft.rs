@@ -49,13 +49,13 @@ fn perft_starting_position() {
 fn perft_starting_position_expensive() {
     let position = Position::start_position();
     let ply5 = perft(position, 5, ONE_THREAD);
-    //let ply6 = perft(position, 6);
+    let ply6 = perft(position, 6, ONE_THREAD);
 
     println!("perft(5): {:?}", ply5);
-    //println!("perft(6): {:?}", ply6);
+    println!("perft(6): {:?}", ply6);
 
     assert_eq!(ply5.nodes, 4_865_609);
-    //assert_eq!(ply6.nodes, 119_060_324);
+    assert_eq!(ply6.nodes, 119_060_324);
 }
 
 fn kiwipete_position() -> Position {
