@@ -9,8 +9,8 @@ use std::iter::{ExactSizeIterator, FusedIterator};
 /// * The pushed items currently in ArrayVec are contiguous, starting from internal array's 0th index.
 ///
 /// Todo:
-///
-/// Convert from Option<T> to MaybeUninit<T> for performance.
+/// * Convert from Option<T> to MaybeUninit<T> for performance.
+/// * impl Deref<Target=[T]>.
 #[derive(Debug, Copy, Clone)]
 pub struct ArrayVec<T, const CAPACITY: usize> {
     items: [Option<T>; CAPACITY],
@@ -38,6 +38,11 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
         self.len() == 0
     }
 
+    /// Returns true if container is completely full, false otherwise.
+    pub fn is_full(&self) -> bool {
+        self.size == CAPACITY
+    }
+
     /// Returns true if container contains the given item.
     pub fn contains(&self, item: &T) -> bool
     where
@@ -50,13 +55,37 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
     /// push does not change the order of any items in the container before the appended item.
     pub fn push(&mut self, item: T) {
         // Guard against full array.
-        if self.size < CAPACITY {
+        if !self.is_full() {
             // size points to element after last valid data, so
             // push into size then increment.
             self.items[self.size] = Some(item);
             self.size += 1;
         } else {
             panic!("Exceeded max capacity of array.");
+        }
+    }
+
+    /// Inserts an item into the front of the container. If the container is full, panic.
+    /// push_front slides all existing items in array to the right by one position.
+    pub fn push_front(&mut self, item: T) {
+        // Guard against full array.
+        if !self.is_full() {
+            // Shift all existing items in array to the right by 1 index.
+            // There is guaranteed to available capacity.
+            // Insert new item into front of array.
+            let len = self.len();
+            self.items.copy_within(0..len, 1);
+            self.items[0] = Some(item);
+            self.size += 1;
+        } else {
+            panic!("Exceeded max capacity of array, cannot push_front.");
+        }
+    }
+
+    /// Copy all items of other into self. Panics if capacity is exceeded.
+    pub fn append(&mut self, other: ArrayVec<T, CAPACITY>) {
+        for item in other {
+            self.push(item);
         }
     }
 
@@ -69,6 +98,23 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
         } else {
             None
         }
+    }
+
+    /// Returns reference to element at position `index` or None if out of bounds.
+    pub fn get(&self, index: usize) -> Option<&T> {
+        if index < self.len() {
+            self.items[index].as_ref()
+        } else {
+            None
+        }
+    }
+
+    /// Removes all items in container, setting len to 0.
+    pub fn clear(&mut self) {
+        for item in &mut self.items {
+            *item = None;
+        }
+        self.size = 0;
     }
 }
 

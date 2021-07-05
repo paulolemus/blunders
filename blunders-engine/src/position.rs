@@ -732,11 +732,21 @@ mod tests {
 
     #[test]
     fn checkmated() {
-        let pos1 =
-            Position::parse_fen("rnb1k1nr/ppp2ppp/4p3/8/P7/1Pb3BQ/3qPPPP/4KBNR w Kkq - 0 14")
-                .unwrap();
-        let moves1 = pos1.get_legal_moves();
-        assert_eq!(moves1.len(), 0);
+        {
+            let pos1 =
+                Position::parse_fen("rnb1k1nr/ppp2ppp/4p3/8/P7/1Pb3BQ/3qPPPP/4KBNR w Kkq - 0 14")
+                    .unwrap();
+            let moves1 = pos1.get_legal_moves();
+            assert_eq!(moves1.len(), 0);
+        }
+
+        {
+            let pos2 =
+                Position::parse_fen("r4r1k/1b3p1p/pp2pQ2/2p5/P1B3R1/3P3P/2q3P1/7K b - - 0 26")
+                    .unwrap();
+            let moves2 = pos2.get_legal_moves();
+            assert_eq!(moves2.len(), 0);
+        }
     }
 
     #[test]

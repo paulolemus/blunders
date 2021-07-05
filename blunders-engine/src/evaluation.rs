@@ -20,7 +20,7 @@ type CpKind = i32;
 
 // Newtype pattern boilerplate
 impl Cp {
-    pub const MIN: Cp = Self(CpKind::MIN);
+    pub const MIN: Cp = Self(CpKind::MIN + 1); // + 1 to avoid overflow error on negate.
     pub const MAX: Cp = Self(CpKind::MAX);
 
     pub const fn new(value: CpKind) -> Self {
@@ -96,15 +96,6 @@ impl PieceKind {
         })
     }
 }
-
-//impl Piece {
-//    const fn centipawns(&self) -> Cp {
-//        Cp(match self.color {
-//            White => self.piece_kind.centipawns().0,
-//            Black => -self.piece_kind.centipawns().0,
-//        })
-//    }
-//}
 
 // Evaluation Constants
 const CHECKMATE: Cp = Cp(Cp::MAX.0 / 2 - 1);

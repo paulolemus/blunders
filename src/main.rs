@@ -6,7 +6,7 @@ use std::time;
 use blunders_engine;
 use blunders_engine::coretypes::{Move, MoveInfo};
 use blunders_engine::evaluation::static_evaluate;
-use blunders_engine::search::alpha_beta;
+use blunders_engine::search::search;
 use blunders_engine::Position;
 
 enum InputKind {
@@ -131,7 +131,7 @@ fn main() -> io::Result<()> {
             // Have computer play its response.
             println!("{}\nthinking...", position);
             let now = time::Instant::now();
-            let (cp, best_move) = alpha_beta(position, 6);
+            let (cp, best_move) = search(position, 6);
             let timed = now.elapsed();
             move_history.push(position.do_move(best_move));
 

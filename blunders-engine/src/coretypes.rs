@@ -14,6 +14,14 @@ pub const NUM_FILES: usize = 8; // A, B, C, D, E, F, G, H
 pub const NUM_RANKS: usize = 8; // 1, 2, 3, 4, 5, 6, 7, 8
 pub const NUM_SQUARES: usize = NUM_FILES * NUM_RANKS;
 
+// The max possible measured number of moves for any chess position.
+pub const MAX_MOVES: usize = 218;
+// The max number of moves that can be in a line for blunders engine.
+// This also can be expressed by the greatest depth reachable for the engine during search.
+// This value may change or be removed at any time.
+// TODO: transition to using a transposition table instead.
+pub const MAX_LINE_LEN: usize = 64;
+
 /////////////////////////
 // Data and Structures //
 /////////////////////////
@@ -22,8 +30,6 @@ pub const NUM_SQUARES: usize = NUM_FILES * NUM_RANKS;
 pub type MoveCount = u32;
 
 /// Color can represent the color of a piece, or a player.
-/// Color's set discriminant is used in position.rs to index without branching.
-/// First 6 are for each piece_kind as white, last 6 are for each piece_kind as black.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Color {
     White,
