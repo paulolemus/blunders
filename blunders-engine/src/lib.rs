@@ -9,6 +9,8 @@ pub mod movelist;
 pub mod perft;
 pub mod position;
 pub mod search;
+pub mod transposition;
+pub mod zobrist;
 
 pub use position::Position;
 

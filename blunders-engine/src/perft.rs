@@ -68,6 +68,7 @@ pub fn perft(mut position: Position, ply: u32, threads: usize) -> PerftInfo {
     // Create threads to process partitioned moves.
     for _ in 0..threads {
         // Arcs
+        let position = position.clone();
         let legal_moves = legal_moves.clone();
         let total_perft_info = total_perft_info.clone();
 

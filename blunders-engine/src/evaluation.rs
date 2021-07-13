@@ -377,3 +377,20 @@ const fn w_pass_pawn_pattern_idx(square: usize) -> Bitboard {
         Bitboard(pass_pawn_pat)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cp_min_and_max() {
+        let min = Cp::MIN;
+        let max = Cp::MAX;
+        assert_eq!(min.signum(), -1);
+        assert_eq!(max.signum(), 1);
+
+        // Negated
+        assert_eq!((-min).signum(), 1);
+        assert_eq!((-max).signum(), -1);
+    }
+}

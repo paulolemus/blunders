@@ -14,6 +14,9 @@ pub const NUM_FILES: usize = 8; // A, B, C, D, E, F, G, H
 pub const NUM_RANKS: usize = 8; // 1, 2, 3, 4, 5, 6, 7, 8
 pub const NUM_SQUARES: usize = NUM_FILES * NUM_RANKS;
 
+// 6 Black, 6 White of Pawn, Knight, Bishop, Rook, Queen, King.
+pub const NUM_PIECE_KINDS: usize = 12;
+
 // The max possible measured number of moves for any chess position.
 pub const MAX_MOVES: usize = 218;
 // The max number of moves that can be in a line for blunders engine.
@@ -70,6 +73,7 @@ impl Castling {
     pub const QUEEN_SIDE: Castling = Castling(Self::W_QUEEN.0 | Self::B_QUEEN.0);
     pub const ALL: Castling = Castling(Self::W_SIDE.0 | Self::B_SIDE.0);
     pub const NONE: Castling = Castling(0u8);
+    pub const ENUMERATIONS: usize = 16; // 16 possibilities for castling rights.
 }
 
 /// Enum variant order and discriminant must be contiguous, start from 0, 
@@ -379,6 +383,11 @@ impl Castling {
         Self::ALL
     }
 
+    /// Returns underlying bits used to represent Castling rights.
+    pub const fn bits(&self) -> u8 {
+        self.0
+    }
+
     /// Returns true if Castling mask has all of provided bits.
     pub fn has(&self, rights: Castling) -> bool {
         assert!(Self::is_mask_valid(rights));
@@ -416,6 +425,7 @@ impl Castling {
         }
     }
 
+    /// Returns true if all bits set in Castling are valid, and false otherwise.
     const fn is_mask_valid(rights: Castling) -> bool {
         rights.0 <= Self::ALL.0
     }
@@ -655,7 +665,7 @@ impl Square {
     /// Square enum variants cover all u8 values from 0-63 inclusive.
     /// WARNING: Uses `unsafe`.
     /// TODO: Change to const safe code covering all cases using match in macro.
-    pub fn from_u8(value: u8) -> Option<Square> {
+    pub fn from_u8(value: u8) -> Option<Self> {
         // If value is in valid range, transmute, otherwise return None.
         (value <= Square::H8 as u8).then(|| unsafe { transmute::<u8, Square>(value) })
     }
@@ -702,6 +712,20 @@ impl Square {
     /// Returns 0-based rank (0,1,2,3,4,5,6,7), not 1-based chess rank.
     pub const fn rank_u8(&self) -> u8 {
         *self as u8 / NUM_FILES as u8
+    }
+
+    /// Returns the Square with the Rank increased by one, "A3 -> A4".
+    pub fn increment_rank(&self) -> Option<Self> {
+        let file = File::from_u8(self.file_u8()).unwrap();
+        let maybe_rank = Rank::from_u8(self.rank_u8() + 1);
+        maybe_rank.and_then(|rank| Self::from_idx((file, rank)))
+    }
+
+    /// Returns the Square with the Rank decreased by one, "A3 -> A2".
+    pub fn decrement_rank(&self) -> Option<Self> {
+        let file = File::from_u8(self.file_u8()).unwrap();
+        let maybe_rank = Rank::from_u8(self.rank_u8().wrapping_sub(1));
+        maybe_rank.and_then(|rank| Self::from_idx((file, rank)))
     }
 }
 
@@ -1121,5 +1145,25 @@ mod tests {
         assert_eq!(R6 as u8, 5);
         assert_eq!(R7 as u8, 6);
         assert_eq!(R8 as u8, 7);
+    }
+
+    #[test]
+    fn increment_decrement_square() {
+        use Square::*;
+        let sq = B4;
+        assert_eq!(sq.increment_rank(), Some(B5));
+        assert_eq!(sq.decrement_rank(), Some(B3));
+
+        let sq = A1;
+        assert_eq!(sq.increment_rank(), Some(A2));
+        assert_eq!(sq.decrement_rank(), None);
+
+        let sq = D7;
+        assert_eq!(sq.increment_rank(), Some(D8));
+        assert_eq!(sq.decrement_rank(), Some(D6));
+
+        let sq = D8;
+        assert_eq!(sq.increment_rank(), None);
+        assert_eq!(sq.decrement_rank(), Some(D7));
     }
 }

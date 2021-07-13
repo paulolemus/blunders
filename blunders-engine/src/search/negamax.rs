@@ -65,7 +65,7 @@ pub fn negamax(mut position: Position, ply: u32) -> SearchResult {
 /// beta: Best (lowest) guaranteed value for opposite player.
 fn negamax_impl(
     position: &mut Position,
-    pv: &mut Line,
+    pv_line: &mut Line,
     nodes: &mut u64,
     ply: u32,
     mut alpha: Cp,
@@ -82,7 +82,7 @@ fn negamax_impl(
     if ply == 0 || num_moves == 0 {
         // The parent of this node receives an empty pv_line,
         // because a terminal node has no best move.
-        pv.clear();
+        pv_line.clear();
         return static_evaluate(&position, num_moves) * position.player.sign();
     }
 
@@ -106,9 +106,9 @@ fn negamax_impl(
         // A new local PV line has been found. Update alpha and store new Line.
         if best_cp > alpha {
             alpha = best_cp;
-            pv.clear();
-            pv.push(legal_move);
-            pv.append(local_pv);
+            pv_line.clear();
+            pv_line.push(legal_move);
+            pv_line.append(local_pv);
         }
     }
     best_cp
@@ -121,6 +121,7 @@ mod tests {
     use crate::fen::Fen;
 
     #[test]
+    #[ignore]
     fn mate_pv() {
         let position =
             Position::parse_fen("r4rk1/1b3ppp/pp2p3/2p5/P1B1NR1Q/3P3P/2q3P1/7K w - - 0 24")

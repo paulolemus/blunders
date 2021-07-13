@@ -132,6 +132,19 @@ impl PieceSets {
     }
 }
 
+impl Index<Piece> for PieceSets {
+    type Output = Bitboard;
+    fn index(&self, piece: Piece) -> &Self::Output {
+        &self.pieces[piece.offset()]
+    }
+}
+
+impl IndexMut<Piece> for PieceSets {
+    fn index_mut(&mut self, piece: Piece) -> &mut Self::Output {
+        &mut self.pieces[piece.offset()]
+    }
+}
+
 impl Index<&Piece> for PieceSets {
     type Output = Bitboard;
     fn index(&self, piece: &Piece) -> &Self::Output {
