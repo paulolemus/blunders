@@ -7,20 +7,30 @@ use crate::evaluation::Cp;
 use crate::zobrist::{HashKind, ZobristTable};
 use crate::Position;
 
+/// The Kind of node used
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum NodeKind {
+    Pv,    // A principal variation node from a previous search. May need depth of search.
+    Cut,   // A Cut node, or a node that was pruned because it caused a beta-cutoff.
+    Other, // Any other node.
+}
+
 /// TranspositionInfo contains information about a previously searched position.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct TranspositionInfo {
-    pub(crate) hash: HashKind, // Full hash value for a position.
-    pub(crate) key_move: Move, // Best move or refutation move.
-    pub(crate) ply: u32,       // The depth searched to in this Position's subtree.
-    pub(crate) score: Cp,      // Score in centipawns for hashed position.
+    pub(crate) hash: HashKind,      // Full hash value for a position.
+    pub(crate) node_kind: NodeKind, // Type of Node this position has in search tree.
+    pub(crate) key_move: Move,      // Best move or refutation move.
+    pub(crate) ply: u32,            // The depth searched to in this Position's subtree.
+    pub(crate) score: Cp,           // Score in centipawns for hashed position.
 }
 
 impl TranspositionInfo {
     /// Returns new TranspositionInfo from provided information.
-    pub fn new(hash: HashKind, key_move: Move, ply: u32, score: Cp) -> Self {
+    pub fn new(hash: HashKind, node_kind: NodeKind, key_move: Move, ply: u32, score: Cp) -> Self {
         Self {
             hash,
+            node_kind,
             key_move,
             ply,
             score,
@@ -63,7 +73,7 @@ pub struct TranspositionTable {
 }
 
 impl TranspositionTable {
-    const DEFAULT_MAX_CAPACITY: usize = 1000;
+    const DEFAULT_MAX_CAPACITY: usize = 10_000;
 
     /// Returns a new TranspositionTable with a randomly generated ZobristTable
     /// and a pre-allocated default max capacity.
@@ -121,6 +131,13 @@ impl TranspositionTable {
         }
     }
 
+    /// Removes all items from TranspositionTable.
+    pub fn clear(&mut self) {
+        self.transpositions.fill(None);
+        debug_assert_eq!(self.max_capacity, self.transpositions.capacity());
+        debug_assert_eq!(self.max_capacity, self.transpositions.len());
+    }
+
     /// Generate a hash for a Position with context to this TranspositionTable.
     /// Hashes used for this table must be generated from it's context, because a hash for
     /// any position are likely to be different between different TranspositionTables.
@@ -131,6 +148,18 @@ impl TranspositionTable {
     /// Update hash for the application of a Move on Position.
     pub fn update_hash(&self, hash: &mut HashKind, position: &Position, move_info: &MoveInfo) {
         self.ztable.update_hash(hash, position.into(), move_info);
+    }
+
+    /// Generate a new hash from a Move applied to an existing Hash and Position.
+    pub fn update_from_hash(
+        &self,
+        mut hash: HashKind,
+        position: &Position,
+        move_info: &MoveInfo,
+    ) -> HashKind {
+        self.ztable
+            .update_hash(&mut hash, position.into(), move_info);
+        hash
     }
 
     // TODO:
@@ -180,6 +209,7 @@ mod tests {
         let mut tt = TranspositionTable::new();
         let tt_info = TranspositionInfo {
             hash,
+            node_kind: NodeKind::Other,
             key_move: Move::new(A2, A3, None),
             ply: 3,
             score: Cp(100),
@@ -194,12 +224,14 @@ mod tests {
         let mut tt = TranspositionTable::with_capacity(1);
         let tt_info1 = TranspositionInfo {
             hash: 100,
+            node_kind: NodeKind::Other,
             key_move: Move::new(A2, A3, None),
             ply: 3,
             score: Cp(100),
         };
         let tt_info2 = TranspositionInfo {
             hash: 200,
+            node_kind: NodeKind::Other,
             key_move: Move::new(B5, B3, None),
             ply: 4,
             score: Cp(-200),
@@ -233,6 +265,7 @@ mod tests {
         let hash = tt.generate_hash(&pos);
         let tt_info = TranspositionInfo {
             hash,
+            node_kind: NodeKind::Other,
             key_move: Move::new(D2, D4, None),
             ply: 5,
             score: Cp(0),

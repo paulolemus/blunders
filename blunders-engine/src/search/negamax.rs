@@ -1,12 +1,15 @@
 //! Negamax implementation of Minimax with Alpha-Beta pruning.
 
-use std::cmp;
+use std::cmp::{self};
 use std::time::Instant;
 
 use crate::coretypes::Color;
 use crate::evaluation::{static_evaluate, Cp};
 use crate::movelist::Line;
+use crate::moveorder::order_all_moves;
 use crate::search::SearchResult;
+use crate::transposition::TranspositionTable;
+use crate::zobrist::HashKind;
 use crate::Position;
 
 impl Color {
@@ -23,16 +26,30 @@ impl Color {
 /// Internally, Negamax treats the active player as the maxing player,
 /// however the final centipawn score of the position returned is
 /// absolute with White as maxing and Black as minning.
-pub fn negamax(mut position: Position, ply: u32) -> SearchResult {
+pub fn negamax(position: Position, ply: u32) -> SearchResult {
+    let mut tt = TranspositionTable::new();
+    negamax_with_tt(position, ply, &mut tt)
+}
+
+/// Negamax implementation that uses provided transposition table.
+pub fn negamax_with_tt(
+    mut position: Position,
+    ply: u32,
+    tt: &mut TranspositionTable,
+) -> SearchResult {
     debug_assert_ne!(ply, 0);
 
     let active_player = *position.player();
+    let hash = tt.generate_hash(&position);
     let instant = Instant::now();
+
     let mut pv_line = Line::new();
     let mut nodes = 0;
 
-    let best_cp = negamax_impl(
+    let best_score = negamax_impl(
         &mut position,
+        tt,
+        hash,
         &mut pv_line,
         &mut nodes,
         ply,
@@ -42,7 +59,7 @@ pub fn negamax(mut position: Position, ply: u32) -> SearchResult {
 
     SearchResult {
         best_move: *pv_line.get(0).unwrap(),
-        cp: best_cp * active_player.sign(),
+        score: best_score * active_player.sign(),
         pv_line,
         nodes,
         elapsed: instant.elapsed(),
@@ -58,13 +75,17 @@ pub fn negamax(mut position: Position, ply: u32) -> SearchResult {
 /// Parameters:
 ///
 /// position: current position to search.
-/// pv: Line of moves in principal variation.
+/// tt: Transposition Table used for recalling search history.
+/// hash: Incrementally updatable hash of provided position.
+/// pv_line: Line of moves in principal variation.
 /// nodes: Counter for number of nodes visited in search.
 /// ply: remaining depth to search to.
 /// alpha: Best (greatest) guaranteed value for current player.
 /// beta: Best (lowest) guaranteed value for opposite player.
 fn negamax_impl(
     position: &mut Position,
+    tt: &mut TranspositionTable,
+    hash: HashKind,
     pv_line: &mut Line,
     nodes: &mut u64,
     ply: u32,
@@ -86,32 +107,46 @@ fn negamax_impl(
         return static_evaluate(&position, num_moves) * position.player.sign();
     }
 
+    // Move Ordering
+    // Sort legal moves with estimated best move first.
+    let ordered_legal_moves = order_all_moves(*position, legal_moves, hash, tt);
+    debug_assert_eq!(num_moves, ordered_legal_moves.len());
+
     let mut local_pv = Line::new();
-    let mut best_cp = Cp::MIN;
+    let mut best_score = Cp::MIN;
 
     // For each child of current position, recursively find maxing move.
-    for legal_move in legal_moves {
+    for legal_move in ordered_legal_moves {
         // Get value of a move relative to active player.
         let move_info = position.do_move(legal_move);
-        let move_cp = -negamax_impl(position, &mut local_pv, nodes, ply - 1, -beta, -alpha);
-        best_cp = cmp::max(best_cp, move_cp);
+        let move_score = -negamax_impl(
+            position,
+            tt,
+            hash,
+            &mut local_pv,
+            nodes,
+            ply - 1,
+            -beta,
+            -alpha,
+        );
+        best_score = cmp::max(best_score, move_score);
         position.undo_move(move_info);
 
         // Cut-off has occurred, no further children of this position need to be searched.
         // This branch will not be taken further up the tree as there is a better move.
-        if move_cp >= beta {
-            return move_cp;
+        if move_score >= beta {
+            return move_score;
         }
 
         // A new local PV line has been found. Update alpha and store new Line.
-        if best_cp > alpha {
-            alpha = best_cp;
+        if best_score > alpha {
+            alpha = best_score;
             pv_line.clear();
             pv_line.push(legal_move);
             pv_line.append(local_pv);
         }
     }
-    best_cp
+    best_score
 }
 
 #[cfg(test)]
@@ -128,7 +163,7 @@ mod tests {
                 .unwrap();
 
         let result = negamax(position, 6);
-        assert_eq!(result.cp.leading(), Some(Color::White));
+        assert_eq!(result.score.leading(), Some(Color::White));
         assert_eq!(result.best_move, Move::new(E4, F6, None));
         println!("{:?}", result.pv_line);
     }

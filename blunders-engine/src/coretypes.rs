@@ -124,6 +124,7 @@ pub struct Move {
     pub(crate) promotion: Option<PieceKind>,
 }
 
+/// Enum describing the kind of a move.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MoveKind {
     Capture(PieceKind), // Normal capture move

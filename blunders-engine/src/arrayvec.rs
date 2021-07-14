@@ -1,6 +1,7 @@
 //! Generic, fixed capacity, Vector on stack.
 
 use std::array;
+use std::cmp::Ordering;
 use std::iter::{ExactSizeIterator, FusedIterator};
 
 /// ArrayVec hold all items of a generic type on the stack with a fixed capacity.
@@ -8,11 +9,28 @@ use std::iter::{ExactSizeIterator, FusedIterator};
 ///
 /// * The pushed items currently in ArrayVec are contiguous, starting from internal array's 0th index.
 ///
+/// "MaybeUninit<T> is guaranteed to have the same size, alignment, and ABI as T:"
+///
+/// "Arrays are laid out so that the nth element of the array is offset from the
+/// start of the array by n * the size of the type bytes.
+/// An array of [T; n] has a size of size_of::<T>() * n and the same alignment of T."
+///
+/// From the above, the arrays [T; CAP] and [MaybeUninit<T>; CAP] are guaranteed to have
+/// the same layout (size, alignment).
+///
+/// Idea:
+///
+/// Do not cast &[MaybeUninit<T>; CAP] to &[T; CAP] because it is unsound.
+/// It is UB because all T's in array are not initialized,
+/// like how `let x: usize = MaybeUninit::uninit().assume_init();` is immediately
+/// UB, even if x is never accessed.
+/// unsafe { &*(slice as *const [MaybeUninit<usize>] as *const [usize]) }
+///
 /// Todo:
-/// * Convert from Option<T> to MaybeUninit<T> for performance.
+/// * Change from [Option<T>; CAP] to [MaybeUninit<T>; CAP].
 /// * impl Deref<Target=[T]>.
 #[derive(Debug, Copy, Clone)]
-pub struct ArrayVec<T, const CAPACITY: usize> {
+pub struct ArrayVec<T: Copy + Clone, const CAPACITY: usize> {
     items: [Option<T>; CAPACITY],
     size: usize,
 }
@@ -21,6 +39,9 @@ pub struct ArrayVec<T, const CAPACITY: usize> {
 // The first size items in array will be the values in the array.
 // size points to the element after the last item, so to junk data.
 impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
+    // Associated constant to get capacity of structure at compile time.
+    pub const CAP: usize = CAPACITY;
+
     pub fn new() -> Self {
         Self {
             items: [None; CAPACITY],
@@ -56,29 +77,11 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
     pub fn push(&mut self, item: T) {
         // Guard against full array.
         if !self.is_full() {
-            // size points to element after last valid data, so
-            // push into size then increment.
+            // size points to element after last valid data, so push into size then increment.
             self.items[self.size] = Some(item);
             self.size += 1;
         } else {
             panic!("Exceeded max capacity of array.");
-        }
-    }
-
-    /// Inserts an item into the front of the container. If the container is full, panic.
-    /// push_front slides all existing items in array to the right by one position.
-    pub fn push_front(&mut self, item: T) {
-        // Guard against full array.
-        if !self.is_full() {
-            // Shift all existing items in array to the right by 1 index.
-            // There is guaranteed to available capacity.
-            // Insert new item into front of array.
-            let len = self.len();
-            self.items.copy_within(0..len, 1);
-            self.items[0] = Some(item);
-            self.size += 1;
-        } else {
-            panic!("Exceeded max capacity of array, cannot push_front.");
         }
     }
 
@@ -111,14 +114,26 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
 
     /// Removes all items in container, setting len to 0.
     pub fn clear(&mut self) {
-        for item in &mut self.items {
+        for item in &mut self.items[0..self.size] {
             *item = None;
         }
         self.size = 0;
     }
+
+    /// Allow for sorting by &T instead of by &Option<T>,
+    /// until underlying data structure is converted to MaybeUninit.
+    pub fn sort_unstable_by<F>(&mut self, mut compare: F)
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        let len = self.len();
+        self.items[0..len].sort_unstable_by(|left, right| {
+            compare(left.as_ref().unwrap(), right.as_ref().unwrap())
+        });
+    }
 }
 
-impl<T, const CAPACITY: usize> IntoIterator for ArrayVec<T, CAPACITY> {
+impl<T: Copy + Clone, const CAPACITY: usize> IntoIterator for ArrayVec<T, CAPACITY> {
     type Item = T;
     type IntoIter = ArrayVecIterator<T, CAPACITY>;
     fn into_iter(self) -> Self::IntoIter {
@@ -133,7 +148,7 @@ pub struct ArrayVecIterator<T, const CAPACITY: usize> {
     size: usize,
 }
 
-impl<T, const CAPACITY: usize> ArrayVecIterator<T, CAPACITY> {
+impl<T: Copy + Clone, const CAPACITY: usize> ArrayVecIterator<T, CAPACITY> {
     pub fn new(array_vec: ArrayVec<T, CAPACITY>) -> Self {
         assert!(array_vec.size < CAPACITY);
         let it = std::array::IntoIter::new(array_vec.items);
@@ -142,7 +157,7 @@ impl<T, const CAPACITY: usize> ArrayVecIterator<T, CAPACITY> {
     }
 }
 
-impl<T, const CAPACITY: usize> Iterator for ArrayVecIterator<T, CAPACITY> {
+impl<T: Copy + Clone, const CAPACITY: usize> Iterator for ArrayVecIterator<T, CAPACITY> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         if self.size > 0 {
@@ -159,8 +174,8 @@ impl<T, const CAPACITY: usize> Iterator for ArrayVecIterator<T, CAPACITY> {
     }
 }
 
-impl<T, const CAPACITY: usize> ExactSizeIterator for ArrayVecIterator<T, CAPACITY> {}
-impl<T, const CAPACITY: usize> FusedIterator for ArrayVecIterator<T, CAPACITY> {}
+impl<T: Copy + Clone, const CAPACITY: usize> ExactSizeIterator for ArrayVecIterator<T, CAPACITY> {}
+impl<T: Copy + Clone, const CAPACITY: usize> FusedIterator for ArrayVecIterator<T, CAPACITY> {}
 
 #[cfg(test)]
 mod tests {
@@ -210,5 +225,42 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert!(!list.is_empty());
         list.push(1000);
+    }
+
+    #[test]
+    fn sorting() {
+        let mut arrayvec = ArrayVec::<i32, 100>::new();
+        arrayvec.push(40);
+        arrayvec.push(300);
+        arrayvec.push(-10);
+        arrayvec.push(0);
+        assert_eq!(4, arrayvec.len());
+        arrayvec.sort_unstable_by(|a, b| a.cmp(b));
+        assert_eq!(4, arrayvec.len());
+
+        let mut iter = arrayvec.into_iter();
+        assert_eq!(-10, iter.next().unwrap());
+        assert_eq!(0, iter.next().unwrap());
+        assert_eq!(40, iter.next().unwrap());
+        assert_eq!(300, iter.next().unwrap());
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn clears() {
+        let mut arrayvec = ArrayVec::<i32, 100>::new();
+        for item in &arrayvec.items {
+            assert_eq!(*item, None);
+        }
+
+        arrayvec.push(100);
+        arrayvec.push(500);
+        assert_eq!(arrayvec.len(), 2);
+
+        arrayvec.clear();
+        assert_eq!(arrayvec.len(), 0);
+        for item in &arrayvec.items {
+            assert_eq!(*item, None);
+        }
     }
 }

@@ -6,6 +6,7 @@ pub mod evaluation;
 pub mod fen;
 pub(crate) mod movegen;
 pub mod movelist;
+pub mod moveorder;
 pub mod perft;
 pub mod position;
 pub mod search;

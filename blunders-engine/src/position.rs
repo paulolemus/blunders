@@ -532,14 +532,6 @@ impl Position {
             mg::absolute_pins(king_square, us, them, queens | rooks, queens | bishops)
         };
 
-        // Generate all normal legal king moves.
-        let mut king_tos = mg::king_attacks(&king);
-        king_tos.remove(&us);
-        king_tos.remove(&attacked);
-        for to in king_tos {
-            legal_moves.push(Move::new(king_square, to, None));
-        }
-
         // Generate all normal Queen, Rook, Bishop, Knight moves.
         // Generate all normal and special Pawn moves (single/double push, attacks, ep).
         let queens = self.pieces[(self.player, Queen)];
@@ -551,12 +543,20 @@ impl Position {
         // Generate strictly legal moves using pinned data.
         let knights_free = knights & !absolute_pins;
         let bishops_free = bishops & !absolute_pins;
-        let rooks_free = rooks & !absolute_pins;
         let queens_free = queens & !absolute_pins;
+        let rooks_free = rooks & !absolute_pins;
         mg::knight_pseudo_moves(&mut legal_moves, knights_free, us);
         mg::bishop_pseudo_moves(&mut legal_moves, bishops_free, occupied, us);
-        mg::rook_pseudo_moves(&mut legal_moves, rooks_free, occupied, us);
         mg::queen_pseudo_moves(&mut legal_moves, queens_free, occupied, us);
+        mg::rook_pseudo_moves(&mut legal_moves, rooks_free, occupied, us);
+
+        // Generate all normal legal king moves.
+        let mut king_tos = mg::king_attacks(&king);
+        king_tos.remove(&us);
+        king_tos.remove(&attacked);
+        for to in king_tos {
+            legal_moves.push(Move::new(king_square, to, None));
+        }
 
         // Generate pseudo moves and check for legality with "do/undo".
         let mut pseudo_moves = MoveList::new();
