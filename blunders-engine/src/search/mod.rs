@@ -36,7 +36,7 @@ pub struct SearchResult {
 /// Blunders Engine primary position search function. WIP.
 pub fn search(position: Position, ply: u32) -> (Cp, Move) {
     assert_ne!(ply, 0);
-    let result = negamax(position, ply);
+    let result = ids(position, ply);
     (result.score, result.best_move)
 }
 
