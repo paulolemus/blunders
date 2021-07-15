@@ -29,15 +29,6 @@ impl<'a> From<&'a Position> for Key<'a> {
     }
 }
 
-/// TODO:
-/// Implement Iterative Deepening Search.
-/// Implement more advanced Move Ordering. Return
-///
-/// In Search:
-/// Steps=Move order, then check if position is cached.
-/// A position does not check itself, it only checks it's potential children.
-/// Whenever a move causes a cutoff,
-
 // Strategy:
 // A TT has a maximum size. That size is pre-allocated, and never changes.
 // The Key of a table is a Position, which has a cached hash.

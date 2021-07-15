@@ -13,7 +13,7 @@ use crate::position::Position;
 /// A positive centipawn value represent an advantage for White,
 /// and a negative value represents an advantage for Black.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
-pub struct Cp(pub(crate) CpKind);
+pub struct Cp(pub CpKind);
 
 // Type alias to make changing type easy if needed.
 type CpKind = i32;
@@ -85,7 +85,7 @@ impl Display for Cp {
 
 impl PieceKind {
     /// Default, color independent value per piece.
-    const fn centipawns(&self) -> Cp {
+    pub const fn centipawns(&self) -> Cp {
         Cp(match self {
             Pawn => 100,
             Knight => 300,

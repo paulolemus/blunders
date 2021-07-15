@@ -30,7 +30,6 @@ use crate::Position;
 // Do we store score for a node with relative or absolute scoring?
 
 // General considerations for move ordering and searching:
-// Node type is useful during move ordering.
 // For tt look ups during a search, a node only needs to search itself, not it's children.
 // a/b can only be inherited, so getting a tt value from a child node within
 // a call is the same as getting it from a recursive call.
@@ -44,11 +43,13 @@ use crate::Position;
 /// top-to-bottom declaration of fields.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) struct OrderStrategy {
-    is_pv: bool,    // pv moves are most important, and are searched first.
-    is_cut: bool,   // Node type is cut, or likely lead to pruning.
-    is_in_tt: bool, // any move that is in the tt should follow pv nodes.
-    is_capture: bool, // capture moves follow all tt moves.
-                    // All other nodes remain with lowest but equal priority.
+    is_key_move: bool,        // Move listed as best move for root position in tt.
+    node_kind: NodeKind,      // Pv nodes are greatest, followed by Cut and then other nodes.
+    is_in_tt: bool,           // any move that is in the tt should follow pv nodes.
+    is_promotion: bool,       // Move promotes a pawn.
+    is_winning_capture: bool, // Captures where a piece captures a piece with gte value.
+    is_capture: bool,         // All remaining capture moves.
+                              // All other nodes remain with lowest but equal priority.
 }
 impl OrderStrategy {
     /// Returns new OrderStrategy with all values set to false.
@@ -61,9 +62,11 @@ impl OrderStrategy {
 impl Default for OrderStrategy {
     fn default() -> Self {
         OrderStrategy {
-            is_pv: false,
-            is_cut: false,
+            is_key_move: false,
+            node_kind: NodeKind::Other,
             is_in_tt: false,
+            is_promotion: false,
+            is_winning_capture: false,
             is_capture: false,
         }
     }
@@ -77,6 +80,7 @@ pub(crate) fn order_all_moves(
     tt: &TranspositionTable,
 ) -> MoveList {
     let mut ordering_vec = ArrayVec::<(Move, OrderStrategy), MAX_MOVES>::new();
+    let maybe_key_move = tt.get(hash).and_then(|tt_info| Some(tt_info.key_move));
 
     // For each move, gather data needed to order, and push into a new ArrayVec.
     for legal_move in legal_moves {
@@ -86,18 +90,27 @@ pub(crate) fn order_all_moves(
 
         let mut order_strategy = OrderStrategy::new();
 
-        if let MoveKind::Capture(_) = move_info.move_kind() {
-            order_strategy.is_capture = true;
+        // Give high priority to move if root position listed it in tt.
+        if let Some(key_move) = maybe_key_move {
+            order_strategy.is_key_move = legal_move == key_move;
         }
 
+        // Check if moved position exists in tt.
         if let Some(tt_info) = tt.get(move_hash) {
             order_strategy.is_in_tt = true;
+            order_strategy.node_kind = tt_info.node_kind;
+        }
 
-            match tt_info.node_kind {
-                NodeKind::Pv => order_strategy.is_pv = true,
-                NodeKind::Cut => order_strategy.is_cut = true,
-                _ => {}
-            };
+        // Set promotion flag.
+        order_strategy.is_promotion = move_info.move_.promotion.is_some();
+
+        // Check if there were any captures. If the capturing piece has a lower value
+        // than the captured piece, consider it a winning capture for ordering.
+        if let MoveKind::Capture(captured_kind) = move_info.move_kind() {
+            order_strategy.is_capture = true;
+            let capturing_cp = move_info.piece_kind.centipawns();
+            let captured_cp = captured_kind.centipawns();
+            order_strategy.is_winning_capture = capturing_cp <= captured_cp;
         }
 
         ordering_vec.push((legal_move, order_strategy));
@@ -134,5 +147,24 @@ mod tests {
 
         assert_eq!(ordered_legal_moves.len(), num_moves);
         assert_eq!(*ordered_legal_moves.get(0).unwrap(), capture);
+    }
+
+    #[test]
+    fn node_kind_ordering() {
+        assert!(NodeKind::Pv > NodeKind::Cut);
+        assert!(NodeKind::Cut > NodeKind::Other);
+    }
+
+    #[test]
+    fn order_strategy_cmp() {
+        let os = OrderStrategy::new();
+        let mut gt_os = OrderStrategy::new();
+        gt_os.is_key_move = true;
+
+        let mut lt_os = OrderStrategy::new();
+        lt_os.is_winning_capture = true;
+
+        assert!(gt_os > os);
+        assert!(gt_os > lt_os);
     }
 }

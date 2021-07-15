@@ -1,25 +1,15 @@
 //! Negamax implementation of Minimax with Alpha-Beta pruning.
 
-use std::cmp::{self};
 use std::time::Instant;
 
-use crate::coretypes::Color;
+use crate::coretypes::{Move, Square::*};
 use crate::evaluation::{static_evaluate, Cp};
 use crate::movelist::Line;
 use crate::moveorder::order_all_moves;
 use crate::search::SearchResult;
-use crate::transposition::TranspositionTable;
+use crate::transposition::{NodeKind, TranspositionInfo, TranspositionTable};
 use crate::zobrist::HashKind;
 use crate::Position;
-
-impl Color {
-    const fn sign(&self) -> Cp {
-        match self {
-            Color::White => Cp(1),
-            Color::Black => Cp(-1),
-        }
-    }
-}
 
 /// Negamax implementation of Minimax with alpha-beta pruning.
 /// Negamax searches to a given depth and returns the best move found.
@@ -37,7 +27,7 @@ pub fn negamax_with_tt(
     ply: u32,
     tt: &mut TranspositionTable,
 ) -> SearchResult {
-    debug_assert_ne!(ply, 0);
+    assert_ne!(ply, 0);
 
     let active_player = *position.player();
     let hash = tt.generate_hash(&position);
@@ -107,6 +97,20 @@ fn negamax_impl(
         return static_evaluate(&position, num_moves) * position.player.sign();
     }
 
+    // Check if current move exists in tt. If so, we might be able to return that value
+    // right away if has a greater or equal depth than we are considering.
+    // Check that the tt key_move is a legal move, as extra (but not complete)
+    // protection against Key collisions.
+    // TODO: Verify that this is bug free. It is possible this may cut the Pv line,
+    //       or that returning early is incorrect.
+    if let Some(tt_info) = tt.get(hash) {
+        if tt_info.ply >= ply && legal_moves.contains(&tt_info.key_move) {
+            pv_line.clear();
+            let relative_score = tt_info.score * position.player.sign();
+            return relative_score;
+        }
+    }
+
     // Move Ordering
     // Sort legal moves with estimated best move first.
     let ordered_legal_moves = order_all_moves(*position, legal_moves, hash, tt);
@@ -115,44 +119,77 @@ fn negamax_impl(
     let mut local_pv = Line::new();
     let mut best_score = Cp::MIN;
 
+    // Placeholder best_move, is guaranteed to be overwritten as there is at
+    // lest one legal move, and the score of that move is better than worst
+    // possible score.
+    let mut best_move = Move::new(A1, H7, None);
+
     // For each child of current position, recursively find maxing move.
     for legal_move in ordered_legal_moves {
         // Get value of a move relative to active player.
         let move_info = position.do_move(legal_move);
+        let move_hash = tt.update_from_hash(hash, &position, &move_info);
         let move_score = -negamax_impl(
             position,
             tt,
-            hash,
+            move_hash,
             &mut local_pv,
             nodes,
             ply - 1,
             -beta,
             -alpha,
         );
-        best_score = cmp::max(best_score, move_score);
         position.undo_move(move_info);
+
+        // Update best_* trackers if this move is best of all seen so far.
+        if move_score > best_score {
+            best_score = move_score;
+            best_move = legal_move;
+        }
 
         // Cut-off has occurred, no further children of this position need to be searched.
         // This branch will not be taken further up the tree as there is a better move.
+        // Push this cut-node into the tt, with an absolute score, instead of relative.
         if move_score >= beta {
+            let abs_move_score = move_score * position.player.sign();
+            let tt_info =
+                TranspositionInfo::new(hash, NodeKind::Cut, legal_move, ply, abs_move_score);
+            tt.replace(tt_info);
+
             return move_score;
         }
 
         // A new local PV line has been found. Update alpha and store new Line.
+        // Update this node in tt as a PV node.
         if best_score > alpha {
             alpha = best_score;
             pv_line.clear();
             pv_line.push(legal_move);
             pv_line.append(local_pv);
+
+            let abs_move_score = best_score * position.player.sign();
+            let tt_info =
+                TranspositionInfo::new(hash, NodeKind::Pv, legal_move, ply, abs_move_score);
+            tt.replace(tt_info);
         }
     }
+
+    // Every move for this node has been evaluated. It is possible that this node
+    // was added to the tt beforehand, so we can add it on the condition that
+    // It's node-kind is less important than what exists in tt.
+    let abs_move_score = best_score * position.player.sign();
+    let tt_info = TranspositionInfo::new(hash, NodeKind::Other, best_move, ply, abs_move_score);
+    tt.replace_by(tt_info, |replacing, slotted| {
+        replacing.node_kind >= slotted.node_kind
+    });
+
     best_score
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coretypes::{Move, Square::*};
+    use crate::coretypes::{Color, Move};
     use crate::fen::Fen;
 
     #[test]
@@ -170,7 +207,9 @@ mod tests {
 
     #[test]
     fn color_sign() {
-        let cp = Cp(40);
+        let cp = Cp(40); // Absolute score.
+
+        // Relative scores.
         let w_signed = cp * Color::White.sign();
         let b_signed = cp * Color::Black.sign();
         assert_eq!(w_signed, Cp(40));

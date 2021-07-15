@@ -1,20 +1,21 @@
 //! Search functions.
 
 mod alpha_beta;
+mod ids;
 mod minimax;
 mod negamax;
-mod search;
 
-pub use alpha_beta::alpha_beta;
-pub use minimax::minimax;
-pub use negamax::negamax;
-pub use search::search;
+pub use alpha_beta::*;
+pub use ids::*;
+pub use minimax::*;
+pub use negamax::*;
 
 use std::time::Duration;
 
-use crate::coretypes::Move;
+use crate::coretypes::{Color, Move};
 use crate::evaluation::Cp;
 use crate::movelist::Line;
+use crate::Position;
 
 /// General information gathered from searching a position.
 /// members:
@@ -30,4 +31,20 @@ pub struct SearchResult {
     pub pv_line: Line,
     pub nodes: u64,
     pub elapsed: Duration,
+}
+
+/// Blunders Engine primary position search function. WIP.
+pub fn search(position: Position, ply: u32) -> (Cp, Move) {
+    assert_ne!(ply, 0);
+    let result = negamax(position, ply);
+    (result.score, result.best_move)
+}
+
+impl Color {
+    pub(super) const fn sign(&self) -> Cp {
+        match self {
+            Color::White => Cp(1),
+            Color::Black => Cp(-1),
+        }
+    }
 }

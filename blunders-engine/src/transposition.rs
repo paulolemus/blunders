@@ -7,22 +7,23 @@ use crate::evaluation::Cp;
 use crate::zobrist::{HashKind, ZobristTable};
 use crate::Position;
 
-/// The Kind of node used
+/// The type of a node in a search tree.
+/// See [Node Types](https://www.chessprogramming.org/Node_Types).
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum NodeKind {
-    Pv,    // A principal variation node from a previous search. May need depth of search.
-    Cut,   // A Cut node, or a node that was pruned because it caused a beta-cutoff.
     Other, // Any other node.
+    Cut,   // A Cut node, or a node that was pruned because it caused a beta-cutoff.
+    Pv,    // A principal variation node from a previous search.
 }
 
 /// TranspositionInfo contains information about a previously searched position.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct TranspositionInfo {
-    pub(crate) hash: HashKind,      // Full hash value for a position.
-    pub(crate) node_kind: NodeKind, // Type of Node this position has in search tree.
-    pub(crate) key_move: Move,      // Best move or refutation move.
-    pub(crate) ply: u32,            // The depth searched to in this Position's subtree.
-    pub(crate) score: Cp,           // Score in centipawns for hashed position.
+    pub hash: HashKind,      // Full hash value for a position.
+    pub node_kind: NodeKind, // Type of Node this position has in search tree.
+    pub key_move: Move,      // Best move or refutation move.
+    pub ply: u32,            // The depth searched to in this Position's subtree.
+    pub score: Cp,           // Score in centipawns for hashed position.
 }
 
 impl TranspositionInfo {
@@ -162,21 +163,71 @@ impl TranspositionTable {
         hash
     }
 
-    // TODO:
-    // FIGURE OUT REPLACEMENT STRATEGY
-    // One option would be to include a marker saying if node is exact, pv, or cut,
-    // and using that and depth to determine if should replace.
-
     /// Convert a full hash to an index for this TranspositionTable.
     fn hash_to_index(&self, hash: HashKind) -> usize {
         (hash % self.max_capacity as HashKind) as usize
     }
 
     /// Inserts an item into the TranspositionTable without increasing capacity.
-    /// If an item already exists in the hash index, it unconditionally replaces it.
+    /// It unconditionally replaces any item that already exists at the hash index.
     pub fn replace(&mut self, tt_info: TranspositionInfo) {
         let index = self.hash_to_index(tt_info.hash);
         self.transpositions[index] = Some(tt_info);
+        debug_assert_eq!(self.max_capacity, self.transpositions.capacity());
+        debug_assert_eq!(self.max_capacity, self.transpositions.len());
+    }
+
+    // TODO:
+    // FIGURE OUT REPLACEMENT STRATEGY
+    // One option would be to include a marker saying if node is exact, pv, or cut,
+    // and using that and depth to determine if should replace.
+
+    /// Attempt to insert an item into the tt depending on a replacement strategy.
+    /// tt_info is inserted if the hash index is empty.
+    /// Otherwise, it inserts using the provided closure returns true.
+    ///
+    /// Closure signature: should_replace(&replacing_item, &slotted_item) -> bool.
+    ///
+    /// ## Example:
+    /// ```rust
+    /// # use blunders_engine::transposition::TranspositionTable;
+    /// # use blunders_engine::transposition::TranspositionInfo;
+    /// # use blunders_engine::transposition::NodeKind;
+    /// # use blunders_engine::evaluation::Cp;
+    /// # use blunders_engine::coretypes::{Move, Square::*};
+    /// # let mut tt = TranspositionTable::new();
+    /// let hash = 0;
+    /// let tt_info = TranspositionInfo::new(hash, NodeKind::Other, Move::new(D2, D4, None), 3, Cp(1));
+    ///
+    /// let mut tt_info_ignored = tt_info.clone();
+    /// tt_info_ignored.score = Cp(0);
+    /// let mut tt_info_replaced = tt_info.clone();
+    /// tt_info_replaced.score = Cp(10);
+    ///
+    /// // Hash slot starts empty, so tt_info is inserted.
+    /// tt.replace_by(tt_info, |replacing, slotted| replacing.score >= slotted.score);
+    /// assert_eq!(tt.get(hash).unwrap(), tt_info);
+    ///
+    /// // Hash slot is full, and closure does not return true, so item is not replaced.
+    /// tt.replace_by(tt_info_ignored, |replacing, slotted| replacing.score >= slotted.score);
+    /// assert_eq!(tt.get(hash).unwrap(), tt_info);
+    /// assert_ne!(tt.get(hash).unwrap(), tt_info_ignored);
+    ///
+    /// // Hash slot is full, and closure does returns true, so item is replaced.
+    /// tt.replace_by(tt_info_replaced, |replacing, slotted| replacing.score >= slotted.score);
+    /// assert_ne!(tt.get(hash).unwrap(), tt_info);
+    /// assert_eq!(tt.get(hash).unwrap(), tt_info_replaced);
+    ///
+    pub fn replace_by<F>(&mut self, tt_info: TranspositionInfo, should_replace: F)
+    where
+        F: FnOnce(&TranspositionInfo, &TranspositionInfo) -> bool,
+    {
+        let index = self.hash_to_index(tt_info.hash);
+
+        let slot = &mut self.transpositions[index];
+        if slot.is_none() || should_replace(&tt_info, slot.as_ref().unwrap()) {
+            slot.insert(tt_info);
+        }
         debug_assert_eq!(self.max_capacity, self.transpositions.capacity());
         debug_assert_eq!(self.max_capacity, self.transpositions.len());
     }
