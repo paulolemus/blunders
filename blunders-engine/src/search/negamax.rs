@@ -106,6 +106,7 @@ fn negamax_impl(
     if let Some(tt_info) = tt.get(hash) {
         if tt_info.ply >= ply && legal_moves.contains(&tt_info.key_move) {
             pv_line.clear();
+            pv_line.push(tt_info.key_move);
             let relative_score = tt_info.score * position.player.sign();
             return relative_score;
         }

@@ -15,6 +15,7 @@ use std::time::Duration;
 use crate::coretypes::{Color, Move};
 use crate::evaluation::Cp;
 use crate::movelist::Line;
+use crate::transposition::TranspositionTable;
 use crate::Position;
 
 /// General information gathered from searching a position.
@@ -37,6 +38,13 @@ pub struct SearchResult {
 pub fn search(position: Position, ply: u32) -> (Cp, Move) {
     assert_ne!(ply, 0);
     let result = ids(position, ply);
+    (result.score, result.best_move)
+}
+
+/// Blunders Engine primary position search function. WIP.
+pub fn search_with_tt(position: Position, ply: u32, tt: &mut TranspositionTable) -> (Cp, Move) {
+    assert_ne!(ply, 0);
+    let result = ids_with_tt(position, ply, tt);
     (result.score, result.best_move)
 }
 

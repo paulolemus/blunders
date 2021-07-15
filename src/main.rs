@@ -6,7 +6,8 @@ use std::time;
 use blunders_engine;
 use blunders_engine::coretypes::{Move, MoveInfo};
 use blunders_engine::evaluation::static_evaluate;
-use blunders_engine::search::search;
+use blunders_engine::search;
+use blunders_engine::transposition::TranspositionTable;
 use blunders_engine::Position;
 
 enum InputKind {
@@ -38,6 +39,7 @@ impl From<&str> for InputKind {
 fn main() -> io::Result<()> {
     println!("Blunders CLI 0.1.0\n");
 
+    let mut tt = TranspositionTable::new();
     let mut input = String::new();
     let mut position = Position::start_position();
     let mut move_history: Vec<MoveInfo> = Vec::new();
@@ -131,7 +133,7 @@ fn main() -> io::Result<()> {
             // Have computer play its response.
             println!("{}\nthinking...", position);
             let now = time::Instant::now();
-            let (cp, best_move) = search(position, 6);
+            let (cp, best_move) = search::search_with_tt(position, 7, &mut tt);
             let timed = now.elapsed();
             move_history.push(position.do_move(best_move));
 
