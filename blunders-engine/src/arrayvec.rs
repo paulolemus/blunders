@@ -2,6 +2,7 @@
 
 use std::array;
 use std::cmp::Ordering;
+use std::fmt::{self, Display};
 use std::iter::{ExactSizeIterator, FusedIterator};
 
 /// ArrayVec hold all items of a generic type on the stack with a fixed capacity.
@@ -131,24 +132,28 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
             compare(left.as_ref().unwrap(), right.as_ref().unwrap())
         });
     }
+
+    pub fn iter(&self) -> Iter<T, CAPACITY> {
+        Iter::<T, CAPACITY>::new(self)
+    }
 }
 
 impl<T: Copy + Clone, const CAPACITY: usize> IntoIterator for ArrayVec<T, CAPACITY> {
     type Item = T;
-    type IntoIter = ArrayVecIterator<T, CAPACITY>;
+    type IntoIter = IntoIter<T, CAPACITY>;
     fn into_iter(self) -> Self::IntoIter {
-        ArrayVecIterator::<T, CAPACITY>::new(self)
+        IntoIter::<T, CAPACITY>::new(self)
     }
 }
 
 /// Into Iterator type for ArrayVec. This Iterator only iterates the items currently
 /// in the consumed ArrayVec, and ignores all items beyond ArrayVec's size.
-pub struct ArrayVecIterator<T, const CAPACITY: usize> {
+pub struct IntoIter<T, const CAPACITY: usize> {
     it: array::IntoIter<Option<T>, CAPACITY>,
     size: usize,
 }
 
-impl<T: Copy + Clone, const CAPACITY: usize> ArrayVecIterator<T, CAPACITY> {
+impl<T: Copy + Clone, const CAPACITY: usize> IntoIter<T, CAPACITY> {
     pub fn new(array_vec: ArrayVec<T, CAPACITY>) -> Self {
         assert!(array_vec.size < CAPACITY);
         let it = std::array::IntoIter::new(array_vec.items);
@@ -157,7 +162,7 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVecIterator<T, CAPACITY> {
     }
 }
 
-impl<T: Copy + Clone, const CAPACITY: usize> Iterator for ArrayVecIterator<T, CAPACITY> {
+impl<T: Copy + Clone, const CAPACITY: usize> Iterator for IntoIter<T, CAPACITY> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         if self.size > 0 {
@@ -174,8 +179,59 @@ impl<T: Copy + Clone, const CAPACITY: usize> Iterator for ArrayVecIterator<T, CA
     }
 }
 
-impl<T: Copy + Clone, const CAPACITY: usize> ExactSizeIterator for ArrayVecIterator<T, CAPACITY> {}
-impl<T: Copy + Clone, const CAPACITY: usize> FusedIterator for ArrayVecIterator<T, CAPACITY> {}
+impl<T: Copy + Clone, const CAPACITY: usize> ExactSizeIterator for IntoIter<T, CAPACITY> {}
+impl<T: Copy + Clone, const CAPACITY: usize> FusedIterator for IntoIter<T, CAPACITY> {}
+
+/// Immutable Iterator type for ArrayVec.
+pub struct Iter<'a, T, const CAPACITY: usize> {
+    it: std::slice::Iter<'a, Option<T>>,
+}
+
+impl<'a, T: Copy + Clone, const CAPACITY: usize> Iter<'a, T, CAPACITY> {
+    /// Create a new iterator from the slice of valid items in ArrayVec.
+    fn new(arrayvec: &'a ArrayVec<T, CAPACITY>) -> Self {
+        let it = arrayvec.items[0..arrayvec.len()].iter();
+        Self { it }
+    }
+}
+
+impl<'a, T, const CAPACITY: usize> Iterator for Iter<'a, T, CAPACITY> {
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.it.next().map(|opt| opt.as_ref().unwrap())
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.it.size_hint()
+    }
+}
+
+impl<'a, T, const CAPACITY: usize> ExactSizeIterator for Iter<'a, T, CAPACITY> {}
+impl<'a, T, const CAPACITY: usize> FusedIterator for Iter<'a, T, CAPACITY> {}
+
+/// Display for ArrayVec is the Display of each contained item, separated by a space.
+impl<T, const CAPACITY: usize> Display for ArrayVec<T, CAPACITY>
+where
+    T: Copy + Clone + Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut displayed = String::new();
+
+        for item in self.iter() {
+            displayed.push_str(&item.to_string());
+            displayed.push(' ');
+        }
+        displayed.pop();
+
+        f.write_str(&displayed)
+    }
+}
+
+/// Defaults to an empty ArrayVec.
+impl<T: Copy + Clone, const CAPACITY: usize> Default for ArrayVec<T, CAPACITY> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {

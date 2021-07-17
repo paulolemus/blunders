@@ -1,7 +1,6 @@
 //! Main CLI interface to Blunders engine.
 
 use std::io::{self, Write};
-use std::time;
 
 use blunders_engine;
 use blunders_engine::coretypes::{Move, MoveInfo};
@@ -38,11 +37,11 @@ impl From<&str> for InputKind {
 
 fn main() -> io::Result<()> {
     println!("Blunders CLI 0.1.0\n");
-
-    let mut tt = TranspositionTable::new();
+    let mut tt = TranspositionTable::with_capacity(100_000);
     let mut input = String::new();
     let mut position = Position::start_position();
     let mut move_history: Vec<MoveInfo> = Vec::new();
+
     loop {
         // Wait for user input.
         {
@@ -90,7 +89,7 @@ fn main() -> io::Result<()> {
                 continue;
             }
             InputKind::Error => {
-                println!("Invalid command!");
+                println!("Invalid command: {}", input);
                 continue;
             }
             _ => (),
@@ -132,22 +131,19 @@ fn main() -> io::Result<()> {
 
             // Have computer play its response.
             println!("{}\nthinking...", position);
-            let now = time::Instant::now();
-            let (cp, best_move) = search::search_with_tt(position, 7, &mut tt);
-            let timed = now.elapsed();
-            move_history.push(position.do_move(best_move));
+            let result = search::search_with_tt(position, 8, &mut tt);
+            move_history.push(position.do_move(result.best_move));
 
             // Print diagnostic information.
             let num_moves = position.get_legal_moves().len();
             let static_cp = static_evaluate(&position, num_moves);
-            println!("Blunders played move {}. Move info:", best_move);
-            println!("Previous Dynamic cp: {}", cp);
-            println!("Current Static cp  : {}", static_cp);
+            println!("Blunders played move {}.", result.best_move);
+            println!("{}", result);
             println!(
-                "Search time        : {}.{} seconds.",
-                timed.as_secs(),
-                timed.subsec_millis()
+                "nps:             : {}",
+                (result.nodes as f64 / result.elapsed.as_secs_f64()).round()
             );
+            println!("Current Static cp: {}", static_cp);
 
             // Check if engine check or stalemated.
             if position.is_checkmate() {

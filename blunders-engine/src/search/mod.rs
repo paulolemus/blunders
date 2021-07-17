@@ -10,6 +10,7 @@ pub use ids::*;
 pub use minimax::*;
 pub use negamax::*;
 
+use std::fmt::{self, Display};
 use std::time::Duration;
 
 use crate::coretypes::{Color, Move};
@@ -34,18 +35,35 @@ pub struct SearchResult {
     pub elapsed: Duration,
 }
 
-/// Blunders Engine primary position search function. WIP.
-pub fn search(position: Position, ply: u32) -> (Cp, Move) {
-    assert_ne!(ply, 0);
-    let result = ids(position, ply);
-    (result.score, result.best_move)
+impl Display for SearchResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut displayed = String::new();
+        displayed.push_str("SearchResult {\n");
+        displayed.push_str(&format!("    best_move: {}\n", self.best_move));
+        displayed.push_str(&format!("    score    : {}\n", self.score));
+        displayed.push_str(&format!("    pv_line  : {}\n", self.pv_line));
+        displayed.push_str(&format!("    nodes    : {}\n", self.nodes));
+        displayed.push_str(&format!(
+            "    elapsed  : {}.{}s\n",
+            self.elapsed.as_secs(),
+            self.elapsed.subsec_millis()
+        ));
+        displayed.push_str("}\n");
+
+        write!(f, "{}", displayed)
+    }
 }
 
 /// Blunders Engine primary position search function. WIP.
-pub fn search_with_tt(position: Position, ply: u32, tt: &mut TranspositionTable) -> (Cp, Move) {
+pub fn search(position: Position, ply: u32) -> SearchResult {
     assert_ne!(ply, 0);
-    let result = ids_with_tt(position, ply, tt);
-    (result.score, result.best_move)
+    ids(position, ply)
+}
+
+/// Blunders Engine primary position search function. WIP.
+pub fn search_with_tt(position: Position, ply: u32, tt: &mut TranspositionTable) -> SearchResult {
+    assert_ne!(ply, 0);
+    ids_with_tt(position, ply, tt)
 }
 
 impl Color {
