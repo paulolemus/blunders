@@ -285,8 +285,7 @@ impl Position {
     /// Otherwise, no action is taken and returns false.
     /// This is best used as a CLI function, not in the engine.
     pub fn do_legal_move(&mut self, move_: Move) -> (bool, Option<MoveInfo>) {
-        let legal_moves = self.get_legal_moves();
-        if legal_moves.contains(&move_) {
+        if self.is_legal_move(move_) {
             (true, Some(self.do_move(move_)))
         } else {
             (false, None)
@@ -323,8 +322,9 @@ impl Position {
     }
 
     /// Checks if given move is legal for current position.
-    pub fn is_legal_move(&self, _move_: Move) -> bool {
-        todo!()
+    pub fn is_legal_move(&self, move_: Move) -> bool {
+        let legal_moves = self.get_legal_moves();
+        legal_moves.contains(&move_)
     }
 
     /// Returns true if active player's king is in any check.

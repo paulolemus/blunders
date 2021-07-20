@@ -1,171 +1,90 @@
 //! Main CLI interface to Blunders engine.
 
-use std::io::{self, Write};
+use std::io;
+use std::str::FromStr;
 
 use blunders_engine;
-use blunders_engine::coretypes::{Move, MoveInfo};
-use blunders_engine::evaluation::static_evaluate;
 use blunders_engine::search;
 use blunders_engine::transposition::TranspositionTable;
+use blunders_engine::uci::{UciCommand, UciOption, UciOptions, UciResponse};
 use blunders_engine::Position;
 
-enum InputKind {
-    Exit,
-    Newgame,
-    Help,
-    Error,
-    Undo,
-    GameMove(Move),
-}
-
-impl From<&str> for InputKind {
-    fn from(s: &str) -> Self {
-        let maybe_move: Result<Move, _> = s.trim().parse();
-        if let Ok(move_) = maybe_move {
-            Self::GameMove(move_)
-        } else {
-            match s {
-                "exit" => Self::Exit,
-                "newgame" | "ng" => Self::Newgame,
-                "help" => Self::Help,
-                "undo" => Self::Undo,
-                _ => Self::Error,
-            }
-        }
-    }
-}
-
 fn main() -> io::Result<()> {
-    println!("Blunders CLI 0.1.0\n");
+    println!("Blunders 0.1.0 by Paulo L");
+
     let mut tt = TranspositionTable::with_capacity(100_000);
-    let mut input = String::new();
     let mut position = Position::start_position();
-    let mut move_history: Vec<MoveInfo> = Vec::new();
+    let mut uci_options = UciOptions::new();
+
+    // option name Hash type spin default 1 min 1 max 16000
+    // option name Clear Hash type button
+    // option name Ponder type check default false
+    // option name Threads type spin default 1 min 1 max 32
+    let option_hash = UciOption::new_spin("Hash", 1, 1, 16000);
+    let option_clear_hash = UciOption::new_button("Clear Hash", false);
+    let option_ponder = UciOption::new_check("Ponder", false);
+    let option_threads = UciOption::new_spin("Threads", 1, 1, 32);
+
+    uci_options.insert(option_hash);
+    uci_options.insert(option_clear_hash);
+    uci_options.insert(option_ponder);
+    uci_options.insert(option_threads);
 
     loop {
-        // Wait for user input.
-        {
-            // Print evaluation of starting position.
-            let num_moves = position.get_legal_moves().len();
-            let static_cp = static_evaluate(&position, num_moves);
-            println!("Current Static cp  : {}", static_cp);
-        }
-        println!("{}", position);
-        print!("> ");
-        io::stdout().flush().unwrap();
-        input.clear();
+        let mut input = String::new();
         io::stdin().read_line(&mut input)?;
 
-        let input_kind: InputKind = input.trim().into();
+        // Get next valid command.
+        let command = if let Ok(comm) = UciCommand::from_str(&input) {
+            comm
+        } else {
+            println!("info error {} could not be parsed", input);
+            continue;
+        };
 
-        match input_kind {
-            InputKind::Exit => break,
-            InputKind::Newgame => {
-                position = Position::start_position();
-                move_history.clear();
-                println!("Starting new game...");
-                continue;
-            }
-            InputKind::Help => {
-                println!("Commands:");
-                println!("newgame | ng => Begin a new game.");
-                println!("undo => Undo the position to return to your last move.");
-                println!("help => Print this help text.");
-                println!("exit => end CLI.");
-                println!("\nTo make a move, enter a move in algebraic coordinate form.");
-                println!("Examples: d2d4 -> Move piece on D2 to D4.");
-                continue;
-            }
-            InputKind::Undo => {
-                // Undo both computer's move and player's last move.
-                if let Some(our_move_info) = move_history.pop() {
-                    position.undo_move(our_move_info);
-                    println!("Undo move {}.", our_move_info.move_());
+        match command {
+            UciCommand::Uci => {
+                UciResponse::Id.send()?;
+                for uci_opt in uci_options.values() {
+                    UciResponse::new_option(uci_opt.clone()).send()?;
                 }
-                if let Some(their_move_info) = move_history.pop() {
-                    position.undo_move(their_move_info);
-                    println!("Undo move {}.", their_move_info.move_());
+                UciResponse::UciOk.send()?;
+            }
+            UciCommand::IsReady => {
+                UciResponse::ReadyOk.send()?;
+            }
+            UciCommand::UciNewGame => {
+                tt.clear();
+            }
+            UciCommand::Stop => {}
+            UciCommand::PonderHit => {}
+            UciCommand::Quit => break,
+            UciCommand::Debug(_value) => {}
+            UciCommand::SetOption(raw_opt) => match uci_options.update_from_raw(&raw_opt) {
+                Ok(_) => println!("info setoption updated successfully"),
+                Err(s) => {
+                    print!("info setoption error: ");
+                    println!("{}", s);
                 }
-                continue;
+            },
+            UciCommand::Pos(new_position) => {
+                position = new_position;
             }
-            InputKind::Error => {
-                println!("Invalid command: {}", input);
-                continue;
-            }
-            _ => (),
-        }
+            UciCommand::Go(_search_ctrl) => {
+                let result = search::search_with_tt(position.clone(), 7, &mut tt);
+                println!(
+                    "info depth 7 score cp {} time {} nodes {} nps {} pv {}",
+                    result.score,
+                    result.elapsed.as_millis(),
+                    result.nodes,
+                    (result.nodes as f64 / result.elapsed.as_secs_f64()).round(),
+                    result.pv_line,
+                );
 
-        // Process a player move, then process an engine move.
-        if let InputKind::GameMove(move_) = input_kind {
-            let (was_legal, maybe_move_info) = position.do_legal_move(move_);
-
-            if !was_legal {
-                println!("That move was illegal! No action taken.");
-                continue;
-            }
-            move_history.push(maybe_move_info.unwrap());
-
-            // Check if human player check or stalemated.
-            if position.is_checkmate() {
-                println!("{}", position);
-                println!("Congrats!! You won by CHECKMATE. Press Enter to start a new game.");
-                io::stdin().read_line(&mut input)?;
-                position = Position::start_position();
-                move_history.clear();
-                continue;
-            }
-            if position.is_stalemate() {
-                println!("{}", position);
-                println!("The game is DRAWN via STALEMATE. Press Enter to start a new game.");
-                io::stdin().read_line(&mut input)?;
-                position = Position::start_position();
-                move_history.clear();
-                continue;
-            }
-            {
-                // Print evaluation of position after player move.
-                let num_moves = position.get_legal_moves().len();
-                let static_cp = static_evaluate(&position, num_moves);
-                println!("Current Static cp  : {}", static_cp);
-            }
-
-            // Have computer play its response.
-            println!("{}\nthinking...", position);
-            let result = search::search_with_tt(position, 8, &mut tt);
-            move_history.push(position.do_move(result.best_move));
-
-            // Print diagnostic information.
-            let num_moves = position.get_legal_moves().len();
-            let static_cp = static_evaluate(&position, num_moves);
-            println!("Blunders played move {}.", result.best_move);
-            println!("{}", result);
-            println!(
-                "nps:             : {}",
-                (result.nodes as f64 / result.elapsed.as_secs_f64()).round()
-            );
-            println!("Current Static cp: {}", static_cp);
-
-            // Check if engine check or stalemated.
-            if position.is_checkmate() {
-                println!("Oh no!! Blunders engine was won by CHECKMATE. ");
-                println!("{}", position);
-                println!("Press Enter to start a new game.");
-
-                io::stdin().read_line(&mut input)?;
-                position = Position::start_position();
-                move_history.clear();
-                continue;
-            }
-            if position.is_stalemate() {
-                println!("The game is DRAWN via STALEMATE.");
-                println!("{}", position);
-                println!("Press Enter to start a new game.");
-                io::stdin().read_line(&mut input)?;
-                position = Position::start_position();
-                move_history.clear();
-                continue;
+                UciResponse::new_best_move(result.best_move).send()?;
             }
         }
     }
+
     Ok(())
 }
