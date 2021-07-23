@@ -4,11 +4,8 @@ use std::io;
 use std::str::FromStr;
 
 use blunders_engine;
-use blunders_engine::fen::Fen;
-use blunders_engine::search;
-use blunders_engine::transposition::TranspositionTable;
 use blunders_engine::uci::{self, UciCommand, UciOption, UciOptions, UciResponse};
-use blunders_engine::Position;
+use blunders_engine::{search, Fen, Position, TranspositionTable};
 
 fn main() -> io::Result<()> {
     println!("Blunders 0.1.0 by Paulo L");
@@ -163,7 +160,7 @@ fn main() -> io::Result<()> {
                     score,
                     result.elapsed.as_millis(),
                     result.nodes,
-                    (result.nodes as f64 / result.elapsed.as_secs_f64()).round(),
+                    result.nps(),
                     result.pv_line,
                 );
 

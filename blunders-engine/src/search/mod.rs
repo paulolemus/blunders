@@ -35,6 +35,13 @@ pub struct SearchResult {
     pub elapsed: Duration,
 }
 
+impl SearchResult {
+    /// Get average nodes per second of search.
+    pub fn nps(&self) -> f64 {
+        (self.nodes as f64 / self.elapsed.as_secs_f64()).round()
+    }
+}
+
 impl Display for SearchResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut displayed = String::new();

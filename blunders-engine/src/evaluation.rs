@@ -1,4 +1,7 @@
-//! Evaluation functions that return a centipawn.
+//! Static Evaluation Functions.
+//!
+//! All functions return a global centipawn score,
+//! with positive values good for white and negative values good for black.
 
 use std::fmt::{self, Display};
 use std::ops::{Add, AddAssign, Mul, Neg, Sub};
@@ -100,16 +103,31 @@ impl PieceKind {
 // Evaluation Constants
 const CHECKMATE: Cp = Cp(Cp::MAX.0 / 2 - 1);
 const STALEMATE: Cp = Cp(0);
-const MOBILITY_CP: Cp = Cp(5);
+const MOBILITY_CP: Cp = Cp(3);
 
 // Evaluation Functions
 
+/// Given a terminal node (no moves can be made), return a score representing
+/// a checkmate for white/black, or a draw.
+/// TODO: Convert to a relative cp function, because terminal nodes are only negative or 0.
+pub fn terminal(position: &Position) -> Cp {
+    if position.is_checkmate() {
+        match position.player {
+            White => -CHECKMATE,
+            Black => CHECKMATE,
+        }
+    } else {
+        STALEMATE
+    }
+}
+
 /// Primary evaluate function for engine.
-pub fn static_evaluate(position: &Position, num_moves: usize) -> Cp {
+/// Statically evaluate a non-terminal position using a variety of heuristics.
+pub fn static_evaluate(position: &Position, _num_moves: usize) -> Cp {
     let cp_material = material(position);
     let cp_pass_pawns = pass_pawns(position);
     let cp_xray_king = xray_king_attacks(position);
-    let cp_mobility = mobility(position, num_moves);
+    let cp_mobility = mobility(position);
     let cp_king_safety = king_safety(position);
 
     let cp_total = cp_material + cp_pass_pawns + cp_xray_king + cp_mobility + cp_king_safety;
@@ -161,34 +179,14 @@ pub fn king_safety(position: &Position) -> Cp {
 }
 
 /// Return value of number of moves that can be made from a position.
-/// This function handles checkmates and stalemates.
-/// Currently treats stalemates as as losses.
-pub fn mobility(position: &Position, num_moves: usize) -> Cp {
-    let mut cp = Cp(0);
-    if num_moves == 0 {
-        // Checkmate is good for opposite player, stalemate is bad for engine.
-        // Need to figure out a stalemate pattern.
-        cp = if position.is_checkmate() {
-            match position.player {
-                White => -CHECKMATE,
-                Black => CHECKMATE,
-            }
-        } else {
-            match position.player {
-                White => STALEMATE,
-                Black => STALEMATE,
-            }
-        };
-    }
-
+pub fn mobility(position: &Position) -> Cp {
     let w_attacks = position.attacks(&White, &position.pieces().occupied());
     let b_attacks = position.attacks(&Black, &position.pieces().occupied());
 
     let attack_surface_area_diff =
         w_attacks.count_squares() as i32 - b_attacks.count_squares() as i32;
-    cp += Cp(attack_surface_area_diff) * MOBILITY_CP;
 
-    cp
+    Cp(attack_surface_area_diff) * MOBILITY_CP
 }
 
 /// Returns Centipawn difference for passed pawns.

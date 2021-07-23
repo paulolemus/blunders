@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use crate::coretypes::{Move, Square::*};
-use crate::evaluation::{static_evaluate, Cp};
+use crate::evaluation::{static_evaluate, terminal, Cp};
 use crate::movelist::Line;
 use crate::moveorder::order_all_moves;
 use crate::search::SearchResult;
@@ -90,7 +90,10 @@ fn negamax_impl(
     // Return evaluation with respect to current player.
     // `static_evaluate` treats white as maxing player and black and minning player,
     // so value is converted to treat active player as maxing player.
-    if ply == 0 || num_moves == 0 {
+    if num_moves == 0 {
+        pv_line.clear();
+        return terminal(&position) * position.player.sign();
+    } else if ply == 0 {
         // The parent of this node receives an empty pv_line,
         // because a terminal node has no best move.
         pv_line.clear();

@@ -14,7 +14,9 @@ pub mod transposition;
 pub mod uci;
 pub mod zobrist;
 
+pub use fen::Fen;
 pub use position::Position;
+pub use transposition::TranspositionTable;
 
 #[cfg(test)]
 mod tests {
