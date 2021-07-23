@@ -1,6 +1,7 @@
 //! Transposition Table.
 
 use std::hash::{Hash, Hasher};
+use std::mem;
 
 use crate::coretypes::{Move, MoveInfo};
 use crate::evaluation::Cp;
@@ -55,6 +56,9 @@ fn fill_with_default(v: &mut Vec<Option<TranspositionInfo>>) {
     debug_assert_eq!(v.capacity(), capacity);
 }
 
+/// Type alias for inner type of TranspositionTable.
+type TtEntry = Option<TranspositionInfo>;
+
 /// A Transposition Table (tt) with a fixed size, memoizing previously evaluated
 /// chess positions.
 ///
@@ -70,7 +74,7 @@ fn fill_with_default(v: &mut Vec<Option<TranspositionInfo>>) {
 pub struct TranspositionTable {
     max_capacity: usize,
     ztable: ZobristTable,
-    transpositions: Vec<Option<TranspositionInfo>>,
+    transpositions: Vec<TtEntry>,
 }
 
 impl TranspositionTable {
@@ -94,6 +98,24 @@ impl TranspositionTable {
     /// Returns a new TranspositionTable with a randomly generated ZobristTable
     /// with given capacity pre-allocated.
     pub fn with_capacity(max_capacity: usize) -> Self {
+        let ztable = ZobristTable::new();
+        let mut transpositions = Vec::with_capacity(max_capacity);
+        fill_with_default(&mut transpositions);
+
+        Self {
+            max_capacity,
+            ztable,
+            transpositions,
+        }
+    }
+
+    /// Returns a new TranspositionTable with a randomly generated ZobristTable
+    /// with capacity calculated to fill given Megabytes.
+    pub fn with_mb(mb: usize) -> Self {
+        assert!(mb > 0);
+        let max_capacity: usize = (mb * 1_000_000) / mem::size_of::<TtEntry>();
+        assert!(max_capacity > 0, "max capacity is not greater than 0");
+
         let ztable = ZobristTable::new();
         let mut transpositions = Vec::with_capacity(max_capacity);
         fill_with_default(&mut transpositions);
@@ -130,6 +152,12 @@ impl TranspositionTable {
             ztable,
             transpositions,
         }
+    }
+
+    /// Returns the capacity of the TranspositionTable.
+    pub fn capacity(&self) -> usize {
+        assert_eq!(self.max_capacity, self.transpositions.capacity());
+        self.transpositions.capacity()
     }
 
     /// Removes all items from TranspositionTable.

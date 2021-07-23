@@ -47,3 +47,28 @@ fn underpromote_to_knight_fork_queen() {
     assert_eq!(result.score.leading(), Some(White));
     assert_eq!(bm, result.best_move);
 }
+
+#[test]
+#[ignore]
+fn trade_queen_that_cannot_escape() {
+    // While playing as white against engine with tt, found that it engine moved Qxd3 pawn
+    // instead of queen.
+    let pos =
+        Position::parse_fen("r1b1k2r/1ppp1pp1/p1n2n1p/4p3/4P3/R1NPBNP1/2q2PBP/1Q3RK1 b kq - 0 1")
+            .unwrap();
+    let bm = Move::new(C2, B1, None);
+    let depth = 7;
+    let result = search(pos, depth);
+    let expected = || {
+        let mut pos = pos;
+        pos.do_move(bm);
+        search(pos, depth - 1)
+    };
+    assert_eq!(
+        bm,
+        result.best_move,
+        "result: {}, result of bm: {}",
+        result,
+        expected()
+    );
+}

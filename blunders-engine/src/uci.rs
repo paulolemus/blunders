@@ -15,10 +15,12 @@
 //!
 
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::fmt::{self, Display, Write};
 use std::hash::{Hash, Hasher};
 use std::io;
 use std::ops::Deref;
+use std::ops::{Index, IndexMut};
 use std::str::{FromStr, SplitWhitespace};
 
 use crate::coretypes::Move;
@@ -283,10 +285,40 @@ impl Display for UciResponse {
             }
             Self::Info(_info) => {
                 // TODO
-                f.write_str("info todo\n")
+                f.write_str("info string todo\n")
             }
         }
     }
+}
+
+/// Send a debug info string over UCI.
+/// TODO: This is a temporary function until UciInfo and UciResponse are worked out.
+pub fn debug(can_debug: bool, s: &str) -> io::Result<()> {
+    if can_debug {
+        let mut debug_str = String::from("info string debug ");
+        debug_str.push_str(s);
+        debug_str.push('\n');
+
+        let stdout = io::stdout();
+        let mut handle = stdout.lock();
+        <io::StdoutLock as io::Write>::write_all(&mut handle, debug_str.as_ref())?;
+        <io::StdoutLock as io::Write>::flush(&mut handle)
+    } else {
+        Ok(())
+    }
+}
+
+/// Send an error info string over UCI.
+/// TODO: This is a temporary function until UciInfo and UciResponse are worked out.
+pub fn error(s: &str) -> io::Result<()> {
+    let mut error_str = String::from("info string error ");
+    error_str.push_str(s);
+    error_str.push('\n');
+
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
+    <io::StdoutLock as io::Write>::write_all(&mut handle, error_str.as_ref())?;
+    <io::StdoutLock as io::Write>::flush(&mut handle)
 }
 
 #[derive(Debug, Clone)]
@@ -300,57 +332,81 @@ pub struct RawOption {
     value: String,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Check {
+    pub value: bool,
+    pub default: bool,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Spin {
+    pub value: i64,
+    pub default: i64,
+    pub min: i64,
+    pub max: i64,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Combo {
+    pub value: String,
+    pub default: String,
+    pub choices: HashSet<String>,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Button {
+    pub pressed: bool,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct UciOptionString {
+    pub value: String,
+    pub default: String,
+}
+
+impl Spin {
+    /// Spin uses an i64 as its value type because it must cover any sort of numeric input.
+    /// Spin::value<T> allows the value to be converted automatically to the intended type.
+    /// This panics if the type cannot convert.
+    pub fn value<T: TryFrom<i64>>(&self) -> T {
+        match T::try_from(self.value) {
+            Ok(converted) => converted,
+            _ => panic!("spin value TryFrom<i64> conversion failed"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum UciOptionType {
-    Check {
-        value: bool,
-        default: bool,
-    },
-    Spin {
-        value: i64,
-        default: i64,
-        min: i64,
-        max: i64,
-    },
-    Combo {
-        value: String,
-        default: String,
-        choices: HashSet<String>,
-    },
-    Button {
-        pressed: bool,
-    },
-    String {
-        value: String,
-        default: String,
-    },
+    Check(Check),
+    Spin(Spin),
+    Combo(Combo),
+    Button(Button),
+    String(UciOptionString),
 }
 
 impl Display for UciOptionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use UciOptionType::*;
         match self {
-            Check { default, .. } => {
+            UciOptionType::Check(Check { default, .. }) => {
                 write!(f, "type check default {}", default)
             }
-            Spin {
+            UciOptionType::Spin(Spin {
                 default, min, max, ..
-            } => {
+            }) => {
                 write!(f, "type spin default {} min {} max {}", default, min, max)
             }
-            Combo {
-                default,
-                ref choices,
-                ..
-            } => {
+            UciOptionType::Combo(Combo {
+                default, choices, ..
+            }) => {
                 write!(f, "type combo default {}", default)?;
                 for choice in choices {
                     write!(f, " var {}", choice)?;
                 }
                 Ok(())
             }
-            Button { .. } => f.write_str("type button"),
-            String { default, .. } => {
+            UciOptionType::Button(_) => f.write_str("type button"),
+            UciOptionType::String(UciOptionString { default, .. }) => {
                 write!(f, "type string default {}", default)
             }
         }
@@ -373,10 +429,10 @@ impl UciOption {
     pub fn new_check(name: &str, default: bool) -> Self {
         Self {
             name: name.into(),
-            option_type: UciOptionType::Check {
+            option_type: UciOptionType::Check(Check {
                 value: default,
                 default,
-            },
+            }),
         }
     }
 
@@ -388,12 +444,12 @@ impl UciOption {
 
         Self {
             name: name.into(),
-            option_type: UciOptionType::Spin {
+            option_type: UciOptionType::Spin(Spin {
                 value: default,
                 default,
                 min,
                 max,
-            },
+            }),
         }
     }
 
@@ -414,11 +470,11 @@ impl UciOption {
 
         Self {
             name: name.into(),
-            option_type: UciOptionType::Combo {
+            option_type: UciOptionType::Combo(Combo {
                 value: default.clone(),
                 default,
                 choices,
-            },
+            }),
         }
     }
 
@@ -426,7 +482,7 @@ impl UciOption {
     pub fn new_button(name: &str, pressed: bool) -> Self {
         Self {
             name: name.into(),
-            option_type: UciOptionType::Button { pressed },
+            option_type: UciOptionType::Button(Button { pressed }),
         }
     }
 
@@ -434,31 +490,113 @@ impl UciOption {
     pub fn new_string(name: &str, default: &str) -> Self {
         Self {
             name: name.into(),
-            option_type: UciOptionType::String {
+            option_type: UciOptionType::String(UciOptionString {
                 value: default.trim().to_string(),
                 default: default.trim().to_string(),
-            },
+            }),
+        }
+    }
+
+    /// Assume that a UciOption is of type Check, and return reference to inner Check struct.
+    /// Panics if UciOption is not Check.
+    pub fn check(&self) -> &Check {
+        match self.option_type {
+            UciOptionType::Check(ref check) => check,
+            _ => panic!("option type is not check"),
+        }
+    }
+    /// Assume that a UciOption is of type Spin, and return reference to inner Spin struct.
+    /// Panics if UciOption is not Spin.
+    pub fn spin(&self) -> &Spin {
+        match self.option_type {
+            UciOptionType::Spin(ref spin) => spin,
+            _ => panic!("option type is not spin"),
+        }
+    }
+    /// Assume that a UciOption is of type Combo, and return reference to inner Combo struct.
+    /// Panics if UciOption is not Combo.
+    pub fn combo(&self) -> &Combo {
+        match self.option_type {
+            UciOptionType::Combo(ref combo) => combo,
+            _ => panic!("option type is not combo"),
+        }
+    }
+    /// Assume that a UciOption is of type Button, and return reference to inner Button struct.
+    /// Panics if UciOption is not Button.
+    pub fn button(&self) -> &Button {
+        match self.option_type {
+            UciOptionType::Button(ref button) => button,
+            _ => panic!("option type is not button"),
+        }
+    }
+    /// Assume that a UciOption is of type String, and return reference to inner String struct.
+    /// Panics if UciOption is not String.
+    pub fn string(&self) -> &UciOptionString {
+        match self.option_type {
+            UciOptionType::String(ref s) => s,
+            _ => panic!("option type is not String"),
+        }
+    }
+
+    /// Assume that a UciOption is of type Check, and return reference to inner Check struct.
+    /// Panics if UciOption is not Check.
+    pub fn check_mut(&mut self) -> &mut Check {
+        match self.option_type {
+            UciOptionType::Check(ref mut check) => check,
+            _ => panic!("option type is not check"),
+        }
+    }
+    /// Assume that a UciOption is of type Spin, and return reference to inner Spin struct.
+    /// Panics if UciOption is not Spin.
+    pub fn spin_mut(&mut self) -> &mut Spin {
+        match self.option_type {
+            UciOptionType::Spin(ref mut spin) => spin,
+            _ => panic!("option type is not spin"),
+        }
+    }
+    /// Assume that a UciOption is of type Combo, and return reference to inner Combo struct.
+    /// Panics if UciOption is not Combo.
+    pub fn combo_mut(&mut self) -> &mut Combo {
+        match self.option_type {
+            UciOptionType::Combo(ref mut combo) => combo,
+            _ => panic!("option type is not combo"),
+        }
+    }
+    /// Assume that a UciOption is of type Button, and return reference to inner Button struct.
+    /// Panics if UciOption is not Button.
+    pub fn button_mut(&mut self) -> &mut Button {
+        match self.option_type {
+            UciOptionType::Button(ref mut button) => button,
+            _ => panic!("option type is not button"),
+        }
+    }
+    /// Assume that a UciOption is of type String, and return reference to inner String struct.
+    /// Panics if UciOption is not String.
+    pub fn string_mut(&mut self) -> &mut UciOptionString {
+        match self.option_type {
+            UciOptionType::String(ref mut s) => s,
+            _ => panic!("option type is not String"),
         }
     }
 
     /// Given a RawOption, try to extract a typed value from it's stringly-typed value.
     /// The type of the parsed value must match the value of this UciOptionType value.
-    /// This returns Ok(()) on success.
-    pub fn try_update(&mut self, raw_opt: &RawOption) -> Result<(), &'static str> {
+    /// This returns a mutable reference to self on successful update.
+    pub fn try_update(&mut self, raw_opt: &RawOption) -> Result<&mut Self, &'static str> {
         (self.name == raw_opt.name)
             .then(|| ())
             .ok_or("names do not match")?;
 
         match self.option_type {
-            UciOptionType::Check { ref mut value, .. } => {
+            UciOptionType::Check(Check { ref mut value, .. }) => {
                 *value = bool::from_str(&raw_opt.value).map_err(|_| "raw value not a bool")?;
             }
-            UciOptionType::Spin {
+            UciOptionType::Spin(Spin {
                 ref mut value,
                 min,
                 max,
                 ..
-            } => {
+            }) => {
                 let new_value =
                     i64::from_str_radix(&raw_opt.value, 10).map_err(|_| "raw value not an int")?;
                 (min..=max)
@@ -467,22 +605,24 @@ impl UciOption {
                     .ok_or("value out of range")?;
                 *value = new_value;
             }
-            UciOptionType::Combo {
+            UciOptionType::Combo(Combo {
                 ref mut value,
                 ref choices,
                 ..
-            } => {
+            }) => {
                 choices
                     .contains(&raw_opt.value)
                     .then(|| ())
                     .ok_or("value not a valid choice")?;
                 *value = raw_opt.value.clone();
             }
-            UciOptionType::Button { ref mut pressed } => *pressed = true,
-            UciOptionType::String { ref mut value, .. } => *value = raw_opt.value.clone(),
+            UciOptionType::Button(Button { ref mut pressed }) => *pressed = true,
+            UciOptionType::String(UciOptionString { ref mut value, .. }) => {
+                *value = raw_opt.value.clone()
+            }
         };
 
-        Ok(())
+        Ok(self)
     }
 }
 
@@ -508,6 +648,12 @@ impl Eq for CaselessString {}
 impl Hash for CaselessString {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.to_lowercase().hash(state);
+    }
+}
+
+impl PartialEq<&str> for CaselessString {
+    fn eq(&self, other: &&str) -> bool {
+        *self == Self::from(*other)
     }
 }
 
@@ -556,11 +702,27 @@ impl UciOptions {
 
     /// Attempts to update a stored UciOption with the value in a RawOption.
     /// This will not create a new UciOption entry.
-    pub fn update_from_raw(&mut self, raw_opt: &RawOption) -> Result<(), &'static str> {
+    /// This returns a mutable reference to the updated value in the table on successful update.
+    pub fn update(&mut self, raw_opt: &RawOption) -> Result<&mut UciOption, &'static str> {
         self.0
             .get_mut(&raw_opt.name)
             .ok_or("RawOption name not a valid UciOption")?
             .try_update(&raw_opt)
+    }
+}
+
+impl<K: Into<CaselessString>> Index<K> for UciOptions {
+    type Output = UciOption;
+    fn index(&self, key: K) -> &Self::Output {
+        let key: CaselessString = key.into();
+        &self.0[&key]
+    }
+}
+
+impl<K: Into<CaselessString>> IndexMut<K> for UciOptions {
+    fn index_mut(&mut self, key: K) -> &mut Self::Output {
+        let key: CaselessString = key.into();
+        self.0.get_mut(&key).expect("key not present")
     }
 }
 
@@ -773,7 +935,7 @@ mod tests {
             name: "hash".into(),
             value: "14".into(),
         };
-        assert_eq!(Ok(()), uci_options.update_from_raw(&raw_hash));
+        assert!(matches!(uci_options.update(&raw_hash), Ok(_)));
 
         assert_eq!(
             option_clear_hash,

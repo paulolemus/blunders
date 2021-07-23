@@ -67,7 +67,7 @@ pub fn search_with_tt(position: Position, ply: u32, tt: &mut TranspositionTable)
 }
 
 impl Color {
-    pub(super) const fn sign(&self) -> Cp {
+    pub const fn sign(&self) -> Cp {
         match self {
             Color::White => Cp(1),
             Color::Black => Cp(-1),
