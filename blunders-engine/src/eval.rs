@@ -1,20 +1,22 @@
 //! Static Evaluation Functions.
 //!
-//! All functions return a global centipawn score,
-//! with positive values good for white and negative values good for black.
+//! An evaluation function may have two types of calls: relative or absolute.
+//!
+//! An absolute score treats White as a maxing player and Black as a minning player,
+//! so a centipawn score of +10 is winning for White, while -10 is winning for Black.
+//! A relative score treats the player to move as the maxing player, so if it is
+//! Black to move, +10 is winning for Black.
 
 use std::fmt::{self, Display};
 use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 
 use crate::bitboard::{self, Bitboard};
-use crate::coretypes::{Color, PieceKind, Rank, NUM_RANKS, NUM_SQUARES};
+use crate::coretypes::{Color, PieceKind, NUM_RANKS, NUM_SQUARES};
 use crate::coretypes::{Color::*, PieceKind::*};
 use crate::movegen as mg;
 use crate::position::Position;
 
 /// Centipawn, a common unit of measurement in chess, where 100 Centipawn == 1 Pawn.
-/// A positive centipawn value represent an advantage for White,
-/// and a negative value represents an advantage for Black.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct Cp(pub CpKind);
 
@@ -25,10 +27,6 @@ type CpKind = i32;
 impl Cp {
     pub const MIN: Cp = Self(CpKind::MIN + 1); // + 1 to avoid overflow error on negate.
     pub const MAX: Cp = Self(CpKind::MAX);
-
-    pub const fn new(value: CpKind) -> Self {
-        Self(value)
-    }
 
     /// Returns the sign of Centipawn value, either 1, -1, or 0.
     pub const fn signum(&self) -> CpKind {
@@ -87,15 +85,15 @@ impl Display for Cp {
 }
 
 impl PieceKind {
-    /// Default, color independent value per piece.
+    /// Default, independent value per piece.
     pub const fn centipawns(&self) -> Cp {
         Cp(match self {
-            Pawn => 100,
-            Knight => 300,
-            Bishop => 300,
-            Rook => 500,
+            Pawn => 100,   // 100 Centipawn == 1 Pawn
+            Knight => 305, // slightly prefer knight over 3 default pawns
+            Bishop => 310, // slightly prefer bishop over 3 default pawns
+            Rook => 510,
             Queen => 950,
-            King => 700_000,
+            King => 400_000,
         })
     }
 }
@@ -103,14 +101,32 @@ impl PieceKind {
 // Evaluation Constants
 const CHECKMATE: Cp = Cp(Cp::MAX.0 / 2 - 1);
 const STALEMATE: Cp = Cp(0);
-const MOBILITY_CP: Cp = Cp(3);
+const MOBILITY_CP: Cp = Cp(2);
 
-// Evaluation Functions
+// Relative Evaluation Functions
+
+/// Given a terminal node, return a score representing a checkmate or a draw.
+/// The return score is relative to the player to move.
+pub fn terminal(position: &Position) -> Cp {
+    // Checkmate position is strictly bad for player to move.
+    if position.is_checkmate() {
+        -CHECKMATE
+    } else {
+        STALEMATE
+    }
+}
+
+/// Primary hand-crafted evaluate function for engine, with return relative to player to move.
+/// Statically evaluates a non-terminal position.
+pub fn evaluate(position: &Position) -> Cp {
+    evaluate_abs(position) * position.player.sign()
+}
+
+// Absolute Evaluation Functions
 
 /// Given a terminal node (no moves can be made), return a score representing
 /// a checkmate for white/black, or a draw.
-/// TODO: Convert to a relative cp function, because terminal nodes are only negative or 0.
-pub fn terminal(position: &Position) -> Cp {
+pub fn terminal_abs(position: &Position) -> Cp {
     if position.is_checkmate() {
         match position.player {
             White => -CHECKMATE,
@@ -123,7 +139,7 @@ pub fn terminal(position: &Position) -> Cp {
 
 /// Primary evaluate function for engine.
 /// Statically evaluate a non-terminal position using a variety of heuristics.
-pub fn static_evaluate(position: &Position) -> Cp {
+pub fn evaluate_abs(position: &Position) -> Cp {
     let cp_material = material(position);
     let cp_pass_pawns = pass_pawns(position);
     let cp_xray_king = xray_king_attacks(position);
@@ -194,26 +210,22 @@ pub fn pass_pawns(position: &Position) -> Cp {
     // Base value of a passed pawn.
     const SCALAR: Cp = Cp(20);
     // Bonus value of passed pawn per rank. Pass pawns are very valuable on rank 7.
-    const RANK_CP: [Cp; NUM_RANKS - 1] = [Cp(0), Cp(0), Cp(0), Cp(5), Cp(10), Cp(100), Cp(500)];
-    let w_passed: Bitboard = w_pass_pawns(&position);
-    let b_passed: Bitboard = b_pass_pawns(&position);
+    const RANK_CP: [CpKind; NUM_RANKS] = [0, 0, 1, 2, 10, 50, 250, 900];
+    let w_passed: Bitboard = pass_pawns_bb(position, White);
+    let b_passed: Bitboard = pass_pawns_bb(position, Black);
     let w_num_passed = w_passed.count_squares() as i32;
     let b_num_passed = b_passed.count_squares() as i32;
 
-    let w_rank_bonus = {
-        let mut bonus = Cp(0);
-        for rank in [Rank::R4, Rank::R5, Rank::R6, Rank::R7] {
-            bonus += RANK_CP[rank as usize] * (w_passed & Bitboard::from(rank)).count_squares();
-        }
-        bonus
-    };
-    let b_rank_bonus = {
-        let mut bonus = Cp(0);
-        for rank in [Rank::R4, Rank::R5, Rank::R6, Rank::R7] {
-            bonus += RANK_CP[rank as usize] * (b_passed & Bitboard::from(rank)).count_squares();
-        }
-        bonus
-    };
+    // Sum the bonus rank value of each pass pawn.
+    let w_rank_bonus = w_passed
+        .into_iter()
+        .map(|sq| sq.rank())
+        .fold(Cp(0), |acc, rank| acc + Cp(RANK_CP[rank as usize]));
+    let b_rank_bonus = b_passed
+        .into_iter()
+        .map(|sq| sq.rank().flip())
+        .fold(Cp(0), |acc, rank| acc + Cp(RANK_CP[rank as usize]));
+
     Cp(w_num_passed - b_num_passed) * SCALAR + w_rank_bonus - b_rank_bonus
 }
 
@@ -242,59 +254,35 @@ pub fn xray_king_attacks(position: &Position) -> Cp {
     Cp(w_xray_attackers - b_xray_attackers) * SCALAR
 }
 
+/// A pass pawn is one with no opponent pawns in front of it on same or adjacent files.
+/// This returns a bitboard with all pass pawns of given player.
 #[inline]
-fn w_pass_pawns(position: &Position) -> Bitboard {
-    let b_pawns = position.pieces[(Black, Pawn)];
-    let mut w_passed = Bitboard::EMPTY;
+fn pass_pawns_bb(position: &Position, player: Color) -> Bitboard {
+    use Bitboard as Bb;
 
-    for w_pawn in position.pieces[(White, Pawn)] {
-        let pawn_file = w_pawn.file();
-        let mut passed_mask = Bitboard::from(pawn_file)
-            | pawn_file
-                .before()
-                .map_or(Bitboard::EMPTY, |file| Bitboard::from(file))
-            | pawn_file
-                .after()
-                .map_or(Bitboard::EMPTY, |file| Bitboard::from(file));
+    let opponent_pawns = position.pieces[(!player, Pawn)];
 
-        // Remove all squares next to and below pawn square to get mask.
-        let next_square = w_pawn.into_iter().next().unwrap();
-        passed_mask.clear_square_and_below(next_square);
+    let spans = opponent_pawns
+        .into_iter()
+        .map(|sq| {
+            let file = sq.file();
+            let mut span = Bb::from(file);
+            // Working with opponent pieces, so if finding w_pass, need to clear above sq.
+            match player {
+                Color::White => span.clear_square_and_above(sq),
+                Color::Black => span.clear_square_and_below(sq),
+            };
 
-        if (passed_mask & b_pawns) == Bitboard::EMPTY {
-            w_passed.set_square(w_pawn);
-        }
-    }
+            span | span.to_east() | span.to_west()
+        })
+        .fold(Bitboard::EMPTY, |acc, bb| acc | bb);
 
-    w_passed
+    // Any pawn not in spans is a pass pawn.
+    position.pieces[(player, Pawn)] & !spans
 }
 
-#[inline]
-fn b_pass_pawns(position: &Position) -> Bitboard {
-    let w_pawns = position.pieces[(White, Pawn)];
-    let mut b_passed = Bitboard::EMPTY;
-
-    for b_pawn in position.pieces[(Black, Pawn)] {
-        let pawn_file = b_pawn.file();
-        let mut passed_mask = Bitboard::from(pawn_file)
-            | pawn_file
-                .before()
-                .map_or(Bitboard::EMPTY, |file| Bitboard::from(file))
-            | pawn_file
-                .after()
-                .map_or(Bitboard::EMPTY, |file| Bitboard::from(file));
-
-        // Remove all squares next to and above pawn square to get mask.
-        passed_mask &= !Bitboard::from(b_pawn.rank());
-        passed_mask.clear_square_and_above(b_pawn);
-
-        if (passed_mask & w_pawns) == Bitboard::EMPTY {
-            b_passed.set_square(b_pawn);
-        }
-    }
-
-    b_passed
-}
+// Piece Square Tables
+// TODO!
 
 // Const Data Generation
 

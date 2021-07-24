@@ -15,7 +15,7 @@
 //! Quiescence search searches a small sub-tree of the leaf node to evaluate
 //! quiet position, so the evaluation of the original leaf node is more stable.
 
-use crate::eval::{static_evaluate, Cp};
+use crate::eval::{evaluate, Cp};
 use crate::Position;
 
 /// notes:
@@ -34,5 +34,5 @@ use crate::Position;
 /// Negamax:
 ///     if node is leaf and non-terminal, return quiescence(position, alpha, beta)
 pub fn quiescence(position: &Position, _alpha: Cp, _beta: Cp) -> Cp {
-    return static_evaluate(position) * position.player.sign();
+    return evaluate(position);
 }

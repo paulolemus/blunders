@@ -4,7 +4,7 @@ use std::io::{self, Write};
 
 use blunders_engine;
 use blunders_engine::coretypes::{Move, MoveInfo};
-use blunders_engine::eval::static_evaluate;
+use blunders_engine::eval::evaluate_abs;
 use blunders_engine::search;
 use blunders_engine::transposition::TranspositionTable;
 use blunders_engine::Position;
@@ -46,7 +46,7 @@ fn main() -> io::Result<()> {
         // Wait for user input.
         {
             // Print evaluation of starting position.
-            let static_cp = static_evaluate(&position);
+            let static_cp = evaluate_abs(&position);
             println!("Current Static cp  : {}", static_cp);
         }
         println!("{}", position);
@@ -123,7 +123,7 @@ fn main() -> io::Result<()> {
             }
             {
                 // Print evaluation of position after player move.
-                let static_cp = static_evaluate(&position);
+                let static_cp = evaluate_abs(&position);
                 println!("Current Static cp  : {}", static_cp);
             }
 
@@ -154,7 +154,7 @@ fn main() -> io::Result<()> {
             }
 
             // Print diagnostic information.
-            let static_cp = static_evaluate(&position);
+            let static_cp = evaluate_abs(&position);
             println!("Blunders played move {}.", result.best_move);
             println!("{}", result);
             println!("Current Static cp: {}", static_cp);

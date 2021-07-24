@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use crate::coretypes::Color::*;
 use crate::coretypes::{Move, Square};
-use crate::eval::{static_evaluate, terminal, Cp};
+use crate::eval::{evaluate_abs, terminal_abs, Cp};
 use crate::movelist::Line;
 use crate::search::SearchResult;
 use crate::Position;
@@ -91,9 +91,9 @@ fn minimax_impl<const COLOR: u8>(position: &mut Position, ply: u32, nodes: &mut 
 
     // Stop at terminal node: Checkmate/Stalemate/last depth.
     if num_moves == 0 {
-        return terminal(position);
+        return terminal_abs(position);
     } else if ply == 0 {
-        return static_evaluate(position);
+        return evaluate_abs(position);
     }
 
     let mut best_cp;

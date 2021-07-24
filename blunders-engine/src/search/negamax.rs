@@ -96,7 +96,7 @@ fn negamax_impl(
     // Terminal and leaf nodes have no following moves so pv_line of parent is cleared.
     if num_moves == 0 {
         pv_line.clear();
-        return terminal(&position) * position.player.sign();
+        return terminal(&position);
     }
     // Check if current move exists in tt. If so, we might be able to return that value
     // right away if has a greater or equal depth than we are considering.
