@@ -1,19 +1,38 @@
 //! Minimax wth Alpha-Beta pruning implementation.
 
 use std::cmp;
+use std::time::Instant;
 
 use crate::coretypes::Color::*;
 use crate::coretypes::{Move, Square};
-use crate::evaluation::{static_evaluate, Cp};
+use crate::eval::{static_evaluate, terminal, Cp};
+use crate::movelist::Line;
+use crate::search::SearchResult;
 use crate::Position;
 
 /// Base alpha_beta call. This function assumes that the current player in the passed position
 /// is the engine.
 /// It returns the best move and score for the position in the search tree.
-pub fn alpha_beta(position: Position, ply: u32) -> (Cp, Move) {
+pub fn alpha_beta(position: Position, ply: u32) -> SearchResult {
     debug_assert_ne!(ply, 0);
-    alpha_beta_root(position, ply, Cp::MIN, Cp::MAX)
+
+    let instant = Instant::now();
+    let mut nodes = 0;
+    let (score, best_move) = alpha_beta_root(position, ply, &mut nodes, Cp::MIN, Cp::MAX);
+    let mut pv_line = Line::new();
+    pv_line.push(best_move);
+
+    SearchResult {
+        best_move,
+        score,
+        pv_line,
+        nodes,
+        elapsed: instant.elapsed(),
+    }
 }
+
+const WHITE: u8 = White as u8;
+const BLACK: u8 = Black as u8;
 
 /// Properties of Alpha-Beta pruning.
 /// * The maxing player can only update alpha from its children.
@@ -32,9 +51,11 @@ pub fn alpha_beta(position: Position, ply: u32) -> (Cp, Move) {
 pub(crate) fn alpha_beta_root(
     mut position: Position,
     ply: u32,
+    nodes: &mut u64,
     mut alpha: Cp,
     mut beta: Cp,
 ) -> (Cp, Move) {
+    *nodes += 1;
     let legal_moves = position.get_legal_moves();
     debug_assert_ne!(ply, 0);
     debug_assert!(legal_moves.len() > 0);
@@ -44,7 +65,7 @@ pub(crate) fn alpha_beta_root(
     if position.player == White {
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
-            let move_cp = alpha_beta_impl::<{ Black as u8 }>(&mut position, ply - 1, alpha, beta);
+            let move_cp = alpha_beta_impl::<BLACK>(&mut position, ply - 1, nodes, alpha, beta);
             position.undo_move(move_info);
 
             if move_cp > alpha {
@@ -56,7 +77,7 @@ pub(crate) fn alpha_beta_root(
     } else {
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
-            let move_cp = alpha_beta_impl::<{ White as u8 }>(&mut position, ply - 1, alpha, beta);
+            let move_cp = alpha_beta_impl::<WHITE>(&mut position, ply - 1, nodes, alpha, beta);
             position.undo_move(move_info);
 
             if move_cp < beta {
@@ -68,13 +89,22 @@ pub(crate) fn alpha_beta_root(
     }
 }
 
-fn alpha_beta_impl<const COLOR: u8>(position: &mut Position, ply: u32, alpha: Cp, beta: Cp) -> Cp {
+fn alpha_beta_impl<const COLOR: u8>(
+    position: &mut Position,
+    ply: u32,
+    nodes: &mut u64,
+    alpha: Cp,
+    beta: Cp,
+) -> Cp {
+    *nodes += 1;
     let legal_moves = position.get_legal_moves();
     let num_moves = legal_moves.len();
 
     // Stop at terminal node: Checkmate/Stalemate/last depth.
-    if ply == 0 || num_moves == 0 {
-        return static_evaluate(&position, num_moves);
+    if num_moves == 0 {
+        return terminal(position);
+    } else if ply == 0 {
+        return static_evaluate(position);
     }
 
     if COLOR == White as u8 {
@@ -83,7 +113,7 @@ fn alpha_beta_impl<const COLOR: u8>(position: &mut Position, ply: u32, alpha: Cp
 
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
-            let move_cp = alpha_beta_impl::<{ Black as u8 }>(position, ply - 1, alpha, beta);
+            let move_cp = alpha_beta_impl::<BLACK>(position, ply - 1, nodes, alpha, beta);
             position.undo_move(move_info);
 
             best_cp = cmp::max(best_cp, move_cp);
@@ -100,7 +130,7 @@ fn alpha_beta_impl<const COLOR: u8>(position: &mut Position, ply: u32, alpha: Cp
 
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
-            let move_cp = alpha_beta_impl::<{ White as u8 }>(position, ply - 1, alpha, beta);
+            let move_cp = alpha_beta_impl::<WHITE>(position, ply - 1, nodes, alpha, beta);
             position.undo_move(move_info);
 
             best_cp = cmp::min(best_cp, move_cp);

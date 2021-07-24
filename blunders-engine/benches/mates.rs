@@ -18,10 +18,9 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
     c.bench_function("mates_3_sac_knight_alpha_beta", |b| {
         b.iter(|| {
             let result = search::alpha_beta(black_box(pos), black_box(ply));
-            let (best_cp, best_move) = result;
 
-            assert_eq!(best_cp.leading(), lead);
-            assert_eq!(best_move, bm);
+            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.best_move, bm);
         })
     });
 
@@ -56,10 +55,9 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
     c.bench_function("mates_3_knights_and_bishop_alpha_beta", |b| {
         b.iter(|| {
             let result = search::alpha_beta(black_box(pos), black_box(ply));
-            let (best_cp, best_move) = result;
 
-            assert_eq!(best_cp.leading(), lead);
-            assert_eq!(best_move, bm);
+            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.best_move, bm);
         })
     });
 

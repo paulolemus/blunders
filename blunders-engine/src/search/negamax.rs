@@ -3,10 +3,10 @@
 use std::time::Instant;
 
 use crate::coretypes::{Move, Square::*};
-use crate::evaluation::{static_evaluate, terminal, Cp};
+use crate::eval::{terminal, Cp};
 use crate::movelist::Line;
 use crate::moveorder::order_all_moves;
-use crate::search::SearchResult;
+use crate::search::{quiescence, SearchResult};
 use crate::transposition::{NodeKind, TranspositionInfo, TranspositionTable};
 use crate::zobrist::HashKind;
 use crate::Position;
@@ -86,33 +86,39 @@ fn negamax_impl(
     let legal_moves = position.get_legal_moves();
     let num_moves = legal_moves.len();
 
-    // Stop search at terminal nodes, Checkmates/Stalemates/last depth.
-    // Return evaluation with respect to current player.
-    // `static_evaluate` treats white as maxing player and black and minning player,
-    // so value is converted to treat active player as maxing player.
+    // Search can return when any of the following are encountered:
+    // * Checkmate / Stalemate (terminal node)
+    // * Tt move evaluated at equal or greater depth than searching depth
+    // * depth 0 reached (leaf node)
+    //
+    // An eval is returned with respect to the current player.
+    // (+Cp good, -Cp bad)
+    // Terminal and leaf nodes have no following moves so pv_line of parent is cleared.
     if num_moves == 0 {
         pv_line.clear();
         return terminal(&position) * position.player.sign();
-    } else if ply == 0 {
-        // The parent of this node receives an empty pv_line,
-        // because a terminal node has no best move.
-        pv_line.clear();
-        return static_evaluate(&position, num_moves) * position.player.sign();
     }
-
     // Check if current move exists in tt. If so, we might be able to return that value
     // right away if has a greater or equal depth than we are considering.
     // Check that the tt key_move is a legal move, as extra (but not complete)
     // protection against Key collisions.
     // TODO: Verify that this is bug free. It is possible this may cut the Pv line,
     //       or that returning early is incorrect.
-    if let Some(tt_info) = tt.get(hash) {
+    else if let Some(tt_info) = tt.get(hash) {
         if tt_info.ply >= ply && legal_moves.contains(&tt_info.key_move) {
             pv_line.clear();
             pv_line.push(tt_info.key_move);
             let relative_score = tt_info.score * position.player.sign();
             return relative_score;
         }
+
+    // Run a Quiescence Search for non-terminal leaf nodes to find a more stable
+    // evaluation than a static evaluation.
+    // The parent of this node receives an empty pv_line,
+    // because this leaf node has no best move, and is not in history.
+    } else if ply == 0 {
+        pv_line.clear();
+        return quiescence(position, alpha, beta);
     }
 
     // Move Ordering
@@ -120,13 +126,12 @@ fn negamax_impl(
     let ordered_legal_moves = order_all_moves(*position, legal_moves, hash, tt);
     debug_assert_eq!(num_moves, ordered_legal_moves.len());
 
-    let mut local_pv = Line::new();
-    let mut best_score = Cp::MIN;
-
     // Placeholder best_move, is guaranteed to be overwritten as there is at
     // lest one legal move, and the score of that move is better than worst
     // possible score.
     let mut best_move = Move::new(A1, H7, None);
+    let mut local_pv = Line::new();
+    let mut best_score = Cp::MIN;
 
     // For each child of current position, recursively find maxing move.
     for legal_move in ordered_legal_moves {

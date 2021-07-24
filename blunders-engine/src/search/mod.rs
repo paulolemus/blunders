@@ -4,17 +4,19 @@ mod alpha_beta;
 mod ids;
 mod minimax;
 mod negamax;
+mod quiescence;
 
 pub use alpha_beta::*;
 pub use ids::*;
 pub use minimax::*;
 pub use negamax::*;
+pub use quiescence::*;
 
 use std::fmt::{self, Display};
 use std::time::Duration;
 
 use crate::coretypes::{Color, Move};
-use crate::evaluation::Cp;
+use crate::eval::Cp;
 use crate::movelist::Line;
 use crate::transposition::TranspositionTable;
 use crate::Position;

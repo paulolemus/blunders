@@ -94,8 +94,8 @@ impl PieceKind {
             Knight => 300,
             Bishop => 300,
             Rook => 500,
-            Queen => 900,
-            King => 800_000,
+            Queen => 950,
+            King => 700_000,
         })
     }
 }
@@ -123,7 +123,7 @@ pub fn terminal(position: &Position) -> Cp {
 
 /// Primary evaluate function for engine.
 /// Statically evaluate a non-terminal position using a variety of heuristics.
-pub fn static_evaluate(position: &Position, _num_moves: usize) -> Cp {
+pub fn static_evaluate(position: &Position) -> Cp {
     let cp_material = material(position);
     let cp_pass_pawns = pass_pawns(position);
     let cp_xray_king = xray_king_attacks(position);
@@ -191,10 +191,10 @@ pub fn mobility(position: &Position) -> Cp {
 
 /// Returns Centipawn difference for passed pawns.
 pub fn pass_pawns(position: &Position) -> Cp {
-    // Base value of a passed pawn. Currently worth 50cp.
-    const SCALAR: Cp = Cp(50);
+    // Base value of a passed pawn.
+    const SCALAR: Cp = Cp(20);
     // Bonus value of passed pawn per rank. Pass pawns are very valuable on rank 7.
-    const RANK_CP: [Cp; NUM_RANKS - 1] = [Cp(0), Cp(0), Cp(0), Cp(5), Cp(10), Cp(100), Cp(700)];
+    const RANK_CP: [Cp; NUM_RANKS - 1] = [Cp(0), Cp(0), Cp(0), Cp(5), Cp(10), Cp(100), Cp(500)];
     let w_passed: Bitboard = w_pass_pawns(&position);
     let b_passed: Bitboard = b_pass_pawns(&position);
     let w_num_passed = w_passed.count_squares() as i32;

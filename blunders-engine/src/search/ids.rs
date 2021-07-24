@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use crate::coretypes::{Move, Square::*};
-use crate::evaluation::Cp;
+use crate::eval::Cp;
 use crate::movelist::Line;
 use crate::search;
 use crate::search::SearchResult;

@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::mem;
 
 use crate::coretypes::{Move, MoveInfo};
-use crate::evaluation::Cp;
+use crate::eval::Cp;
 use crate::zobrist::{HashKind, ZobristTable};
 use crate::Position;
 
@@ -221,7 +221,7 @@ impl TranspositionTable {
     /// # use blunders_engine::transposition::TranspositionTable;
     /// # use blunders_engine::transposition::TranspositionInfo;
     /// # use blunders_engine::transposition::NodeKind;
-    /// # use blunders_engine::evaluation::Cp;
+    /// # use blunders_engine::eval::Cp;
     /// # use blunders_engine::coretypes::{Move, Square::*};
     /// # let mut tt = TranspositionTable::new();
     /// let hash = 0;

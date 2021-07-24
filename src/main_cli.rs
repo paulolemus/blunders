@@ -4,7 +4,7 @@ use std::io::{self, Write};
 
 use blunders_engine;
 use blunders_engine::coretypes::{Move, MoveInfo};
-use blunders_engine::evaluation::static_evaluate;
+use blunders_engine::eval::static_evaluate;
 use blunders_engine::search;
 use blunders_engine::transposition::TranspositionTable;
 use blunders_engine::Position;
@@ -46,8 +46,7 @@ fn main() -> io::Result<()> {
         // Wait for user input.
         {
             // Print evaluation of starting position.
-            let num_moves = position.get_legal_moves().len();
-            let static_cp = static_evaluate(&position, num_moves);
+            let static_cp = static_evaluate(&position);
             println!("Current Static cp  : {}", static_cp);
         }
         println!("{}", position);
@@ -124,8 +123,7 @@ fn main() -> io::Result<()> {
             }
             {
                 // Print evaluation of position after player move.
-                let num_moves = position.get_legal_moves().len();
-                let static_cp = static_evaluate(&position, num_moves);
+                let static_cp = static_evaluate(&position);
                 println!("Current Static cp  : {}", static_cp);
             }
 
@@ -133,17 +131,6 @@ fn main() -> io::Result<()> {
             println!("{}\nthinking...", position);
             let result = search::search_with_tt(position, 8, &mut tt);
             move_history.push(position.do_move(result.best_move));
-
-            // Print diagnostic information.
-            let num_moves = position.get_legal_moves().len();
-            let static_cp = static_evaluate(&position, num_moves);
-            println!("Blunders played move {}.", result.best_move);
-            println!("{}", result);
-            println!(
-                "nps:             : {}",
-                (result.nodes as f64 / result.elapsed.as_secs_f64()).round()
-            );
-            println!("Current Static cp: {}", static_cp);
 
             // Check if engine check or stalemated.
             if position.is_checkmate() {
@@ -165,6 +152,12 @@ fn main() -> io::Result<()> {
                 move_history.clear();
                 continue;
             }
+
+            // Print diagnostic information.
+            let static_cp = static_evaluate(&position);
+            println!("Blunders played move {}.", result.best_move);
+            println!("{}", result);
+            println!("Current Static cp: {}", static_cp);
         }
     }
     Ok(())
