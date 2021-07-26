@@ -11,7 +11,7 @@ use std::fmt::{self, Display};
 use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 
 use crate::bitboard::{self, Bitboard};
-use crate::coretypes::{Color, PieceKind, NUM_RANKS, NUM_SQUARES};
+use crate::coretypes::{Color, PieceKind, SquareIndexable, NUM_RANKS, NUM_SQUARES};
 use crate::coretypes::{Color::*, PieceKind::*};
 use crate::movegen as mg;
 use crate::position::Position;
@@ -141,12 +141,14 @@ pub fn terminal_abs(position: &Position) -> Cp {
 /// Statically evaluate a non-terminal position using a variety of heuristics.
 pub fn evaluate_abs(position: &Position) -> Cp {
     let cp_material = material(position);
+    let cp_piece_sq = piece_square_lookup(position);
     let cp_pass_pawns = pass_pawns(position);
     let cp_xray_king = xray_king_attacks(position);
     let cp_mobility = mobility(position);
     let cp_king_safety = king_safety(position);
 
-    let cp_total = cp_material + cp_pass_pawns + cp_xray_king + cp_mobility + cp_king_safety;
+    let cp_total =
+        cp_material + cp_piece_sq + cp_pass_pawns + cp_xray_king + cp_mobility + cp_king_safety;
     cp_total
 }
 
@@ -254,6 +256,39 @@ pub fn xray_king_attacks(position: &Position) -> Cp {
     Cp(w_xray_attackers - b_xray_attackers) * SCALAR
 }
 
+/// Returns value from looking up each piece square in precalculated tables.
+pub fn piece_square_lookup(position: &Position) -> Cp {
+    let mut w_values = Cp(0);
+    position.pieces[(White, Pawn)]
+        .into_iter()
+        .for_each(|sq| w_values += Cp(MG_PAWN_TABLE[sq.idx()]));
+    position.pieces[(White, Knight)]
+        .into_iter()
+        .for_each(|sq| w_values += Cp(MG_KNIGHT_TABLE[sq.idx()]));
+    position.pieces[(White, Bishop)]
+        .into_iter()
+        .for_each(|sq| w_values += Cp(MG_BISHOP_TABLE[sq.idx()]));
+    position.pieces[(White, King)]
+        .into_iter()
+        .for_each(|sq| w_values += Cp(MG_KING_TABLE[sq.idx()]));
+
+    let mut b_values = Cp(0);
+    position.pieces[(Black, Pawn)]
+        .into_iter()
+        .for_each(|sq| b_values += Cp(MG_PAWN_TABLE[sq.flip_rank().idx()]));
+    position.pieces[(Black, Knight)]
+        .into_iter()
+        .for_each(|sq| b_values += Cp(MG_KNIGHT_TABLE[sq.flip_rank().idx()]));
+    position.pieces[(Black, Bishop)]
+        .into_iter()
+        .for_each(|sq| b_values += Cp(MG_BISHOP_TABLE[sq.flip_rank().idx()]));
+    position.pieces[(Black, King)]
+        .into_iter()
+        .for_each(|sq| b_values += Cp(MG_KING_TABLE[sq.flip_rank().idx()]));
+
+    w_values - b_values
+}
+
 /// A pass pawn is one with no opponent pawns in front of it on same or adjacent files.
 /// This returns a bitboard with all pass pawns of given player.
 #[inline]
@@ -282,7 +317,69 @@ fn pass_pawns_bb(position: &Position, player: Color) -> Bitboard {
 }
 
 // Piece Square Tables
-// TODO!
+// Orientation:
+// A1, B1, C1, D1, ...,
+// ...             ...,
+// A8, B8, C8, D8, ...,
+
+/// Midgame Pawn square values
+///
+/// * Penalize not pushing D2/E2
+/// TODO:
+/// Dynamically change to consider where king is?
+#[rustfmt::skip]
+const MG_PAWN_TABLE: [CpKind; NUM_SQUARES] = [
+    0,   0,   0,   0,   0,   0,   0,   0,
+    5,   1,   0, -20, -20,   0,   1,   5,
+    5,  -2,   0,   0,   0,   0,  -2,   5,
+    0,   0,   0,  20,  20,   0,   0,   0,
+    2,   2,   2,  21,  21,   2,   2,   2,
+    3,   3,   3,  22,  22,   3,   3,   3,
+    4,   4,   4,  23,  23,   4,   4,   4,
+    0,   0,   0,   0,   0,   0,   0,   0,
+];
+
+/// Midgame Knight square values
+/// Encourage central squares, penalize edge squares.
+#[rustfmt::skip]
+const MG_KNIGHT_TABLE: [CpKind; NUM_SQUARES] = [
+    -50, -30, -20, -20, -20, -20, -30, -50,
+    -20,   0,   0,   5,   5,   0,   0, -20,
+    -10,   0,  10,  15,  15,  10,   0, -10,
+    -10,   0,  15,  20,  20,  15,   0, -10,
+    -10,   0,  15,  20,  20,  15,   0, -10,
+    -10,   0,  10,  15,  15,  10,   0, -10,
+    -20,   0,   0,   0,   0,   0,   0, -20,
+    -50, -10, -10, -10, -10, -10, -10, -50,
+];
+
+/// Midgame Bishop square values
+/// Avoid corners and borders
+#[rustfmt::skip]
+const MG_BISHOP_TABLE: [CpKind; NUM_SQUARES] = [
+    -20,  -8, -10,  -8,  -8, -10,  -8, -20,
+     -8,   5,   0,   0,   0,   0,   5,  -8,
+     -8,  10,  10,  10,  10,  10,  10,  -8,
+     -8,   0,  10,  10,  10,  10,   0,  -8,
+     -8,   0,  10,  10,  10,  10,   0,  -8,
+     -8,   0,  10,  10,  10,  10,   0,  -8,
+     -8,   0,   0,   0,   0,   0,   0,  -8,
+    -20,  -8,  -8,  -8,  -8,  -8,  -8, -20,
+];
+
+/// Midgame King square values
+/// Keep king in corner, in pawn shelter.
+#[rustfmt::skip]
+const MG_KING_TABLE: [CpKind; NUM_SQUARES] = [
+     20,  30,  10,   0,   0,  10,  30,  20,
+     20,  20,   0,   0,   0,   0,  20,  20,
+    -10, -10, -15, -15, -15, -15, -10, -10,
+    -10, -10, -10, -10, -10, -10, -10, -10,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+];
 
 // Const Data Generation
 
@@ -367,6 +464,19 @@ const fn w_pass_pawn_pattern_idx(square: usize) -> Bitboard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn start_pos_equal_eval() {
+        // The start position is symmetric.
+        // Its eval should be the same for white to move and black to move.
+        let mut start = Position::start_position();
+        let w_eval = evaluate(&start);
+        start.player = Black;
+        let b_eval = evaluate(&start);
+        assert_eq!(w_eval, b_eval);
+
+        assert_eq!(w_eval, evaluate(&start.color_flip()));
+    }
 
     #[test]
     fn cp_min_and_max() {

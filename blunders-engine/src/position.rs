@@ -67,6 +67,57 @@ impl Position {
         &self.fullmoves
     }
 
+    /// Create a new position where the relative position is the same for the active player,
+    /// but the player gets switched.
+    /// This is equivalent to a vertical flip and color swap for all pieces,
+    /// along with castling rights, player and en-passant.
+    ///
+    /// This is useful for checking that an evaluation function scores the same scenario
+    /// presented to either player.
+    pub fn color_flip(&self) -> Self {
+        let mut flipped = self.clone();
+
+        // For each piece, flip its rank and color
+        let mut pieces = PieceSets::new();
+        for color in Color::iter() {
+            for piece_kind in PieceKind::iter() {
+                for sq in self.pieces[(color, piece_kind)] {
+                    let flipped_sq = Square::from((sq.file(), sq.rank().flip()));
+                    pieces[(!color, piece_kind)].set_square(flipped_sq);
+                }
+            }
+        }
+        flipped.pieces = pieces;
+
+        // Flip side to move
+        flipped.player = !self.player;
+
+        // Flip castling rights
+        let mut cr = Castling::NONE;
+        self.castling
+            .has(Castling::W_KING)
+            .then(|| cr.set(Castling::B_KING));
+        self.castling
+            .has(Castling::W_QUEEN)
+            .then(|| cr.set(Castling::B_QUEEN));
+        self.castling
+            .has(Castling::B_KING)
+            .then(|| cr.set(Castling::W_KING));
+        self.castling
+            .has(Castling::B_QUEEN)
+            .then(|| cr.set(Castling::W_QUEEN));
+        flipped.castling = cr;
+
+        // Flip ep passant square
+        flipped.en_passant = self
+            .en_passant
+            .map(|sq| Square::from((sq.file(), sq.rank().flip())));
+
+        debug_assert!(flipped.pieces().is_valid());
+        debug_assert!(flipped.castling().is_mask_valid());
+        flipped
+    }
+
     /// Updates the En-Passant position square, and handles any en-passant capture.
     /// En Passant square is set after any double pawn push.
     fn update_en_passant(&mut self, move_: &Move, active_piece: &Piece, move_info: &mut MoveInfo) {
@@ -755,5 +806,22 @@ mod tests {
 
         let moves1 = pos1.get_legal_moves();
         assert_eq!(moves1.len(), 0);
+    }
+
+    #[test]
+    fn color_flipped_eq() {
+        // Manually check flipped positions.
+        // Flipping one gets the other, and vice-versa.
+        let w_giuoco = Position::parse_fen(
+            "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 6 4",
+        )
+        .unwrap();
+        let b_giuoco = Position::parse_fen(
+            "rnbqk2r/pppp1ppp/5n2/2b1p3/2B1P3/2N5/PPPP1PPP/R1BQK1NR b KQkq - 6 4",
+        )
+        .unwrap();
+
+        assert_eq!(w_giuoco.color_flip(), b_giuoco);
+        assert_eq!(b_giuoco.color_flip(), w_giuoco);
     }
 }

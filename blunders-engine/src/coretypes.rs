@@ -389,32 +389,32 @@ impl Castling {
         self.0
     }
 
-    /// Returns true if Castling mask has all of provided bits.
-    pub fn has(&self, rights: Castling) -> bool {
-        assert!(Self::is_mask_valid(rights));
-        self.0 & rights.0 == rights.0
-    }
-
-    /// Returns true if self has any of the provided bits.
-    pub fn has_any(&self, rights: Castling) -> bool {
-        assert!(Self::is_mask_valid(rights));
-        self.0 & rights.0 != 0
-    }
-
     /// Returns true if there are no castling rights.
     pub const fn is_none(&self) -> bool {
         self.0 == 0u8
     }
 
+    /// Returns true if Castling mask has all of provided bits.
+    pub fn has(&self, rights: Castling) -> bool {
+        debug_assert!(rights.is_mask_valid());
+        self.0 & rights.0 == rights.0
+    }
+
+    /// Returns true if self has any of the provided bits.
+    pub fn has_any(&self, rights: Castling) -> bool {
+        debug_assert!(rights.is_mask_valid());
+        self.0 & rights.0 != 0
+    }
+
     /// Set given bits to '1' on Castling mask.
     pub fn set(&mut self, rights: Castling) {
-        assert!(Self::is_mask_valid(rights));
+        debug_assert!(rights.is_mask_valid());
         self.0 |= rights.0;
     }
 
     /// Set given bits to '0' on Castling mask.
     pub fn clear(&mut self, rights: Castling) {
-        assert!(Self::is_mask_valid(rights));
+        debug_assert!(rights.is_mask_valid());
         self.0 &= !rights.0;
     }
 
@@ -427,8 +427,8 @@ impl Castling {
     }
 
     /// Returns true if all bits set in Castling are valid, and false otherwise.
-    const fn is_mask_valid(rights: Castling) -> bool {
-        rights.0 <= Self::ALL.0
+    pub const fn is_mask_valid(&self) -> bool {
+        self.0 <= Self::ALL.0
     }
 }
 
@@ -727,6 +727,11 @@ impl Square {
         let file = File::from_u8(self.file_u8()).unwrap();
         let maybe_rank = Rank::from_u8(self.rank_u8().wrapping_sub(1));
         maybe_rank.and_then(|rank| Self::from_idx((file, rank)))
+    }
+
+    /// Flips the rank of the current square. For example, A1 -> A8, A2 -> A7.
+    pub fn flip_rank(&self) -> Self {
+        Self::from_idx((self.file(), self.rank().flip())).unwrap()
     }
 }
 

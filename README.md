@@ -70,4 +70,4 @@ Run expensive tests: `cargo test --all -- --ignored` or `cargo test --all --rele
 
 # Benchmarking Blunders
 
-Blunders has some simple benchmarks that can be run with `cargo bench`.
+Blunders has some simple benchmarks that can be run with `cargo bench --all`.
