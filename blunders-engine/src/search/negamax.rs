@@ -123,7 +123,7 @@ fn negamax_impl(
 
     // Move Ordering
     // Sort legal moves with estimated best move first.
-    let ordered_legal_moves = order_all_moves(*position, legal_moves, hash, tt);
+    let ordered_legal_moves = order_all_moves(position, legal_moves, hash, tt);
     debug_assert_eq!(num_moves, ordered_legal_moves.len());
 
     // Placeholder best_move, is guaranteed to be overwritten as there is at
@@ -194,6 +194,27 @@ fn negamax_impl(
 
     best_score
 }
+
+/// Iterative Negamax implementation
+///
+/// Why change from recursive to iterative?
+/// * Need to be able to STOP search at any given time. Attempting this from a recursive call is difficult
+///       because the return value would need to be changed or checked for a special condition.
+///       It is EASY to return immediately from an iterative call than from a recursive call.
+/// * Makes it easier to tell how far a node is from root.
+/// * Can stop without risk of corrupting transposition table.
+//fn iterative_negamax(position: Position, ply: u32, tt: &mut TranspositionTable) -> SearchResult {
+//    let mut alpha = Cp::MIN;
+//    let beta = Cp::MAX;
+//
+//    let mut complete_results = SearchResult {
+//        best_move: Move::new(A1, H7, None),
+//        score: Cp(0),
+//        pv_line: Line::new(),
+//        nodes: 0,
+//        elapsed: Duration::fr
+//    }
+//}
 
 #[cfg(test)]
 mod tests {

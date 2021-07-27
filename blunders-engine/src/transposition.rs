@@ -56,6 +56,12 @@ fn fill_with_default(v: &mut Vec<Option<TranspositionInfo>>) {
     debug_assert_eq!(v.capacity(), capacity);
 }
 
+// Idea: SharedTranspositionTable
+// transpositions: Arc<Vec<Mutex<Option<TranspositionInfo>>>>
+// Can be cloned and passed between threads.
+// Vec in Arc is immutable so must be set to size before putting into Arc.
+// Shared access with very low chances of blocking.
+
 /// Type alias for inner type of TranspositionTable.
 type TtEntry = Option<TranspositionInfo>;
 

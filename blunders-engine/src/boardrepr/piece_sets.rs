@@ -85,6 +85,18 @@ impl PieceSets {
         self[color].iter().fold(Bitboard::EMPTY, |acc, bb| acc | bb)
     }
 
+    /// Finds and returns the first piece found on target square, or None.
+    pub fn on_square(&self, sq: Square) -> Option<Piece> {
+        for player in Color::iter() {
+            for pk in PieceKind::iter() {
+                if self[(player, pk)].has_square(sq) {
+                    return Some(Piece::new(player, pk));
+                }
+            }
+        }
+        None
+    }
+
     /// Returns pretty-printed chess board representation of Self.
     /// Uses Mailbox pretty.
     pub fn pretty(&self) -> String {
