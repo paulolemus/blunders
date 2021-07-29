@@ -39,7 +39,7 @@ pub fn ids_with_tt(position: Position, ply: u32, tt: &mut TranspositionTable) ->
     // After each search, ensure that the principal variation from the previous
     // iteration is in the tt.
     for ids_ply in 1..=ply {
-        search_result = search::negamax_with_tt(position, ids_ply, tt);
+        search_result = search::iterative_negamax(position, ids_ply, tt);
         nodes += search_result.nodes;
 
         // The length of the pv_line should be the same as the depth searched to

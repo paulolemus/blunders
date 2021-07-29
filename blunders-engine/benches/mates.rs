@@ -33,6 +33,16 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
         })
     });
 
+    c.bench_function("mates_3_sac_knight_iter_negamax", |b| {
+        b.iter(|| {
+            let mut tt = TranspositionTable::new();
+            let result = search::iterative_negamax(black_box(pos), black_box(ply), &mut tt);
+
+            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.best_move, bm);
+        })
+    });
+
     c.bench_function("mates_3_sac_knight_ids", |b| {
         b.iter(|| {
             let result = search::ids(black_box(pos), black_box(ply));
@@ -64,6 +74,16 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
     c.bench_function("mates_3_knights_and_bishop_negamax", |b| {
         b.iter(|| {
             let result = search::negamax(black_box(pos), black_box(ply));
+
+            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.best_move, bm);
+        })
+    });
+
+    c.bench_function("mates_3_knights_and_bishop_iter_negamax", |b| {
+        b.iter(|| {
+            let mut tt = TranspositionTable::new();
+            let result = search::iterative_negamax(black_box(pos), black_box(ply), &mut tt);
 
             assert_eq!(result.score.leading(), lead);
             assert_eq!(result.best_move, bm);

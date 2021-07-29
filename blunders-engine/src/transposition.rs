@@ -12,9 +12,9 @@ use crate::Position;
 /// See [Node Types](https://www.chessprogramming.org/Node_Types).
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum NodeKind {
-    Other, // Any other node.
-    Cut,   // A Cut node, or a node that was pruned because it caused a beta-cutoff.
-    Pv,    // A principal variation node from a previous search.
+    All, // An All node has had all of its children searched.
+    Cut, // A Cut node, or a node that was pruned because it caused a beta-cutoff.
+    Pv,  // A principal variation node from a previous search.
 }
 
 /// TranspositionInfo contains information about a previously searched position.
@@ -231,7 +231,7 @@ impl TranspositionTable {
     /// # use blunders_engine::coretypes::{Move, Square::*};
     /// # let mut tt = TranspositionTable::new();
     /// let hash = 0;
-    /// let tt_info = TranspositionInfo::new(hash, NodeKind::Other, Move::new(D2, D4, None), 3, Cp(1));
+    /// let tt_info = TranspositionInfo::new(hash, NodeKind::All, Move::new(D2, D4, None), 3, Cp(1));
     ///
     /// let mut tt_info_ignored = tt_info.clone();
     /// tt_info_ignored.score = Cp(0);
@@ -294,7 +294,7 @@ mod tests {
         let mut tt = TranspositionTable::new();
         let tt_info = TranspositionInfo {
             hash,
-            node_kind: NodeKind::Other,
+            node_kind: NodeKind::All,
             key_move: Move::new(A2, A3, None),
             ply: 3,
             score: Cp(100),
@@ -309,14 +309,14 @@ mod tests {
         let mut tt = TranspositionTable::with_capacity(1);
         let tt_info1 = TranspositionInfo {
             hash: 100,
-            node_kind: NodeKind::Other,
+            node_kind: NodeKind::All,
             key_move: Move::new(A2, A3, None),
             ply: 3,
             score: Cp(100),
         };
         let tt_info2 = TranspositionInfo {
             hash: 200,
-            node_kind: NodeKind::Other,
+            node_kind: NodeKind::All,
             key_move: Move::new(B5, B3, None),
             ply: 4,
             score: Cp(-200),
@@ -350,7 +350,7 @@ mod tests {
         let hash = tt.generate_hash(&pos);
         let tt_info = TranspositionInfo {
             hash,
-            node_kind: NodeKind::Other,
+            node_kind: NodeKind::All,
             key_move: Move::new(D2, D4, None),
             ply: 5,
             score: Cp(0),

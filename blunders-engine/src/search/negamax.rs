@@ -2,8 +2,8 @@
 
 use std::time::Instant;
 
-use crate::arrayvec;
-use crate::coretypes::{Move, MoveInfo, Square::*, MAX_DEPTH, MAX_MOVES};
+use crate::arrayvec::{self, ArrayVec};
+use crate::coretypes::{Castling, Move, MoveInfo, MoveKind, PieceKind, Square::*, MAX_DEPTH};
 use crate::eval::{terminal, Cp};
 use crate::movelist::{Line, MoveList};
 use crate::moveorder::order_all_moves;
@@ -189,7 +189,7 @@ fn negamax_impl(
     // was added to the tt beforehand, so we can add it on the condition that
     // It's node-kind is less important than what exists in tt.
     let abs_move_score = best_score * position.player.sign();
-    let tt_info = TranspositionInfo::new(hash, NodeKind::Other, best_move, ply, abs_move_score);
+    let tt_info = TranspositionInfo::new(hash, NodeKind::All, best_move, ply, abs_move_score);
     tt.replace_by(tt_info, |replacing, slotted| {
         replacing.node_kind >= slotted.node_kind
     });
@@ -197,6 +197,7 @@ fn negamax_impl(
     best_score
 }
 
+/// Label represents what stage of processing a node is in.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum Label {
     Initialize,
@@ -204,7 +205,8 @@ enum Label {
     Retrieve,
 }
 
-// Stack variables
+/// Frame contains all the variables needed during the evaluation of a node.
+/// It is somewhat like the call frame for recursive negamax.
 #[derive(Debug, Clone)]
 struct Frame {
     pub label: Label,
@@ -215,9 +217,13 @@ struct Frame {
     pub best_score: Cp,
     pub best_move: Move,
     pub hash: HashKind,
+    pub move_info: MoveInfo,
 }
+/// A frame defaults with junk data, however this is acceptable
+/// because nodes set appropriate data before using.
 impl Default for Frame {
     fn default() -> Self {
+        let illegal_move = Move::new(A1, H7, None);
         Self {
             label: Label::Initialize,
             local_pv: Line::new(),
@@ -225,271 +231,286 @@ impl Default for Frame {
             alpha: Cp::MIN,
             beta: Cp::MAX,
             best_score: Cp::MIN,
-            best_move: Move::new(A1, H7, None),
+            best_move: illegal_move,
             hash: 0,
+            move_info: MoveInfo {
+                move_: illegal_move,
+                piece_kind: PieceKind::Pawn,
+                move_kind: MoveKind::Quiet,
+                castling: Castling::NONE,
+                en_passant: None,
+                halfmoves: 1,
+            },
         }
     }
 }
 
+/// Extract a "Window" from a frame stack, where a window is a reference to
+/// the parent, current, and child frames of the given frame index.
+/// Frame index must not be 0.
 #[inline(always)]
-fn parent(frame_idx: usize) -> usize {
+fn split_window_frames(frames: &mut [Frame], idx: usize) -> (&mut Frame, &mut Frame, &mut Frame) {
+    debug_assert!(idx > 0, "cannot get parent frame of index 0");
+    // split_at_mut includes the index in the second slice.
+    let (parent_slice, rest) = frames.split_at_mut(idx);
+    let (curr_slice, rest) = rest.split_at_mut(1);
+
+    let parent_frame = parent_slice.last_mut().unwrap();
+    let current_frame = &mut curr_slice[0];
+    let child_frame = &mut rest[0];
+
+    (parent_frame, current_frame, child_frame)
+}
+
+/// Given a frame index, returns the index of the frame's parent.
+#[inline(always)]
+fn parent_idx(frame_idx: usize) -> usize {
     frame_idx - 1
 }
 
+/// Given a frame index, returns the index of the frame's child.
 #[inline(always)]
-fn child(frame_idx: usize) -> usize {
+fn child_idx(frame_idx: usize) -> usize {
     frame_idx + 1
 }
 
+/// Convert a frame index to a ply.
 #[inline(always)]
 fn curr_ply(frame_idx: usize) -> u32 {
     debug_assert!(frame_idx > 0);
     (frame_idx - 1) as u32
 }
 
-/// Iterative Negamax implementation
+/// Iterative Negamax implementation with alpha-beta pruning.
 ///
 /// Why change from recursive to iterative?
-/// * Need to be able to STOP search at any given time. Attempting this from a recursive call is difficult
-///       because the return value would need to be changed or checked for a special condition.
-///       It is EASY to return immediately from an iterative call than from a recursive call.
+/// * Need to be able to STOP searching at any time.
+/// This is hard to do from a recursive search without changing/checking return value.
 /// * Makes it easier to tell how far a node is from root.
-/// * Can stop without risk of corrupting transposition table.
-///
-/// Recursive: all refer to same mut position and
-//fn iterative_negamax(
-//    mut position: Position,
-//    ply: u32,
-//    tt: &mut TranspositionTable,
-//) -> SearchResult {
-//    // Must have a valid ply to search to, and root position must not be terminal.
-//    assert_ne!(ply, 0);
-//    assert!(ply < MAX_DEPTH as u32);
-//    assert_ne!(position.get_legal_moves().len(), 0);
-//
-//    // Meta Search variables
-//    // Time search
-//    let instant = Instant::now();
-//    // Keep color of root player
-//    let _root_player = *position.player();
-//    // Count nodes visited
-//    let mut nodes: u64 = 0;
-//
-//    // Stack holds local data used per ply.
-//    // Size is +1 because the 0th index holds the most recently updated data
-//    // for the root position. This is useful because it allows for returning
-//    // without completing an entire depth, as the best pv so far is saved.
-//    // 0th Idx: Global, best-so-far data
-//    // 1st Idx: Root position data
-//    let mut stack: ArrayVec<Frame, { MAX_DEPTH + 1 }> = ArrayVec::new();
-//    // Fill stack with default values
-//    while !stack.is_full() {
-//        stack.push(Default::default());
-//    }
-//
-//    // Stack of move info history.
-//    let mut move_history: ArrayVec<MoveInfo, MAX_DEPTH> = ArrayVec::new();
-//
-//    // Frame indexer, begins at 1 (root) as 0 is for global pv.
-//    let mut frame_idx: usize = 1;
-//
-//    // Set initial valid root parameters.
-//    {
-//        let root_frame: &mut Frame = &mut stack[frame_idx];
-//        root_frame.label = Label::Initialize;
-//        root_frame.hash = tt.generate_hash(&position);
-//    }
-//
-//    // MAIN ITERATIVE LOOP //
-//    while frame_idx > 0 {
-//        let label: Label = stack[frame_idx].label;
-//
-//        // INITIALIZE MODE
-//        // A new node has been created.
-//        // If it is terminal, a leaf, or has been evaluated in the past,
-//        // it immediately returns its evaluation up the stack to its parent.
-//        // Otherwise, it has children nodes to search and sets itself into Search mode.
-//        //
-//        // Initialize -> Return eval to parent | set self to search mode.
-//        if Label::Initialize == label {
-//            let legal_moves = position.get_legal_moves();
-//            let num_moves = legal_moves.len();
-//            nodes += 1;
-//
-//            // Parent frame and hash are only used if this node early returns.
-//            let hash = stack[frame_idx].hash;
-//            let parent_idx = parent(frame_idx);
-//            let parent_frame = &mut stack[parent_idx];
-//
-//            // This position has no best move.
-//            // Store its evaluation and tell parent to retrieve value.
-//            if num_moves == 0 {
-//                parent_frame.local_pv.clear();
-//                parent_frame.label = Label::Retrieve;
-//
-//                stack[frame_idx].best_score = terminal(&position);
-//
-//                frame_idx = parent_idx;
-//
-//            // Check if this position exists in tt.
-//            } else if let Some(tt_info) = tt.get(hash) {
-//                let remaining_ply = ply - curr_ply(frame_idx);
-//                if tt_info.ply >= remaining_ply && legal_moves.contains(&tt_info.key_move) {
-//                    // Found a usable Transposition hit. Its value can be used immediately
-//                    // since this node has already been searched completely.
-//                    parent_frame.local_pv.clear();
-//                    parent_frame.local_pv.push(tt_info.key_move);
-//                    parent_frame.label = Label::Retrieve;
-//
-//                    let relative_score = tt_info.score * position.player().sign();
-//                    stack[frame_idx].best_score = relative_score;
-//
-//                    frame_idx = parent_idx;
-//                }
-//
-//            // Max depth (leaf node) reached. Statically evaluate position and return value.
-//            } else if curr_ply(frame_idx) == ply {
-//                parent_frame.local_pv.clear();
-//                parent_frame.label = Label::Retrieve;
-//
-//                stack[frame_idx].best_score = quiescence(&position, Cp::MIN, Cp::MAX);
-//
-//                frame_idx = parent_idx;
-//
-//            // Otherwise this node has children to continue to search.
-//            // Order all of this node's legal moves, and set it to search mode.
-//            } else {
-//                let this_frame = &mut stack[frame_idx];
-//                let ordered_moves = order_all_moves(&position, legal_moves, this_frame.hash, tt);
-//                this_frame.ordered_moves = ordered_moves.into_iter();
-//                this_frame.label = Label::Search;
-//            }
-//
-//        // SEARCH MODE
-//        // If a node ever enters search mode, it is guaranteed to have had a legal move to search.
-//        // Each search either pushes a child node onto the stack during which it waits
-//        // to be set to RETRIEVE, or it sees that it has evaluated all of its children and returns
-//        // its own score to its parent.
-//        } else if Label::Search == label {
-//            // This position has a child position to search.
-//            // Increment global variables for the child and initialize its frame.
-//            if let Some(legal_move) = stack[frame_idx].ordered_moves.next() {
-//                let this_frame = &stack[frame_idx];
-//                let hash = this_frame.hash;
-//                let alpha = this_frame.alpha;
-//                let beta = this_frame.beta;
-//
-//                let move_info = position.do_move(legal_move);
-//                let child_hash = tt.update_from_hash(hash, &position, &move_info);
-//                move_history.push(move_info);
-//
-//                let child_frame = &mut stack[child(frame_idx)];
-//                child_frame.label = Label::Initialize;
-//                child_frame.hash = child_hash;
-//                child_frame.alpha = -beta;
-//                child_frame.beta = -alpha;
-//                child_frame.best_score = Cp::MIN;
-//
-//                frame_idx = child(frame_idx);
-//
-//            // Every move for this node has been evaluated, so its complete score is returned.
-//            // This node's hashtable index may be occupied, so it is added on the condition that
-//            // its node-kind is less important than what exists in tt.
-//            } else {
-//                let this_frame = &stack[frame_idx];
-//                let abs_node_score = this_frame.best_score * position.player().sign();
-//                let remaining_ply = ply - curr_ply(frame_idx);
-//                let tt_info = TranspositionInfo::new(
-//                    this_frame.hash,
-//                    NodeKind::Other,
-//                    this_frame.best_move,
-//                    remaining_ply,
-//                    abs_node_score,
-//                );
-//                tt.replace_by(tt_info, |replacing, slotted| {
-//                    replacing.node_kind >= slotted.node_kind
-//                });
-//
-//                stack[parent(frame_idx)].label = Label::Retrieve;
-//                frame_idx = parent(frame_idx);
-//            }
-//
-//        // RETRIEVE MODE
-//        // Only a child of the current node sets this value to RETRIEVE.
-//        // This node is allowed to take the return value and process it.
-//        //
-//        } else if Label::Retrieve == label {
-//            // Need to negate child's best score so its relative to this node.
-//            let child_score = -stack[child(frame_idx)].best_score;
-//            let this_frame = &mut stack[frame_idx];
-//
-//            let move_info = move_history.pop().unwrap();
-//            position.undo_move(move_info);
-//
-//            // Update our best_* trackers if this move is best seen so far.
-//            if child_score > this_frame.best_score {
-//                this_frame.best_score = child_score;
-//                this_frame.best_move = move_info.move_;
-//            }
-//
-//            // Cut-off has occurred, no further children of this position need to be searched.
-//            // This branch will not be taken further up the tree as there is a better move.
-//            // Push this cut-node into the tt, with an absolute score, instead of relative.
-//            if this_frame.best_score >= this_frame.beta {
-//                let abs_best_score = this_frame.best_score * position.player().sign();
-//                let remaining_ply = ply - curr_ply(frame_idx);
-//                let tt_info = TranspositionInfo::new(
-//                    this_frame.hash,
-//                    NodeKind::Cut,
-//                    this_frame.best_move,
-//                    remaining_ply,
-//                    abs_best_score,
-//                );
-//                tt.replace(tt_info);
-//
-//                // Early return.
-//                stack[parent(frame_idx)].label = Label::Retrieve;
-//                frame_idx = parent(frame_idx);
-//
-//            // Continue to search this node.
-//            } else {
-//                this_frame.label = Label::Search;
-//
-//                // New local PV has been found. Update alpha and store new Line.
-//                // Update this node in tt as a PV node.
-//                if this_frame.best_score > this_frame.alpha {
-//                    this_frame.alpha = this_frame.best_score;
-//                    let local_pv = this_frame.local_pv.clone();
-//
-//                    let abs_best_score = this_frame.best_score * position.player().sign();
-//                    let remaining_ply = ply - curr_ply(frame_idx);
-//                    let tt_info = TranspositionInfo::new(
-//                        this_frame.hash,
-//                        NodeKind::Pv,
-//                        move_info.move_,
-//                        remaining_ply,
-//                        abs_best_score,
-//                    );
-//                    tt.replace(tt_info);
-//
-//                    let parent_frame = &mut stack[parent(frame_idx)];
-//                    parent_frame.local_pv.clear();
-//                    parent_frame.local_pv.push(move_info.move_);
-//                    parent_frame.local_pv.append(local_pv);
-//                }
-//            }
-//        }
-//    }
-//
-//    let result = SearchResult {
-//        best_move: Move::new(A1, H7, None),
-//        score: Cp(0),
-//        pv_line: Line::new(),
-//        nodes,
-//        elapsed: instant.elapsed(),
-//    };
-//    result
-//}
+/// * Easy to stop without risk of corrupting transposition table entries.
+pub fn iterative_negamax(
+    mut position: Position,
+    ply: u32,
+    tt: &mut TranspositionTable,
+) -> SearchResult {
+    // Guard: must have a valid searchable ply, and root position must not be terminal.
+    assert_ne!(ply, 0);
+    assert!(ply < MAX_DEPTH as u32);
+    assert_ne!(position.get_legal_moves().len(), 0);
+
+    // Meta Search variables
+    let instant = Instant::now(); // Timer for search
+    let root_player = *position.player(); // Keep copy of root player for assertions
+
+    // Metrics
+    let mut nodes: u64 = 0; // Number of nodes created
+
+    // Stack holds frame data, where each ply gets one frame.
+    // Size is +1 because the 0th index holds the PV so far for root position.
+    // 0th Idx: Root PV (root passes PV to parent).
+    // 1st Idx: Root data frame.
+    const BASE_IDX: usize = 0;
+    const ROOT_IDX: usize = 1;
+    let mut stack: ArrayVec<Frame, { MAX_DEPTH + 1 }> = ArrayVec::new();
+    // Fill stack with default values to navigate, opposed to pushing and popping.
+    while !stack.is_full() {
+        stack.push(Default::default());
+    }
+    // Set initial valid root parameters.
+    {
+        let root_frame: &mut Frame = &mut stack[ROOT_IDX];
+        root_frame.label = Label::Initialize;
+        root_frame.hash = tt.generate_hash(&position);
+    }
+
+    // Frame indexer, begins at 1 (root) as 0 is for global pv.
+    // Incrementing -> recurse to child
+    // Decrementing -> return to parent
+    let mut frame_idx: usize = ROOT_IDX;
+
+    // MAIN ITERATIVE LOOP
+    while frame_idx > 0 {
+        // Take a mut sliding window view into the stack.
+        let (parent, us, child) = split_window_frames(&mut stack, frame_idx);
+
+        // How many ply left to target depth.
+        let remaining_ply = ply - curr_ply(frame_idx);
+
+        let label: Label = us.label;
+
+        // INITIALIZE MODE
+        // A new node has been created.
+        // If it is terminal, a leaf, or has been evaluated in the past,
+        // it immediately returns its evaluation up the stack to its parent.
+        // Otherwise, it has children nodes to search and sets itself into Search mode.
+        //
+        // Flow: Return eval to parent || set self to search mode
+        if Label::Initialize == label {
+            let legal_moves = position.get_legal_moves();
+            let num_moves = legal_moves.len();
+            nodes += 1;
+
+            // This position has no best move.
+            // Store its evaluation and tell parent to retrieve value.
+            if num_moves == 0 {
+                parent.label = Label::Retrieve;
+                parent.local_pv.clear();
+                us.best_score = terminal(&position);
+
+                frame_idx = parent_idx(frame_idx);
+                continue;
+
+            // Check if this position exists in tt and has been searched to/beyond our ply.
+            // If so the score is usable, store this value and return to parent.
+            } else if let Some(tt_info) = tt.get(us.hash) {
+                if tt_info.ply >= remaining_ply && legal_moves.contains(&tt_info.key_move) {
+                    parent.label = Label::Retrieve;
+                    parent.local_pv.clear();
+                    parent.local_pv.push(tt_info.key_move);
+
+                    let relative_score = tt_info.score * position.player().sign();
+                    us.best_score = relative_score;
+
+                    frame_idx = parent_idx(frame_idx);
+                    continue;
+                }
+
+            // Max depth (leaf node) reached. Statically evaluate position and return value.
+            } else if remaining_ply == 0 {
+                parent.label = Label::Retrieve;
+                parent.local_pv.clear();
+
+                us.best_score = quiescence(&position, Cp::MIN, Cp::MAX);
+
+                frame_idx = parent_idx(frame_idx);
+                continue;
+            }
+
+            // This node has not returned early, so it has moves to search.
+            // Order all of this node's legal moves, and set it to search mode.
+            us.ordered_moves = order_all_moves(&position, legal_moves, us.hash, tt);
+            us.label = Label::Search;
+
+        // SEARCH MODE
+        // If a node ever enters search mode, it is guaranteed to have had a legal move to search.
+        // Each search either pushes a child node onto the stack during which it waits
+        // to be set to RETRIEVE, or it sees that it has evaluated all of its children and returns
+        // its own score to its parent.
+        //
+        // Flow: (Moves to search) ? recurse to child : return eval to parent
+        } else if Label::Search == label {
+            // This position has a child position to search, initialize its frame.
+            if let Some(legal_move) = us.ordered_moves.pop() {
+                us.move_info = position.do_move(legal_move);
+                let child_hash = tt.update_from_hash(us.hash, &position, &us.move_info);
+
+                child.label = Label::Initialize;
+                child.hash = child_hash;
+                child.alpha = -us.beta;
+                child.beta = -us.alpha;
+                child.best_score = Cp::MIN;
+
+                frame_idx = child_idx(frame_idx);
+
+            // Every move for this node has been evaluated, so its complete score is returned.
+            } else {
+                // ALL-NODE hash strategy: TODO
+                // Currently adding only if it's node-kind is less important than what's in tt.
+                let abs_score = us.best_score * position.player().sign();
+                let tt_info = TranspositionInfo::new(
+                    us.hash,
+                    NodeKind::All,
+                    us.best_move,
+                    remaining_ply,
+                    abs_score,
+                );
+                tt.replace_by(tt_info, |replacing, slotted| {
+                    replacing.node_kind >= slotted.node_kind
+                });
+
+                parent.label = Label::Retrieve;
+                frame_idx = parent_idx(frame_idx);
+            }
+
+        // RETRIEVE MODE
+        // Only a child of the current node sets this value to RETRIEVE.
+        // This node is allowed to take the return value and process it.
+        //
+        // Flow: (beta cutoff) ? Return best-score to parent : continue searching this node
+        } else if Label::Retrieve == label {
+            // Negate child's best score so it's relative to this node.
+            let move_score = -child.best_score;
+
+            position.undo_move(us.move_info);
+
+            // Update our best_* trackers if this move is best seen so far.
+            if move_score > us.best_score {
+                us.best_score = move_score;
+                us.best_move = us.move_info.move_;
+            }
+
+            // Cut-off has occurred, no further children of this position need to be searched.
+            // This branch will not be taken further up the tree as there is a better move.
+            // Push this cut-node into the tt, with an absolute score, instead of relative.
+            if us.best_score >= us.beta {
+                let abs_best_score = us.best_score * position.player().sign();
+                let tt_info = TranspositionInfo::new(
+                    us.hash,
+                    NodeKind::Cut,
+                    us.best_move,
+                    remaining_ply,
+                    abs_best_score,
+                );
+                tt.replace(tt_info);
+
+                // Early return.
+                parent.label = Label::Retrieve;
+                frame_idx = parent_idx(frame_idx);
+                continue;
+            }
+
+            // New local PV has been found. Update alpha and store new Line.
+            // Update this node in tt as a PV node.
+            // TODO: This might not be sound, since we are storing a value
+            // where node is only partially checked.
+            if us.best_score > us.alpha {
+                us.alpha = us.best_score;
+
+                // Give parent updated PV by appending child PV to our best move.
+                parent.local_pv.clear();
+                parent.local_pv.push(us.best_move);
+                arrayvec::append(&mut parent.local_pv, us.local_pv.clone());
+
+                //let abs_best_score = us.best_score * position.player().sign();
+                //let tt_info = TranspositionInfo::new(
+                //    us.hash,
+                //    NodeKind::Pv,
+                //    us.best_move,
+                //    remaining_ply,
+                //    abs_best_score,
+                //);
+                //tt.replace(tt_info);
+            }
+
+            // Default action is to attempt to continue searching this node.
+            us.label = Label::Search;
+        }
+    }
+
+    // Check that the position has returned to its original state.
+    assert_eq!(*position.player(), root_player);
+
+    // Extract values from stack.
+    let result = SearchResult {
+        best_move: stack[ROOT_IDX].best_move,
+        score: stack[ROOT_IDX].best_score * root_player.sign(),
+        pv_line: stack[BASE_IDX].local_pv.clone(),
+        nodes,
+        elapsed: instant.elapsed(),
+    };
+
+    result
+}
 
 #[cfg(test)]
 mod tests {

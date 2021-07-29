@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn node_kind_ordering() {
         assert!(NodeKind::Pv > NodeKind::Cut);
-        assert!(NodeKind::Cut > NodeKind::Other);
+        assert!(NodeKind::Cut > NodeKind::All);
     }
 
     #[test]
