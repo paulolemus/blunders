@@ -19,11 +19,10 @@ pub const NUM_PIECE_KINDS: usize = 12;
 
 // The max possible measured number of moves for any chess position.
 pub const MAX_MOVES: usize = 218;
-// The max number of moves that can be in a line for blunders engine.
-// This also can be expressed by the greatest depth reachable for the engine during search.
+// The greatest depth reachable for the engine during search.
+// This also expresses the maximum number of moves than can be in a line.
 // This value may change or be removed at any time.
-// TODO: transition to using a transposition table instead.
-pub const MAX_LINE_LEN: usize = 64;
+pub const MAX_DEPTH: usize = 40;
 
 /////////////////////////
 // Data and Structures //

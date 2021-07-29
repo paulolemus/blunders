@@ -4,7 +4,7 @@
 //! pre-1.0 development, so a MoveList type alias makes changes easy.
 
 use crate::arrayvec::ArrayVec;
-use crate::coretypes::MAX_LINE_LEN;
+use crate::coretypes::MAX_DEPTH;
 use crate::coretypes::MAX_MOVES;
 use crate::coretypes::{Move, MoveInfo};
 
@@ -14,4 +14,4 @@ pub type MoveList = ArrayVec<Move, MAX_MOVES>;
 pub type MoveInfoList = ArrayVec<MoveInfo, MAX_MOVES>;
 /// Line is a sequence of legal moves that can be applied to a position. Useful for retaining a principal variation
 /// found from a search.
-pub type Line = ArrayVec<Move, MAX_LINE_LEN>;
+pub type Line = ArrayVec<Move, MAX_DEPTH>;

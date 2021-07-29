@@ -4,6 +4,7 @@ use std::io;
 use std::str::FromStr;
 
 use blunders_engine;
+use blunders_engine::arrayvec::display;
 use blunders_engine::uci::{self, UciCommand, UciOption, UciOptions, UciResponse};
 use blunders_engine::{search, Fen, Position, TranspositionTable};
 
@@ -161,7 +162,7 @@ fn main() -> io::Result<()> {
                     result.elapsed.as_millis(),
                     result.nodes,
                     result.nps(),
-                    result.pv_line,
+                    display(&result.pv_line),
                 );
 
                 UciResponse::new_best_move(result.best_move).send()?;

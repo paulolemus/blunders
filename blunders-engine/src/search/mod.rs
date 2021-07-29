@@ -15,6 +15,7 @@ pub use quiescence::*;
 use std::fmt::{self, Display};
 use std::time::Duration;
 
+use crate::arrayvec;
 use crate::coretypes::{Color, Move};
 use crate::eval::Cp;
 use crate::movelist::Line;
@@ -28,7 +29,7 @@ use crate::Position;
 /// `pv_line`: The principal variation, or the line of play following the best move.
 /// `nodes`: The number of nodes visited from the search.
 /// `elapsed` Time taken to complete a search.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct SearchResult {
     pub best_move: Move,
     pub score: Cp,
@@ -50,7 +51,10 @@ impl Display for SearchResult {
         displayed.push_str("SearchResult {\n");
         displayed.push_str(&format!("    best_move: {}\n", self.best_move));
         displayed.push_str(&format!("    score    : {}\n", self.score));
-        displayed.push_str(&format!("    pv_line  : {}\n", self.pv_line));
+        displayed.push_str(&format!(
+            "    pv_line  : {}\n",
+            arrayvec::display(&self.pv_line)
+        ));
         displayed.push_str(&format!("    nodes    : {}\n", self.nodes));
         displayed.push_str(&format!(
             "    elapsed  : {}.{}s\n",

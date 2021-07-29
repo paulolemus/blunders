@@ -4,34 +4,12 @@ use std::array;
 use std::cmp::Ordering;
 use std::fmt::{self, Display};
 use std::iter::{ExactSizeIterator, FusedIterator};
+use std::mem;
+use std::ops::{Index, IndexMut};
 
-/// ArrayVec hold all items of a generic type on the stack with a fixed capacity.
-/// Guarantees:
-///
-/// * The pushed items currently in ArrayVec are contiguous, starting from internal array's 0th index.
-///
-/// "MaybeUninit<T> is guaranteed to have the same size, alignment, and ABI as T:"
-///
-/// "Arrays are laid out so that the nth element of the array is offset from the
-/// start of the array by n * the size of the type bytes.
-/// An array of [T; n] has a size of size_of::<T>() * n and the same alignment of T."
-///
-/// From the above, the arrays [T; CAP] and [MaybeUninit<T>; CAP] are guaranteed to have
-/// the same layout (size, alignment).
-///
-/// Idea:
-///
-/// Do not cast &[MaybeUninit<T>; CAP] to &[T; CAP] because it is unsound.
-/// It is UB because all T's in array are not initialized,
-/// like how `let x: usize = MaybeUninit::uninit().assume_init();` is immediately
-/// UB, even if x is never accessed.
-/// unsafe { &*(slice as *const [MaybeUninit<usize>] as *const [usize]) }
-///
-/// Todo:
-/// * Change from [Option<T>; CAP] to [MaybeUninit<T>; CAP].
-/// * impl Deref<Target=[T]>.
-#[derive(Debug, Copy, Clone)]
-pub struct ArrayVec<T: Copy + Clone, const CAPACITY: usize> {
+/// ArrayVec hold all items of a generic type contiguously on the stack with a fixed capacity.
+#[derive(Debug, Clone)]
+pub struct ArrayVec<T: Clone, const CAPACITY: usize> {
     items: [Option<T>; CAPACITY],
     size: usize,
 }
@@ -39,11 +17,47 @@ pub struct ArrayVec<T: Copy + Clone, const CAPACITY: usize> {
 // Implementation details:
 // The first size items in array will be the values in the array.
 // size points to the element after the last item, so to junk data.
-impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
+impl<T: Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
     // Associated constant to get capacity of structure at compile time.
     pub const CAP: usize = CAPACITY;
 
-    pub fn new() -> Self {
+    /// Returns an empty instance of ArrayVec.
+    /// WARNING: uses unsafe code. Needs to be thoroughly tested.
+    pub fn new() -> Self
+    where
+        T: Copy,
+    {
+        // NOTE THE FOLLOWING COMMENTED CHANGE SLOWED EXECUTION BY 20%.
+        // Iterative initialization required as [None; CAP] syntax
+        // does not work as T is not Copy. Unsafe init required.
+        // let items: [Option<T>; CAPACITY] = {
+        // Legal to assume array of MaybeUninit is initialized;
+        // It doesn't require init.  This is from std docs.
+        // let mut data: [MaybeUninit<Option<T>>; CAPACITY] =
+        //     unsafe { MaybeUninit::uninit().assume_init() };
+
+        // Each item in array is now initialized and droppable.
+        // Pointer assignment for a MaybeUninit is safe because it is not Drop,
+        // so drop does not get called on uninit memory.
+        // for item in &mut data {
+        //     *item = MaybeUninit::new(None);
+        // }
+
+        // We take a pointer to our initialized [MaybeUninit; CAP] array,
+        // and can cast it to a [Option; CAP] pointer, since the arrays are guaranteed
+        // to have the same layout.
+        // The values are read from the pointer into a valid [Option; CAP] array.
+        // The initialized Clone type T values in the [MaybeUninit; CAP] array do NOT
+        // need to be dropped, as they are logically dropped, and actually get dropped
+        // when the array [Option; CAP] gets dropped later on.
+        // unsafe {
+        //     let initialized_arr_ptr: *const [MaybeUninit<Option<T>>; CAPACITY] = &data;
+        //     let option_arr_ptr: *const [Option<T>; CAPACITY] = initialized_arr_ptr.cast();
+
+        //     ptr::read::<[Option<T>; CAPACITY]>(option_arr_ptr)
+        // }
+        // };
+
         Self {
             items: [None; CAPACITY],
             size: 0,
@@ -70,7 +84,9 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
     where
         T: PartialEq,
     {
-        self.items[0..self.size].contains(&Some(*item))
+        self.items[0..self.size]
+            .iter()
+            .any(|t| t.as_ref() == Some(item))
     }
 
     /// Appends an item to the back of the container. If the container is full, panic.
@@ -98,7 +114,7 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
         // Only process pop if container has items.
         if !self.is_empty() {
             self.size -= 1;
-            self.items[self.size]
+            mem::replace(&mut self.items[self.size], None)
         } else {
             None
         }
@@ -108,6 +124,15 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
     pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.len() {
             self.items[index].as_ref()
+        } else {
+            None
+        }
+    }
+
+    /// Returns reference to element at position `index` or None if out of bounds.
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+        if index < self.len() {
+            self.items[index].as_mut()
         } else {
             None
         }
@@ -138,7 +163,20 @@ impl<T: Copy + Clone, const CAPACITY: usize> ArrayVec<T, CAPACITY> {
     }
 }
 
-impl<T: Copy + Clone, const CAPACITY: usize> IntoIterator for ArrayVec<T, CAPACITY> {
+impl<T: Clone, const CAPACITY: usize> Index<usize> for ArrayVec<T, CAPACITY> {
+    type Output = T;
+    fn index(&self, idx: usize) -> &Self::Output {
+        self.get(idx).unwrap()
+    }
+}
+
+impl<T: Clone, const CAPACITY: usize> IndexMut<usize> for ArrayVec<T, CAPACITY> {
+    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
+        self.get_mut(idx).unwrap()
+    }
+}
+
+impl<T: Clone, const CAPACITY: usize> IntoIterator for ArrayVec<T, CAPACITY> {
     type Item = T;
     type IntoIter = IntoIter<T, CAPACITY>;
     fn into_iter(self) -> Self::IntoIter {
@@ -148,12 +186,13 @@ impl<T: Copy + Clone, const CAPACITY: usize> IntoIterator for ArrayVec<T, CAPACI
 
 /// Into Iterator type for ArrayVec. This Iterator only iterates the items currently
 /// in the consumed ArrayVec, and ignores all items beyond ArrayVec's size.
+#[derive(Debug, Clone)]
 pub struct IntoIter<T, const CAPACITY: usize> {
     it: array::IntoIter<Option<T>, CAPACITY>,
     size: usize,
 }
 
-impl<T: Copy + Clone, const CAPACITY: usize> IntoIter<T, CAPACITY> {
+impl<T: Clone, const CAPACITY: usize> IntoIter<T, CAPACITY> {
     pub fn new(array_vec: ArrayVec<T, CAPACITY>) -> Self {
         assert!(array_vec.size < CAPACITY);
         let it = std::array::IntoIter::new(array_vec.items);
@@ -162,7 +201,7 @@ impl<T: Copy + Clone, const CAPACITY: usize> IntoIter<T, CAPACITY> {
     }
 }
 
-impl<T: Copy + Clone, const CAPACITY: usize> Iterator for IntoIter<T, CAPACITY> {
+impl<T: Clone, const CAPACITY: usize> Iterator for IntoIter<T, CAPACITY> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         if self.size > 0 {
@@ -179,15 +218,15 @@ impl<T: Copy + Clone, const CAPACITY: usize> Iterator for IntoIter<T, CAPACITY> 
     }
 }
 
-impl<T: Copy + Clone, const CAPACITY: usize> ExactSizeIterator for IntoIter<T, CAPACITY> {}
-impl<T: Copy + Clone, const CAPACITY: usize> FusedIterator for IntoIter<T, CAPACITY> {}
+impl<T: Clone, const CAPACITY: usize> ExactSizeIterator for IntoIter<T, CAPACITY> {}
+impl<T: Clone, const CAPACITY: usize> FusedIterator for IntoIter<T, CAPACITY> {}
 
 /// Immutable Iterator type for ArrayVec.
 pub struct Iter<'a, T, const CAPACITY: usize> {
     it: std::slice::Iter<'a, Option<T>>,
 }
 
-impl<'a, T: Copy + Clone, const CAPACITY: usize> Iter<'a, T, CAPACITY> {
+impl<'a, T: Clone, const CAPACITY: usize> Iter<'a, T, CAPACITY> {
     /// Create a new iterator from the slice of valid items in ArrayVec.
     fn new(arrayvec: &'a ArrayVec<T, CAPACITY>) -> Self {
         let it = arrayvec.items[0..arrayvec.len()].iter();
@@ -211,7 +250,7 @@ impl<'a, T, const CAPACITY: usize> FusedIterator for Iter<'a, T, CAPACITY> {}
 /// Display for ArrayVec is the Display of each contained item, separated by a space.
 impl<T, const CAPACITY: usize> Display for ArrayVec<T, CAPACITY>
 where
-    T: Copy + Clone + Display,
+    T: Clone + Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut displayed = String::new();
@@ -227,7 +266,7 @@ where
 }
 
 /// Defaults to an empty ArrayVec.
-impl<T: Copy + Clone, const CAPACITY: usize> Default for ArrayVec<T, CAPACITY> {
+impl<T: Clone + Copy, const CAPACITY: usize> Default for ArrayVec<T, CAPACITY> {
     fn default() -> Self {
         Self::new()
     }

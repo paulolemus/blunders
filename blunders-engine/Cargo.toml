@@ -13,9 +13,10 @@ version = "0.1.0"
 [dependencies]
 # Pseudorandom numbers for Zobrist Hashing. TODO: optionally remove to precompute.
 rand = "0.8.4" 
+arrayvec = "0.7.1"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.3.5"
 num_cpus = "1.13"
 
 [[bench]]

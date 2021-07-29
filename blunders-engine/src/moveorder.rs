@@ -62,14 +62,16 @@ impl Default for OrderStrategy {
     }
 }
 
-/// Order all moves in a container completely, with best moves at front.
+/// Order all moves in a container completely, in order of worst move to best move.
+/// Best moves are near the end to allow for iterating from best to worst move by using
+/// `while let Some(move_) = move_list.pop() ...` or `for move_ in move_list.into_iter().rev() ...`
 pub(crate) fn order_all_moves(
     position: &Position,
     legal_moves: MoveList,
     hash: HashKind,
     tt: &TranspositionTable,
 ) -> MoveList {
-    let mut ordering_vec = ArrayVec::<(Move, Reverse<OrderStrategy>), MAX_MOVES>::new();
+    let mut ordering_vec = ArrayVec::<(Move, OrderStrategy), MAX_MOVES>::new();
     let maybe_key_move = tt.get(hash).and_then(|tt_info| Some(tt_info.key_move));
 
     // For each move, gather data needed to order, and push into a new ArrayVec.
@@ -97,13 +99,11 @@ pub(crate) fn order_all_moves(
             );
         }
 
-        ordering_vec.push((legal_move, Reverse(order_strategy)));
+        ordering_vec.push((legal_move, order_strategy));
     }
 
     // Sort all moves using their OrderStrategy as a key.
-    // Since OrderStrategy has been reversed, the most valuable moves will be
-    // closer to the head of the list.
-    ordering_vec.sort_unstable_by(|left, right| left.1.cmp(&right.1));
+    ordering_vec.sort_unstable_by_key(|pair| pair.1);
 
     // Extract Moves from ordering_vec.
     let mut ordered_move_list = MoveList::new();
@@ -129,10 +129,10 @@ mod tests {
         let num_moves = 24; // Checked manually.
         let tt = TranspositionTable::new();
         let hash = tt.generate_hash(&pos);
-        let ordered_legal_moves = order_all_moves(&pos, pos.get_legal_moves(), hash, &tt);
+        let mut ordered_legal_moves = order_all_moves(&pos, pos.get_legal_moves(), hash, &tt);
 
         assert_eq!(ordered_legal_moves.len(), num_moves);
-        assert_eq!(*ordered_legal_moves.get(0).unwrap(), capture);
+        assert_eq!(ordered_legal_moves.pop().unwrap(), capture);
     }
 
     #[test]
