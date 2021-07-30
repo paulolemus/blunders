@@ -302,15 +302,18 @@ pub fn iterative_negamax(
     let instant = Instant::now(); // Timer for search
     let root_player = *position.player(); // Keep copy of root player for assertions
 
+    // Early Stop variables
+    let nodes_per_stop_check = 2000; // Number of nodes between updates to stopped flag
+    let stopped = false; // Indicates if search was stopped
+    let mut stop_check_counter = nodes_per_stop_check; // When this hits 0, update stopped and reset
+
     // Metrics
     let mut nodes: u64 = 0; // Number of nodes created
 
     // Stack holds frame data, where each ply gets one frame.
     // Size is +1 because the 0th index holds the PV so far for root position.
-    // 0th Idx: Root PV (root passes PV to parent).
-    // 1st Idx: Root data frame.
-    const BASE_IDX: usize = 0;
-    const ROOT_IDX: usize = 1;
+    const BASE_IDX: usize = 0; // Root passes PV to this parent frame
+    const ROOT_IDX: usize = 1; // Root position data frame
     let mut stack: ArrayVec<Frame, { MAX_DEPTH + 1 }> = ArrayVec::new();
     // Fill stack with default values to navigate, opposed to pushing and popping.
     while !stack.is_full() {
@@ -324,8 +327,7 @@ pub fn iterative_negamax(
     }
 
     // Frame indexer, begins at 1 (root) as 0 is for global pv.
-    // Incrementing -> recurse to child
-    // Decrementing -> return to parent
+    // Incrementing -> recurse to child, Decrementing -> return to parent.
     let mut frame_idx: usize = ROOT_IDX;
 
     // MAIN ITERATIVE LOOP
@@ -338,6 +340,18 @@ pub fn iterative_negamax(
 
         let label: Label = us.label;
 
+        // If stopped flag is ever set, breaking ends search early.
+        if stopped {
+            break;
+        }
+
+        // Stop Check: Before processing, check if search has been told to stop.
+        // It is safe to stop at anytime outside of the processing modes below.
+        if label == Label::Initialize && stop_check_counter <= 0 {
+            stop_check_counter = nodes_per_stop_check;
+            // LOAD the atomic bool value to local stopped variable.
+        }
+
         // INITIALIZE MODE
         // A new node has been created.
         // If it is terminal, a leaf, or has been evaluated in the past,
@@ -346,9 +360,11 @@ pub fn iterative_negamax(
         //
         // Flow: Return eval to parent || set self to search mode
         if Label::Initialize == label {
+            stop_check_counter -= 1;
+            nodes += 1;
+
             let legal_moves = position.get_legal_moves();
             let num_moves = legal_moves.len();
-            nodes += 1;
 
             // This position has no best move.
             // Store its evaluation and tell parent to retrieve value.

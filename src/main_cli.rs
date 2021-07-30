@@ -129,7 +129,7 @@ fn main() -> io::Result<()> {
 
             // Have computer play its response.
             println!("{}\nthinking...", position);
-            let result = search::search_with_tt(position, 8, &mut tt);
+            let result = search::search(position, 8, &mut tt);
             move_history.push(position.do_move(result.best_move));
 
             // Check if engine check or stalemated.

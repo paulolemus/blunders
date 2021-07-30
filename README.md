@@ -71,3 +71,13 @@ Run expensive tests: `cargo test --all -- --ignored` or `cargo test --all --rele
 # Benchmarking Blunders
 
 Blunders has some simple benchmarks that can be run with `cargo bench --all`.
+
+# Checklist for 1.0
+
+- [ ] Develop stable engine API
+- [ ] Support single and multithreaded search
+- [ ] Blocking and non-blocking `search`
+- [ ] Compile for WASM
+- [ ] Add Blunders non-UCI commands for GUI-less play vs engine
+- [ ] Clean library docs for `blunders-engine`
+- [ ] Write User Starting Guide

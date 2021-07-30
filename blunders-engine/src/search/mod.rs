@@ -68,13 +68,7 @@ impl Display for SearchResult {
 }
 
 /// Blunders Engine primary position search function. WIP.
-pub fn search(position: Position, ply: u32) -> SearchResult {
-    assert_ne!(ply, 0);
-    ids(position, ply)
-}
-
-/// Blunders Engine primary position search function. WIP.
-pub fn search_with_tt(position: Position, ply: u32, tt: &mut TranspositionTable) -> SearchResult {
+pub fn search(position: Position, ply: u32, tt: &mut TranspositionTable) -> SearchResult {
     assert_ne!(ply, 0);
     ids_with_tt(position, ply, tt)
 }
