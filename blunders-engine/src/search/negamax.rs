@@ -1,5 +1,7 @@
 //! Negamax implementation of Minimax with Alpha-Beta pruning.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::arrayvec::{self, ArrayVec};
@@ -17,21 +19,11 @@ use crate::Position;
 /// Internally, Negamax treats the active player as the maxing player,
 /// however the final centipawn score of the position returned is
 /// absolute with White as maxing and Black as minning.
-pub fn negamax(position: Position, ply: u32) -> SearchResult {
-    let mut tt = TranspositionTable::new();
-    negamax_with_tt(position, ply, &mut tt)
-}
-
-/// Negamax implementation that uses provided transposition table.
-pub fn negamax_with_tt(
-    mut position: Position,
-    ply: u32,
-    tt: &mut TranspositionTable,
-) -> SearchResult {
+pub fn negamax(mut position: Position, ply: u32, tt: &mut TranspositionTable) -> SearchResult {
     assert_ne!(ply, 0);
     assert!(ply < MAX_DEPTH as u32);
 
-    let active_player = *position.player();
+    let root_player = *position.player();
     let hash = tt.generate_hash(&position);
     let instant = Instant::now();
 
@@ -50,11 +42,14 @@ pub fn negamax_with_tt(
     );
 
     SearchResult {
+        player: root_player,
+        depth: ply,
         best_move: *pv_line.get(0).unwrap(),
-        score: best_score * active_player.sign(),
+        score: best_score * root_player.sign(),
         pv_line,
         nodes,
         elapsed: instant.elapsed(),
+        stopped: false,
     }
 }
 
@@ -292,7 +287,8 @@ pub fn iterative_negamax(
     mut position: Position,
     ply: u32,
     tt: &mut TranspositionTable,
-) -> SearchResult {
+    stopper: Arc<AtomicBool>,
+) -> Option<SearchResult> {
     // Guard: must have a valid searchable ply, and root position must not be terminal.
     assert_ne!(ply, 0);
     assert!(ply < MAX_DEPTH as u32);
@@ -304,7 +300,7 @@ pub fn iterative_negamax(
 
     // Early Stop variables
     let nodes_per_stop_check = 2000; // Number of nodes between updates to stopped flag
-    let stopped = false; // Indicates if search was stopped
+    let mut stopped = false; // Indicates if search was stopped
     let mut stop_check_counter = nodes_per_stop_check; // When this hits 0, update stopped and reset
 
     // Metrics
@@ -320,11 +316,8 @@ pub fn iterative_negamax(
         stack.push(Default::default());
     }
     // Set initial valid root parameters.
-    {
-        let root_frame: &mut Frame = &mut stack[ROOT_IDX];
-        root_frame.label = Label::Initialize;
-        root_frame.hash = tt.generate_hash(&position);
-    }
+    stack[ROOT_IDX].label = Label::Initialize;
+    stack[ROOT_IDX].hash = tt.generate_hash(&position);
 
     // Frame indexer, begins at 1 (root) as 0 is for global pv.
     // Incrementing -> recurse to child, Decrementing -> return to parent.
@@ -334,22 +327,19 @@ pub fn iterative_negamax(
     while frame_idx > 0 {
         // Take a mut sliding window view into the stack.
         let (parent, us, child) = split_window_frames(&mut stack, frame_idx);
-
         // How many ply left to target depth.
         let remaining_ply = ply - curr_ply(frame_idx);
-
         let label: Label = us.label;
-
-        // If stopped flag is ever set, breaking ends search early.
-        if stopped {
-            break;
-        }
 
         // Stop Check: Before processing, check if search has been told to stop.
         // It is safe to stop at anytime outside of the processing modes below.
         if label == Label::Initialize && stop_check_counter <= 0 {
             stop_check_counter = nodes_per_stop_check;
-            // LOAD the atomic bool value to local stopped variable.
+            stopped = stopper.load(Ordering::Acquire);
+        }
+        // If stopped flag is ever set, breaking ends search early.
+        if stopped {
+            break;
         }
 
         // INITIALIZE MODE
@@ -513,19 +503,25 @@ pub fn iterative_negamax(
         }
     }
 
-    // Check that the position has returned to its original state.
-    assert_eq!(*position.player(), root_player);
-
-    // Extract values from stack.
-    let result = SearchResult {
-        best_move: stack[ROOT_IDX].best_move,
-        score: stack[ROOT_IDX].best_score * root_player.sign(),
-        pv_line: stack[BASE_IDX].local_pv.clone(),
-        nodes,
-        elapsed: instant.elapsed(),
-    };
-
-    result
+    // The search may not run to completion. If at any point the Root node's PV gets updated,
+    // the base will have a non-zero length PV as the default is zero length.
+    // This PV can be returned as a best guess. If this is coming from iterative deepening
+    // this partial-search PV is guaranteed to be at least more accurate than what came from
+    // a lesser depth, as long as the previous depth PV was searched first.
+    if stack[BASE_IDX].local_pv.len() == 0 {
+        None
+    } else {
+        Some(SearchResult {
+            player: root_player,
+            depth: ply,
+            best_move: stack[ROOT_IDX].best_move,
+            score: stack[ROOT_IDX].best_score * root_player.sign(),
+            pv_line: stack[BASE_IDX].local_pv.clone(),
+            nodes,
+            elapsed: instant.elapsed(),
+            stopped,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -541,7 +537,8 @@ mod tests {
             Position::parse_fen("r4rk1/1b3ppp/pp2p3/2p5/P1B1NR1Q/3P3P/2q3P1/7K w - - 0 24")
                 .unwrap();
 
-        let result = negamax(position, 6);
+        let mut tt = TranspositionTable::new();
+        let result = negamax(position, 6, &mut tt);
         assert_eq!(result.score.leading(), Some(Color::White));
         assert_eq!(result.best_move, Move::new(E4, F6, None));
         println!("{:?}", result.pv_line);

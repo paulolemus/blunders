@@ -1,5 +1,7 @@
 //! Iterative Deepening Search.
 
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::coretypes::{Move, Square::*};
@@ -10,15 +12,16 @@ use crate::search::SearchResult;
 use crate::transposition::{NodeKind, TranspositionInfo, TranspositionTable};
 use crate::Position;
 
-/// Run Iterative Deepening search on a root position to depth "ply".
+/// Run Iterative Deepening search on a root position to depth "ply" using
+/// a persistent transposition table.
 /// It returns the best move and score for the position in the search tree.
-pub fn ids(position: Position, ply: u32) -> SearchResult {
-    let mut tt = TranspositionTable::new();
-    ids_with_tt(position, ply, &mut tt)
-}
-
-/// Run Iterative Deepening search to depth "ply" using a persistent transposition table.
-pub fn ids_with_tt(position: Position, ply: u32, tt: &mut TranspositionTable) -> SearchResult {
+/// TODO: Bug fix, returns invalid result in case where stopper was set too quickly.
+pub fn ids(
+    position: Position,
+    ply: u32,
+    tt: &mut TranspositionTable,
+    stopper: Arc<AtomicBool>,
+) -> SearchResult {
     assert_ne!(ply, 0);
 
     let hash = tt.generate_hash(&position);
@@ -28,19 +31,34 @@ pub fn ids_with_tt(position: Position, ply: u32, tt: &mut TranspositionTable) ->
 
     // Invalid default values, will be overwritten after each loop.
     let mut search_result = SearchResult {
+        player: position.player,
+        depth: ply,
         best_move: Move::new(A1, H7, None),
         score: Cp(0),
         pv_line: Line::new(),
         nodes,
         elapsed: instant.elapsed(),
+        stopped: true,
     };
 
     // Run a search for each ply from 1 to target ply.
     // After each search, ensure that the principal variation from the previous
     // iteration is in the tt.
     for ids_ply in 1..=ply {
-        search_result = search::iterative_negamax(position, ids_ply, tt);
-        nodes += search_result.nodes;
+        let maybe_result = search::iterative_negamax(position, ids_ply, tt, Arc::clone(&stopper));
+
+        // Use the most recent valid search_result,
+        // and return early if search_result is flagged as stopped.
+        if let Some(result) = maybe_result {
+            nodes += result.nodes;
+            search_result = result;
+
+            if search_result.stopped {
+                break;
+            }
+        } else {
+            break;
+        }
 
         // The length of the pv_line should be the same as the depth searched to
         // if a game-ending line was not found.
@@ -52,7 +70,7 @@ pub fn ids_with_tt(position: Position, ply: u32, tt: &mut TranspositionTable) ->
         let mut position = position.clone();
         let mut hash = hash.clone();
         let mut move_ply = ids_ply.clone();
-        let mut relative_pv_score = search_result.score * position.player.sign();
+        let mut relative_pv_score = search_result.relative_score();
         let pv_line = search_result.pv_line.clone();
 
         // For each move in PV, TranspositionInfo is recreated from the current position,

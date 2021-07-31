@@ -23,11 +23,14 @@ pub fn alpha_beta(position: Position, ply: u32) -> SearchResult {
     pv_line.push(best_move);
 
     SearchResult {
+        player: position.player,
+        depth: ply,
         best_move,
         score,
         pv_line,
         nodes,
         elapsed: instant.elapsed(),
+        stopped: false,
     }
 }
 

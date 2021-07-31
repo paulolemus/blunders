@@ -1,3 +1,5 @@
+use std::sync::{atomic::AtomicBool, Arc};
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use blunders_engine::coretypes::{Color::*, Move, Square::*};
@@ -26,7 +28,8 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
 
     c.bench_function("mates_3_sac_knight_negamax", |b| {
         b.iter(|| {
-            let result = search::negamax(black_box(pos), black_box(ply));
+            let mut tt = TranspositionTable::new();
+            let result = search::negamax(black_box(pos), black_box(ply), black_box(&mut tt));
 
             assert_eq!(result.score.leading(), lead);
             assert_eq!(result.best_move, bm);
@@ -36,7 +39,14 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
     c.bench_function("mates_3_sac_knight_iter_negamax", |b| {
         b.iter(|| {
             let mut tt = TranspositionTable::new();
-            let result = search::iterative_negamax(black_box(pos), black_box(ply), &mut tt);
+            let stopper = Arc::new(AtomicBool::new(false));
+            let result = search::iterative_negamax(
+                black_box(pos),
+                black_box(ply),
+                black_box(&mut tt),
+                black_box(stopper),
+            )
+            .unwrap();
 
             assert_eq!(result.score.leading(), lead);
             assert_eq!(result.best_move, bm);
@@ -45,7 +55,14 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
 
     c.bench_function("mates_3_sac_knight_ids", |b| {
         b.iter(|| {
-            let result = search::ids(black_box(pos), black_box(ply));
+            let mut tt = TranspositionTable::new();
+            let stopper = Arc::new(AtomicBool::new(false));
+            let result = search::ids(
+                black_box(pos),
+                black_box(ply),
+                black_box(&mut tt),
+                black_box(stopper),
+            );
 
             assert_eq!(result.score.leading(), lead);
             assert_eq!(result.best_move, bm);
@@ -73,7 +90,8 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
 
     c.bench_function("mates_3_knights_and_bishop_negamax", |b| {
         b.iter(|| {
-            let result = search::negamax(black_box(pos), black_box(ply));
+            let mut tt = TranspositionTable::new();
+            let result = search::negamax(black_box(pos), black_box(ply), black_box(&mut tt));
 
             assert_eq!(result.score.leading(), lead);
             assert_eq!(result.best_move, bm);
@@ -83,7 +101,14 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
     c.bench_function("mates_3_knights_and_bishop_iter_negamax", |b| {
         b.iter(|| {
             let mut tt = TranspositionTable::new();
-            let result = search::iterative_negamax(black_box(pos), black_box(ply), &mut tt);
+            let stopper = Arc::new(AtomicBool::new(false));
+            let result = search::iterative_negamax(
+                black_box(pos),
+                black_box(ply),
+                black_box(&mut tt),
+                black_box(stopper),
+            )
+            .unwrap();
 
             assert_eq!(result.score.leading(), lead);
             assert_eq!(result.best_move, bm);
@@ -92,7 +117,14 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
 
     c.bench_function("mates_3_knights_and_bishop_ids", |b| {
         b.iter(|| {
-            let result = search::ids(black_box(pos), black_box(ply));
+            let mut tt = TranspositionTable::new();
+            let stopper = Arc::new(AtomicBool::new(false));
+            let result = search::ids(
+                black_box(pos),
+                black_box(ply),
+                black_box(&mut tt),
+                black_box(stopper),
+            );
 
             assert_eq!(result.score.leading(), lead);
             assert_eq!(result.best_move, bm);
