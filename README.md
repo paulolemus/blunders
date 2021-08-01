@@ -3,6 +3,16 @@
 A Universal Chess Interface ([UCI](https://www.shredderchess.com/chess-features/uci-universal-chess-interface.html)) chess engine.  
 Blunders is currently a work in progress.
 
+## Current Features
+* Iterative negamax search with alpha-beta pruning
+* Iterative deepening search
+* Non-blocking, stoppable search
+* Transposition Table
+* Bitboard position representation
+* Incremental Zobrist hashing
+* Responsive UCI compatible I/O
+* FEN string parsing
+
 # Building and running Blunders
 
 Blunders supports Windows 10 and Linux, the following commands should work on both platforms. Building for MacOS is untested.
@@ -81,3 +91,22 @@ Blunders has some simple benchmarks that can be run with `cargo bench --all`.
 - [ ] Add Blunders non-UCI commands for GUI-less play vs engine
 - [ ] Clean library docs for `blunders-engine`
 - [ ] Write User Starting Guide
+
+# License
+
+This project is licensed under GNU GPL v3.0.
+
+    Copyright (C) 2021  Paulo Lemus
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.

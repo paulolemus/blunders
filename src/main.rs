@@ -93,8 +93,12 @@ fn panic_hook() {
     }));
 }
 
+const NAME: &'static str = env!("CARGO_PKG_NAME");
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const AUTHOR: &'static str = env!("CARGO_PKG_AUTHORS");
+
 fn main() -> io::Result<()> {
-    println!("Blunders 0.1.0 by Paulo L");
+    println!("{} {} by {}", NAME, VERSION, AUTHOR);
 
     // Hook to print errors to STDOUT.
     panic_hook();
