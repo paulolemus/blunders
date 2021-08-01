@@ -229,10 +229,8 @@ fn main() -> io::Result<()> {
                         // Engine debug mode was set.
                         } else if option.name == "Debug" {
                             let new_debug_value = option.check().value;
-                            uci::debug(
-                                debug | new_debug_value,
-                                &format!("setoption Debug {}", new_debug_value),
-                            )?;
+                            let response = format!("setoption Debug {}", new_debug_value);
+                            uci::debug(debug | new_debug_value, &response)?;
                             debug = new_debug_value;
                         }
                     }
@@ -249,8 +247,9 @@ fn main() -> io::Result<()> {
 
                 // Begin a search with provided parameters. Only search if are no other active searches.
                 UciCommand::Go(_search_ctrl) => {
+                    // TODO: When receive a go command, STOP the current search, wait for it, then start a new one
                     if search_handle.is_none() {
-                        uci::debug(debug, "go handle is none, starting search")?;
+                        uci::debug(debug, "go starting search...")?;
                         // Ensure stopper is not set before starting search.
                         stopper.store(false, Ordering::SeqCst);
 
@@ -263,7 +262,6 @@ fn main() -> io::Result<()> {
                             sender.clone(),
                         );
                         search_handle = Some(handle);
-                        uci::debug(debug, "go started search, set handle")?;
                     } else {
                         uci::error("search already in progress. Cannot begin new search")?;
                     }
