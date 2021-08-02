@@ -183,8 +183,8 @@ pub fn king_safety(position: &Position) -> Cp {
     let w_king = position.pieces[(White, King)];
     let b_king = position.pieces[(Black, King)];
 
-    let w_king_open_squares = mg::queen_attacks(&w_king, &occupied).count_squares();
-    let b_king_open_squares = mg::queen_attacks(&b_king, &occupied).count_squares();
+    let w_king_open_squares = mg::queen_attacks(w_king, occupied).count_squares();
+    let b_king_open_squares = mg::queen_attacks(b_king, occupied).count_squares();
 
     // The more sliding pieces the enemy has, the more value each open square has.
     let w_value = b_king_open_squares * w_num_sliding / 2;
@@ -198,8 +198,8 @@ pub fn king_safety(position: &Position) -> Cp {
 
 /// Return value of number of moves that can be made from a position.
 pub fn mobility(position: &Position) -> Cp {
-    let w_attacks = position.attacks(&White, &position.pieces().occupied());
-    let b_attacks = position.attacks(&Black, &position.pieces().occupied());
+    let w_attacks = position.attacks(White, position.pieces().occupied());
+    let b_attacks = position.attacks(Black, position.pieces().occupied());
 
     let attack_surface_area_diff =
         w_attacks.count_squares() as i32 - b_attacks.count_squares() as i32;

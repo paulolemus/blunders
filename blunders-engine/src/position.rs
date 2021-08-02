@@ -120,7 +120,7 @@ impl Position {
 
     /// Updates the En-Passant position square, and handles any en-passant capture.
     /// En Passant square is set after any double pawn push.
-    fn update_en_passant(&mut self, move_: &Move, active_piece: &Piece, move_info: &mut MoveInfo) {
+    fn update_en_passant(&mut self, move_: &Move, active_piece: Piece, move_info: &mut MoveInfo) {
         // Non-pawn pushes set to None.
         if active_piece.piece_kind != Pawn {
             self.en_passant = None;
@@ -128,7 +128,7 @@ impl Position {
         }
         let pawn = Bitboard::from(move_.from);
         let to = Bitboard::from(move_.to);
-        let double_push = mg::pawn_double_pushes(&pawn, &active_piece.color);
+        let double_push = mg::pawn_double_pushes(pawn, active_piece.color);
 
         // Handle en passant capture. A pawn moving to an en-passant square is
         // only possible in en-passant capture.
@@ -136,15 +136,14 @@ impl Position {
             if move_.to == *ep_square {
                 move_info.move_kind = MoveKind::EnPassant;
                 let passive_player = !active_piece.color;
-                let captured_pawn = mg::pawn_single_pushes(&to, &passive_player);
+                let captured_pawn = mg::pawn_single_pushes(to, passive_player);
                 self.pieces[(passive_player, Pawn)].remove(&captured_pawn);
             }
         }
 
         // Set en passant square.
         if to == double_push {
-            self.en_passant =
-                mg::pawn_single_pushes(&pawn, &active_piece.color).get_lowest_square();
+            self.en_passant = mg::pawn_single_pushes(pawn, active_piece.color).get_lowest_square();
         } else {
             self.en_passant = None;
         }
@@ -158,7 +157,7 @@ impl Position {
         let is_pawn_move = *active_piece.piece_kind() == Pawn;
         let is_capture = {
             let passive_player = !active_piece.color;
-            self.pieces()[&passive_player]
+            self.pieces()[passive_player]
                 .iter()
                 .any(|bb| bb.has_square(move_.to()))
         };
@@ -206,7 +205,7 @@ impl Position {
 
         // These always get updated, regardless of move.
         // Note: Do not use self.player, instead refer to active_piece.color.
-        self.update_en_passant(&move_, &active_piece, &mut move_info);
+        self.update_en_passant(&move_, active_piece, &mut move_info);
         self.update_move_counters(&move_, &active_piece);
         self.pieces[&active_piece].clear_square(move_.from);
         self.player = !self.player;
@@ -322,7 +321,7 @@ impl Position {
                     .en_passant
                     .expect("MoveKind is EnPassant, but en_passant square is not set.");
                 let ep_bb = Bitboard::from(ep_square);
-                let original_bb = mg::pawn_single_pushes(&ep_bb, &!player);
+                let original_bb = mg::pawn_single_pushes(ep_bb, !player);
                 self.pieces[(!player, Pawn)] |= original_bb;
             }
 
@@ -395,48 +394,48 @@ impl Position {
     pub fn num_active_king_checks(&self) -> u32 {
         let king_bb = self.pieces[(self.player, King)];
         let king_square = king_bb.get_lowest_square().unwrap();
-        let king_attackers = self.attackers_to(&king_square, &!self.player);
+        let king_attackers = self.attackers_to(king_square, !self.player);
         king_attackers.count_squares()
     }
 
     /// Returns bitboard with positions of all pieces of a player attacking a square.
     /// Assumes there is no overlap for pieces of a color.
-    pub fn attackers_to(&self, target: &Square, attacking: &Color) -> Bitboard {
-        let pawns = self.pieces[(*attacking, Pawn)];
-        let knights = self.pieces[(*attacking, Knight)];
-        let king = self.pieces[(*attacking, King)];
-        let bishops = self.pieces[(*attacking, Bishop)];
-        let rooks = self.pieces[(*attacking, Rook)];
-        let queens = self.pieces[(*attacking, Queen)];
+    pub fn attackers_to(&self, target: Square, attacking: Color) -> Bitboard {
+        let pawns = self.pieces[(attacking, Pawn)];
+        let knights = self.pieces[(attacking, Knight)];
+        let king = self.pieces[(attacking, King)];
+        let bishops = self.pieces[(attacking, Bishop)];
+        let rooks = self.pieces[(attacking, Rook)];
+        let queens = self.pieces[(attacking, Queen)];
 
         let occupied = self.pieces().occupied();
 
-        mg::pawn_attackers_to(target, &pawns, &attacking)
-            | mg::knight_attackers_to(target, &knights)
-            | mg::king_attackers_to(target, &king)
-            | mg::bishop_attackers_to(target, &bishops, &occupied)
-            | mg::rook_attackers_to(target, &rooks, &occupied)
-            | mg::queen_attackers_to(target, &queens, &occupied)
+        mg::pawn_attackers_to(target, pawns, attacking)
+            | mg::knight_attackers_to(target, knights)
+            | mg::king_attackers_to(target, king)
+            | mg::bishop_attackers_to(target, bishops, occupied)
+            | mg::rook_attackers_to(target, rooks, occupied)
+            | mg::queen_attackers_to(target, queens, occupied)
     }
 
     /// Returns true if target square is attacked by any piece of attacking color.
-    pub fn is_attacked_by(&self, target: &Square, attacking: &Color) -> bool {
+    pub fn is_attacked_by(&self, target: Square, attacking: Color) -> bool {
         self.attackers_to(target, attacking).count_squares() > 0
     }
 
     /// Returns bitboard with all squares attacked by a player's pieces.
-    pub fn attacks(&self, attacking: &Color, occupied: &Bitboard) -> Bitboard {
-        let pawns = self.pieces[(*attacking, Pawn)];
-        let knights = self.pieces[(*attacking, Knight)];
-        let king = self.pieces[(*attacking, King)];
-        let rooks = self.pieces[(*attacking, Rook)];
-        let bishops = self.pieces[(*attacking, Bishop)];
-        let queens = self.pieces[(*attacking, Queen)];
+    pub fn attacks(&self, attacking: Color, occupied: Bitboard) -> Bitboard {
+        let pawns = self.pieces[(attacking, Pawn)];
+        let knights = self.pieces[(attacking, Knight)];
+        let king = self.pieces[(attacking, King)];
+        let rooks = self.pieces[(attacking, Rook)];
+        let bishops = self.pieces[(attacking, Bishop)];
+        let queens = self.pieces[(attacking, Queen)];
 
-        mg::pawn_attacks(&pawns, &attacking)
-            | mg::knight_attacks(&knights)
-            | mg::king_attacks(&king)
-            | mg::slide_attacks(&queens, &rooks, &bishops, &occupied)
+        mg::pawn_attacks(pawns, attacking)
+            | mg::knight_attacks(knights)
+            | mg::king_attacks(king)
+            | mg::slide_attacks(queens, rooks, bishops, occupied)
     }
 
     /// Returns a list of all legal moves for active player in current position.
@@ -467,13 +466,13 @@ impl Position {
         // Sliding pieces x-ray king.
         let passive_player = !self.player;
         let occupied_without_king = self.pieces.occupied() & !king;
-        let attacked = self.attacks(&passive_player, &occupied_without_king);
+        let attacked = self.attacks(passive_player, occupied_without_king);
 
         // Filter illegal moves from pseudo-legal king moves.
         // King cannot move into attacked square, or into piece of same color.
-        let mut possible_moves = mg::king_attacks(&king);
+        let mut possible_moves = mg::king_attacks(king);
         possible_moves.remove(&attacked);
-        possible_moves.remove(&self.pieces.color_occupied(&self.player));
+        possible_moves.remove(&self.pieces.color_occupied(self.player));
 
         // Convert remaining move squares into Move structs.
         let mut legal_moves = MoveList::new(); // Eight max possible moves.
@@ -495,14 +494,14 @@ impl Position {
         let king = self.pieces[(self.player, King)];
         let king_square = king.get_lowest_square().unwrap();
         let passive_player = !self.player;
-        let us = self.pieces.color_occupied(&self.player);
-        let them = self.pieces.color_occupied(&passive_player);
+        let us = self.pieces.color_occupied(self.player);
+        let them = self.pieces.color_occupied(passive_player);
         let occupied = self.pieces.occupied();
 
         // Generate all legal king moves.
         let occupied_without_king = occupied & !king;
-        let attacked_xray_king = self.attacks(&passive_player, &occupied_without_king);
-        let mut possible_moves = mg::king_attacks(&king);
+        let attacked_xray_king = self.attacks(passive_player, occupied_without_king);
+        let mut possible_moves = mg::king_attacks(king);
         possible_moves.remove(&attacked_xray_king);
         possible_moves.remove(&us);
         for to in possible_moves {
@@ -546,7 +545,7 @@ impl Position {
             .into_iter()
             .filter(|pseudo_move| {
                 let move_info = position.do_move(*pseudo_move);
-                let is_legal = !position.is_attacked_by(&king_square, &passive_player);
+                let is_legal = !position.is_attacked_by(king_square, passive_player);
                 position.undo_move(move_info);
                 is_legal
             })
@@ -570,10 +569,10 @@ impl Position {
         let king = self.pieces[(self.player, King)];
         let king_square = king.get_lowest_square().unwrap();
         let passive_player = !self.player;
-        let us = self.pieces.color_occupied(&self.player);
-        let them = self.pieces.color_occupied(&passive_player);
+        let us = self.pieces.color_occupied(self.player);
+        let them = self.pieces.color_occupied(passive_player);
         let occupied = us | them;
-        let attacked = self.attacks(&passive_player, &occupied);
+        let attacked = self.attacks(passive_player, occupied);
 
         let (absolute_pins, _pinned_moves) = {
             let queens = self.pieces[(passive_player, Queen)];
@@ -602,7 +601,7 @@ impl Position {
         mg::rook_pseudo_moves(&mut legal_moves, rooks_free, occupied, us);
 
         // Generate all normal legal king moves.
-        let mut king_tos = mg::king_attacks(&king);
+        let mut king_tos = mg::king_attacks(king);
         king_tos.remove(&us);
         king_tos.remove(&attacked);
         for to in king_tos {
@@ -632,7 +631,7 @@ impl Position {
             .into_iter()
             .filter(|pseudo_move| {
                 let move_info = position.do_move(*pseudo_move);
-                let is_legal = !position.is_attacked_by(&king_square, &passive_player);
+                let is_legal = !position.is_attacked_by(king_square, passive_player);
                 position.undo_move(move_info);
                 is_legal
             })

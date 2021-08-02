@@ -81,7 +81,7 @@ impl PieceSets {
     }
 
     /// Return a bitboard representing the set of squares occupied by piece of color.
-    pub fn color_occupied(&self, color: &Color) -> Bitboard {
+    pub fn color_occupied(&self, color: Color) -> Bitboard {
         self[color].iter().fold(Bitboard::EMPTY, |acc, bb| acc | bb)
     }
 
@@ -200,32 +200,11 @@ impl IndexMut<&(Color, PieceKind)> for PieceSets {
 /// ```rust
 /// # use blunders_engine::{coretypes::Color, boardrepr::PieceSets, bitboard::Bitboard};
 /// let ps = PieceSets::start_position();
-/// let w_slice = &ps[&Color::White];
-/// let b_slice = &ps[&Color::Black];
+/// let w_slice = &ps[Color::White];
+/// let b_slice = &ps[Color::Black];
 /// assert_eq!(b_slice.len(), w_slice.len());
 /// assert_eq!(b_slice.len(), 6);
 /// ```
-impl Index<&Color> for PieceSets {
-    type Output = [Bitboard];
-    fn index(&self, color: &Color) -> &Self::Output {
-        const RANGES: (Range<usize>, Range<usize>) = color_ranges();
-        match color {
-            White => &self.pieces[RANGES.0],
-            Black => &self.pieces[RANGES.1],
-        }
-    }
-}
-
-impl IndexMut<&Color> for PieceSets {
-    fn index_mut(&mut self, color: &Color) -> &mut Self::Output {
-        const RANGES: (Range<usize>, Range<usize>) = color_ranges();
-        match color {
-            White => &mut self.pieces[RANGES.0],
-            Black => &mut self.pieces[RANGES.1],
-        }
-    }
-}
-
 impl Index<Color> for PieceSets {
     type Output = [Bitboard];
     fn index(&self, color: Color) -> &Self::Output {
@@ -293,7 +272,7 @@ mod tests {
     #[test]
     fn piece_indexing() {
         let pieces = PieceSets::start_position();
-        let w_king = &pieces[&Piece::new(White, King)];
+        let w_king = &pieces[Piece::new(White, King)];
         assert_eq!(w_king.count_squares(), 1);
         assert!(w_king.has_square(E1));
     }

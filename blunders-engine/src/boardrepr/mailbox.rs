@@ -86,7 +86,7 @@ impl Mailbox {
 
             for file in 0..Self::FILES {
                 pretty.push(match self[rank * Self::RANKS + file] {
-                    Some(ref piece) => char::from(piece),
+                    Some(piece) => char::from(piece),
                     None => ' ',
                 });
                 pretty.push_str(" | ");
