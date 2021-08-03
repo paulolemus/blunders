@@ -4,8 +4,8 @@ use std::cmp;
 use std::time::Instant;
 
 use crate::coretypes::Color::*;
-use crate::coretypes::{Move, Square};
-use crate::eval::{evaluate_abs, terminal_abs, Cp};
+use crate::coretypes::{Cp, Move, Square};
+use crate::eval::{evaluate_abs, terminal_abs};
 use crate::movelist::Line;
 use crate::search::SearchResult;
 use crate::Position;

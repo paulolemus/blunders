@@ -7,82 +7,11 @@
 //! A relative score treats the player to move as the maxing player, so if it is
 //! Black to move, +10 is winning for Black.
 
-use std::fmt::{self, Display};
-use std::ops::{Add, AddAssign, Mul, Neg, Sub};
-
 use crate::bitboard::{self, Bitboard};
-use crate::coretypes::{Color, PieceKind, SquareIndexable, NUM_RANKS, NUM_SQUARES};
+use crate::coretypes::{Color, Cp, CpKind, PieceKind, SquareIndexable, NUM_RANKS, NUM_SQUARES};
 use crate::coretypes::{Color::*, PieceKind::*};
 use crate::movegen as mg;
 use crate::position::Position;
-
-/// Centipawn, a common unit of measurement in chess, where 100 Centipawn == 1 Pawn.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
-pub struct Cp(pub CpKind);
-
-// Type alias to make changing type easy if needed.
-type CpKind = i32;
-
-// Newtype pattern boilerplate
-impl Cp {
-    pub const MIN: Cp = Self(CpKind::MIN + 1); // + 1 to avoid overflow error on negate.
-    pub const MAX: Cp = Self(CpKind::MAX);
-
-    /// Returns the sign of Centipawn value, either 1, -1, or 0.
-    pub const fn signum(&self) -> CpKind {
-        self.0.signum()
-    }
-
-    /// Returns currently leading player, or None is position is equal.
-    pub const fn leading(&self) -> Option<Color> {
-        match self.signum() {
-            1 => Some(White),
-            -1 => Some(Black),
-            _ => None,
-        }
-    }
-}
-
-impl Add for Cp {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
-impl AddAssign for Cp {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0
-    }
-}
-impl Sub for Cp {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0 - rhs.0)
-    }
-}
-impl Mul for Cp {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self::Output {
-        Self(self.0 * rhs.0)
-    }
-}
-impl Mul<u32> for Cp {
-    type Output = Cp;
-    fn mul(self, rhs: u32) -> Self::Output {
-        Self(self.0 * rhs as i32)
-    }
-}
-impl Neg for Cp {
-    type Output = Self;
-    fn neg(self) -> Self::Output {
-        Self(-self.0)
-    }
-}
-impl Display for Cp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:+}", self.0)
-    }
-}
 
 impl PieceKind {
     /// Default, independent value per piece.

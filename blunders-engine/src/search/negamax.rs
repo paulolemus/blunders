@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::arrayvec::{self, ArrayVec};
-use crate::coretypes::{Castling, Move, MoveInfo, MoveKind, PieceKind, Square::*, MAX_DEPTH};
-use crate::eval::{terminal, Cp};
+use crate::coretypes::{Castling, Cp, Move, MoveInfo, MoveKind, PieceKind, Square::*, MAX_DEPTH};
+use crate::eval::terminal;
 use crate::movelist::{Line, MoveList};
 use crate::moveorder::order_all_moves;
 use crate::search::{quiescence, SearchResult};
@@ -105,8 +105,7 @@ fn negamax_impl(
         if tt_info.ply >= ply && legal_moves.contains(&tt_info.key_move) {
             pv_line.clear();
             pv_line.push(tt_info.key_move);
-            let relative_score = tt_info.score * position.player.sign();
-            return relative_score;
+            return tt_info.score;
         }
 
     // Run a Quiescence Search for non-terminal leaf nodes to find a more stable
@@ -155,13 +154,10 @@ fn negamax_impl(
 
         // Cut-off has occurred, no further children of this position need to be searched.
         // This branch will not be taken further up the tree as there is a better move.
-        // Push this cut-node into the tt, with an absolute score, instead of relative.
+        // Push this cut-node into the tt, with a score relative to this node's active player.
         if move_score >= beta {
-            let abs_move_score = move_score * position.player.sign();
-            let tt_info =
-                TranspositionInfo::new(hash, NodeKind::Cut, legal_move, ply, abs_move_score);
+            let tt_info = TranspositionInfo::new(hash, NodeKind::Cut, legal_move, ply, move_score);
             tt.replace(tt_info);
-
             return move_score;
         }
 
@@ -173,9 +169,7 @@ fn negamax_impl(
             pv_line.push(legal_move);
             arrayvec::append(pv_line, local_pv.clone());
 
-            let abs_move_score = best_score * position.player.sign();
-            let tt_info =
-                TranspositionInfo::new(hash, NodeKind::Pv, legal_move, ply, abs_move_score);
+            let tt_info = TranspositionInfo::new(hash, NodeKind::Pv, legal_move, ply, best_score);
             tt.replace(tt_info);
         }
     }
@@ -183,8 +177,7 @@ fn negamax_impl(
     // Every move for this node has been evaluated. It is possible that this node
     // was added to the tt beforehand, so we can add it on the condition that
     // It's node-kind is less important than what exists in tt.
-    let abs_move_score = best_score * position.player.sign();
-    let tt_info = TranspositionInfo::new(hash, NodeKind::All, best_move, ply, abs_move_score);
+    let tt_info = TranspositionInfo::new(hash, NodeKind::All, best_move, ply, best_score);
     tt.replace_by(tt_info, |replacing, slotted| {
         replacing.node_kind >= slotted.node_kind
     });
@@ -374,8 +367,7 @@ pub fn iterative_negamax(
                     parent.local_pv.clear();
                     parent.local_pv.push(tt_info.key_move);
 
-                    let relative_score = tt_info.score * position.player().sign();
-                    us.best_score = relative_score;
+                    us.best_score = tt_info.score;
 
                     frame_idx = parent_idx(frame_idx);
                     continue;
@@ -422,13 +414,12 @@ pub fn iterative_negamax(
             } else {
                 // ALL-NODE hash strategy: TODO
                 // Currently adding only if it's node-kind is less important than what's in tt.
-                let abs_score = us.best_score * position.player().sign();
                 let tt_info = TranspositionInfo::new(
                     us.hash,
                     NodeKind::All,
                     us.best_move,
                     remaining_ply,
-                    abs_score,
+                    us.best_score,
                 );
                 tt.replace_by(tt_info, |replacing, slotted| {
                     replacing.node_kind >= slotted.node_kind
@@ -459,13 +450,12 @@ pub fn iterative_negamax(
             // This branch will not be taken further up the tree as there is a better move.
             // Push this cut-node into the tt, with an absolute score, instead of relative.
             if us.best_score >= us.beta {
-                let abs_best_score = us.best_score * position.player().sign();
                 let tt_info = TranspositionInfo::new(
                     us.hash,
                     NodeKind::Cut,
                     us.best_move,
                     remaining_ply,
-                    abs_best_score,
+                    us.best_score,
                 );
                 tt.replace(tt_info);
 
@@ -487,13 +477,12 @@ pub fn iterative_negamax(
                 parent.local_pv.push(us.best_move);
                 arrayvec::append(&mut parent.local_pv, us.local_pv.clone());
 
-                //let abs_best_score = us.best_score * position.player().sign();
                 //let tt_info = TranspositionInfo::new(
                 //    us.hash,
                 //    NodeKind::Pv,
                 //    us.best_move,
                 //    remaining_ply,
-                //    abs_best_score,
+                //    us.best_score,
                 //);
                 //tt.replace(tt_info);
             }
@@ -539,7 +528,7 @@ mod tests {
 
         let mut tt = TranspositionTable::new();
         let result = negamax(position, 6, &mut tt);
-        assert_eq!(result.score.leading(), Some(Color::White));
+        assert_eq!(result.leading(), Some(Color::White));
         assert_eq!(result.best_move, Move::new(E4, F6, None));
         println!("{:?}", result.pv_line);
     }

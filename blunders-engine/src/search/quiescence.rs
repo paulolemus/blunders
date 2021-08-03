@@ -15,7 +15,8 @@
 //! Quiescence search searches a small sub-tree of the leaf node to evaluate
 //! quiet position, so the evaluation of the original leaf node is more stable.
 
-use crate::eval::{evaluate, Cp};
+use crate::coretypes::Cp;
+use crate::eval::evaluate;
 use crate::Position;
 
 /// notes:

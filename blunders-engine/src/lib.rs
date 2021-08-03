@@ -18,6 +18,7 @@ pub mod zobrist;
 pub use fen::Fen;
 pub use position::Position;
 pub use transposition::TranspositionTable;
+pub use zobrist::ZobristTable;
 
 #[cfg(test)]
 mod tests {

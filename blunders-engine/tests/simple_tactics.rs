@@ -15,7 +15,7 @@ fn trade_rooks_win_queen() {
     let mut tt = TranspositionTable::new();
     let result = search(pos, 5, &mut tt);
 
-    assert_eq!(result.score.leading(), Some(Black));
+    assert_eq!(result.leading(), Some(Black));
     assert_eq!(bm, result.best_move);
 }
 
@@ -27,7 +27,7 @@ fn win_bishop_after_trading_bishop_for_knight() {
     let mut tt = TranspositionTable::new();
     let result = search(pos, 5, &mut tt);
 
-    assert_eq!(result.score.leading(), Some(White));
+    assert_eq!(result.leading(), Some(White));
     assert_eq!(bm, result.best_move);
 }
 
@@ -38,7 +38,7 @@ fn tempo_on_king_capture_queen() {
     let mut tt = TranspositionTable::new();
     let result = search(pos, 5, &mut tt);
 
-    assert_eq!(result.score.leading(), Some(White));
+    assert_eq!(result.leading(), Some(White));
     assert_eq!(bm, result.best_move);
 }
 
@@ -48,7 +48,7 @@ fn underpromote_to_knight_fork_queen() {
     let bm = Move::new(E7, E8, Some(Knight));
     let mut tt = TranspositionTable::new();
     let result = search(pos, 6, &mut tt);
-    assert_eq!(result.score.leading(), Some(White));
+    assert_eq!(result.leading(), Some(White));
     assert_eq!(bm, result.best_move);
 }
 

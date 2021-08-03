@@ -4,6 +4,7 @@ use std::convert::TryFrom;
 use std::fmt::{self, Display, Write};
 use std::mem::replace;
 use std::mem::transmute; // unsafe
+use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 use std::ops::{BitOr, Not};
 use std::str::FromStr;
 
@@ -30,6 +31,13 @@ pub const MAX_DEPTH: usize = 40;
 
 /// Counter for half-move clock and full-moves.
 pub type MoveCount = u32;
+
+// Type alias to make changing Cp inner type easy if needed.
+pub type CpKind = i32;
+
+/// Centipawn, a common unit of measurement in chess, where 100 Centipawn == 1 Pawn.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+pub struct Cp(pub CpKind);
 
 /// Color can represent the color of a piece, or a player.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -176,6 +184,57 @@ impl<I: SquareIndexable> SquareIndexable for &I {
 /// Implementations //
 //////////////////////
 
+impl Cp {
+    pub const MIN: Cp = Self(CpKind::MIN + 1); // + 1 to avoid overflow error on negate.
+    pub const MAX: Cp = Self(CpKind::MAX);
+
+    /// Returns the sign of Centipawn value, either 1, -1, or 0.
+    pub const fn signum(&self) -> CpKind {
+        self.0.signum()
+    }
+}
+
+impl Add for Cp {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+impl AddAssign for Cp {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0
+    }
+}
+impl Sub for Cp {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 - rhs.0)
+    }
+}
+impl Mul for Cp {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self(self.0 * rhs.0)
+    }
+}
+impl Mul<u32> for Cp {
+    type Output = Cp;
+    fn mul(self, rhs: u32) -> Self::Output {
+        Self(self.0 * rhs as i32)
+    }
+}
+impl Neg for Cp {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self(-self.0)
+    }
+}
+impl Display for Cp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:+}", self.0)
+    }
+}
+
 impl Color {
     /// FEN compliant conversion.
     pub const fn to_char(&self) -> char {
@@ -184,6 +243,16 @@ impl Color {
             Color::Black => 'b',
         }
     }
+
+    /// Returns the absolute sign of a Color in Cp.
+    /// A positive value is good for white and a negative value is good for Black.
+    pub const fn sign(&self) -> Cp {
+        match self {
+            Color::White => Cp(1),
+            Color::Black => Cp(-1),
+        }
+    }
+
     pub const fn iter() -> ColorIterator {
         ColorIterator::new()
     }

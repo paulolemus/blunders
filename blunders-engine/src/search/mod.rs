@@ -18,8 +18,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::arrayvec::display;
-use crate::coretypes::{Color, Move};
-use crate::eval::Cp;
+use crate::coretypes::{Color, Cp, Move};
 use crate::movelist::Line;
 use crate::transposition::TranspositionTable;
 use crate::Position;
@@ -27,7 +26,7 @@ use crate::Position;
 /// General information gathered from searching a position.
 /// members:
 /// `best_move`: Best move to make for a position discovered.
-/// `score`: The centipawn evaluation of making the best move, with an absolute reference.
+/// `score`: The centipawn evaluation of making the best move, with absolute Cp (+White, -Black).
 /// `pv_line`: The principal variation, or the line of play following the best move.
 /// `player`: Active player of searched root position.
 /// `depth`: Ply that was searched to. Currently this can be either partially or fully searched.
@@ -56,6 +55,20 @@ impl SearchResult {
     pub fn relative_score(&self) -> Cp {
         self.score * self.player.sign()
     }
+
+    /// Converts the score of the search into one that is absolute, with White as + and Black as -.
+    pub fn absolute_score(&self) -> Cp {
+        self.score
+    }
+
+    /// Returns the color who is leading in the search of the root position, or None if drawn.
+    pub fn leading(&self) -> Option<Color> {
+        match self.absolute_score().signum() {
+            1 => Some(Color::White),
+            -1 => Some(Color::Black),
+            _ => None,
+        }
+    }
 }
 
 impl Display for SearchResult {
@@ -63,7 +76,7 @@ impl Display for SearchResult {
         let mut displayed = String::new();
         displayed.push_str("SearchResult {\n");
         displayed.push_str(&format!("    best_move: {}\n", self.best_move));
-        displayed.push_str(&format!("    score    : {}\n", self.score));
+        displayed.push_str(&format!("    abs_score: {}\n", self.absolute_score()));
         displayed.push_str(&format!("    pv_line  : {}\n", display(&self.pv_line)));
         displayed.push_str(&format!("    player   : {}\n", self.player));
         displayed.push_str(&format!("    depth    : {}\n", self.depth));
@@ -110,13 +123,4 @@ pub fn search_nonblocking<T: 'static + Send + From<SearchResult>>(
         };
         sender.send(search_result.into()).unwrap();
     })
-}
-
-impl Color {
-    pub const fn sign(&self) -> Cp {
-        match self {
-            Color::White => Cp(1),
-            Color::Black => Cp(-1),
-        }
-    }
 }

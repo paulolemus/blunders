@@ -4,8 +4,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::coretypes::{Move, Square::*};
-use crate::eval::Cp;
+use crate::coretypes::{Cp, Move, Square::*};
 use crate::movelist::Line;
 use crate::search;
 use crate::search::SearchResult;

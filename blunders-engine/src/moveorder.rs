@@ -17,9 +17,7 @@
 use std::cmp::Reverse;
 
 use crate::arrayvec::ArrayVec;
-use crate::coretypes::Move;
-use crate::coretypes::MAX_MOVES;
-use crate::eval::Cp;
+use crate::coretypes::{Cp, Move, MAX_MOVES};
 use crate::movelist::MoveList;
 use crate::transposition::TranspositionTable;
 use crate::zobrist::HashKind;

@@ -3,8 +3,7 @@
 use std::hash::{Hash, Hasher};
 use std::mem;
 
-use crate::coretypes::{Move, MoveInfo};
-use crate::eval::Cp;
+use crate::coretypes::{Cp, Move, MoveInfo};
 use crate::zobrist::{HashKind, ZobristTable};
 use crate::Position;
 
@@ -84,7 +83,7 @@ pub struct TranspositionTable {
 }
 
 impl TranspositionTable {
-    const DEFAULT_MAX_CAPACITY: usize = 10_000;
+    const DEFAULT_MAX_CAPACITY: usize = 100_000;
 
     /// Returns a new TranspositionTable with a randomly generated ZobristTable
     /// and a pre-allocated default max capacity.
@@ -227,7 +226,7 @@ impl TranspositionTable {
     /// # use blunders_engine::transposition::TranspositionTable;
     /// # use blunders_engine::transposition::TranspositionInfo;
     /// # use blunders_engine::transposition::NodeKind;
-    /// # use blunders_engine::eval::Cp;
+    /// # use blunders_engine::coretypes::Cp;
     /// # use blunders_engine::coretypes::{Move, Square::*};
     /// # let mut tt = TranspositionTable::new();
     /// let hash = 0;

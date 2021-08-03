@@ -16,7 +16,7 @@ fn mate_in_1_queen_take_pawn() {
     let bm = Move::new(F3, F7, None);
     let mut tt = TranspositionTable::new();
     let result = search(pos, 5, &mut tt);
-    assert_eq!(result.score.leading(), Some(White));
+    assert_eq!(result.leading(), Some(White));
     assert_eq!(bm, result.best_move);
 }
 
@@ -27,7 +27,7 @@ fn mate_in_2_double_bishop() {
     let bm = Move::new(E6, C6, None);
     let mut tt = TranspositionTable::new();
     let result = search(pos, 6, &mut tt);
-    assert_eq!(result.score.leading(), Some(White));
+    assert_eq!(result.leading(), Some(White));
     assert_eq!(bm, result.best_move);
 }
 
@@ -37,7 +37,7 @@ fn mate_in_2_back_rank_queen() {
     let bm = Move::new(G2, A8, None);
     let mut tt = TranspositionTable::new();
     let result = search(pos, 5, &mut tt);
-    assert_eq!(result.score.leading(), Some(White));
+    assert_eq!(result.leading(), Some(White));
     assert_eq!(bm, result.best_move);
 }
 
@@ -47,7 +47,7 @@ fn mate_in_2_force_king_moves() {
     let bm = Move::new(H5, H6, None);
     let mut tt = TranspositionTable::new();
     let result = search(pos, 5, &mut tt);
-    assert_eq!(result.score.leading(), Some(White));
+    assert_eq!(result.leading(), Some(White));
     assert_eq!(bm, result.best_move);
 }
 
@@ -57,7 +57,7 @@ fn mate_in_2_sac_rook() {
     let bm = Move::new(A1, F1, None);
     let mut tt = TranspositionTable::new();
     let result = search(pos, 5, &mut tt);
-    assert_eq!(result.score.leading(), Some(Black));
+    assert_eq!(result.leading(), Some(Black));
     assert_eq!(bm, result.best_move);
 }
 
@@ -67,7 +67,7 @@ fn mate_in_3_queen_promotion() {
     let bm = Move::new(F2, F1, Some(Queen));
     let mut tt = TranspositionTable::new();
     let result = search(pos, 5, &mut tt);
-    assert_eq!(result.score.leading(), Some(Black));
+    assert_eq!(result.leading(), Some(Black));
     assert_eq!(bm, result.best_move);
 }
 
@@ -78,7 +78,7 @@ fn mate_in_3_sac_knight() {
     let bm = Move::new(E4, F6, None);
     let mut tt = TranspositionTable::new();
     let result = search(pos, 6, &mut tt);
-    assert_eq!(result.score.leading(), Some(White));
+    assert_eq!(result.leading(), Some(White));
     assert_eq!(bm, result.best_move);
 }
 
@@ -89,7 +89,7 @@ fn mate_in_3_back_rank_sac_queen() {
     let bm = Move::new(F2, F7, None);
     let mut tt = TranspositionTable::new();
     let result = search(pos, 6, &mut tt);
-    assert_eq!(result.score.leading(), Some(White));
+    assert_eq!(result.leading(), Some(White));
     assert_eq!(bm, result.best_move);
 }
 
@@ -99,6 +99,6 @@ fn mate_in_3_force_king_moves_with_bishop_rook() {
     let bm = Move::new(G4, F3, None);
     let mut tt = TranspositionTable::new();
     let result = search(pos, 6, &mut tt);
-    assert_eq!(result.score.leading(), Some(Black));
+    assert_eq!(result.leading(), Some(Black));
     assert_eq!(bm, result.best_move);
 }

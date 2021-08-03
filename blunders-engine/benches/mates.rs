@@ -21,7 +21,7 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
         b.iter(|| {
             let result = search::alpha_beta(black_box(pos), black_box(ply));
 
-            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.leading(), lead);
             assert_eq!(result.best_move, bm);
         })
     });
@@ -31,7 +31,7 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
             let mut tt = TranspositionTable::new();
             let result = search::negamax(black_box(pos), black_box(ply), black_box(&mut tt));
 
-            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.leading(), lead);
             assert_eq!(result.best_move, bm);
         })
     });
@@ -48,7 +48,7 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
             )
             .unwrap();
 
-            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.leading(), lead);
             assert_eq!(result.best_move, bm);
         })
     });
@@ -64,7 +64,7 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
                 black_box(stopper),
             );
 
-            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.leading(), lead);
             assert_eq!(result.best_move, bm);
         })
     });
@@ -83,7 +83,7 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
         b.iter(|| {
             let result = search::alpha_beta(black_box(pos), black_box(ply));
 
-            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.leading(), lead);
             assert_eq!(result.best_move, bm);
         })
     });
@@ -93,7 +93,7 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
             let mut tt = TranspositionTable::new();
             let result = search::negamax(black_box(pos), black_box(ply), black_box(&mut tt));
 
-            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.leading(), lead);
             assert_eq!(result.best_move, bm);
         })
     });
@@ -110,7 +110,7 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
             )
             .unwrap();
 
-            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.leading(), lead);
             assert_eq!(result.best_move, bm);
         })
     });
@@ -126,7 +126,7 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
                 black_box(stopper),
             );
 
-            assert_eq!(result.score.leading(), lead);
+            assert_eq!(result.leading(), lead);
             assert_eq!(result.best_move, bm);
         })
     });
