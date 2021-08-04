@@ -2,6 +2,7 @@ pub mod arrayvec;
 pub mod bitboard;
 pub mod boardrepr;
 pub mod coretypes;
+pub mod error;
 pub mod eval;
 pub mod fen;
 pub(crate) mod movegen;

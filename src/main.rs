@@ -57,10 +57,10 @@ fn input_handler(sender: mpsc::Sender<Message>) {
 
             // On error, report over UCI.
             // On error reporting, exit.
-            Err(_) => {
-                let err_str = format!("{} could not be parsed", buffer.escape_debug());
-                if let Err(_) = uci::error(&err_str) {
-                    return;
+            Err(err) => {
+                let err_str = format!("{} could not be parsed, {}", buffer.escape_debug(), err);
+                if let Err(err) = uci::error(&err_str) {
+                    panic!("{}", err);
                 }
             }
         }
@@ -93,12 +93,11 @@ fn panic_hook() {
     }));
 }
 
-const NAME: &'static str = env!("CARGO_PKG_NAME");
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const NAME_VERSION: &'static str = concat!(env!("CARGO_PKG_NAME"), ' ', env!("CARGO_PKG_VERSION"));
 const AUTHOR: &'static str = env!("CARGO_PKG_AUTHORS");
 
 fn main() -> io::Result<()> {
-    println!("{} {} by {}", NAME, VERSION, AUTHOR);
+    println!("{} by {}", NAME_VERSION, AUTHOR);
 
     // Hook to print errors to STDOUT.
     panic_hook();
@@ -150,7 +149,7 @@ fn main() -> io::Result<()> {
                 // GUI is telling engine to use UCI protocol.
                 // It requires a response of Id, available options, and an acknowledgement.
                 UciCommand::Uci => {
-                    UciResponse::Id.send()?;
+                    UciResponse::new_id(NAME_VERSION, AUTHOR).send()?;
                     for uci_opt in uci_options.values() {
                         UciResponse::new_option(uci_opt.clone()).send()?;
                     }
@@ -238,8 +237,8 @@ fn main() -> io::Result<()> {
                             debug = new_debug_value;
                         }
                     }
-                    Err(s) => {
-                        uci::error(s)?;
+                    Err(err) => {
+                        uci::error(&err.to_string())?;
                     }
                 },
 

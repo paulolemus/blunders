@@ -1,21 +1,8 @@
 //! Universal Chess Interface
-//!
-//! Main thread:
-//! Start input loop, process commands, delegate searches.
-//! Main thread cannot block on any large task,
-//! so searching and input need to be on different threads.
-//! data structures like transposition table, curr_position.
-//!
-//! Main thread goes to sleep, and wakes up if:
-//! 1. Input is received
-//! 2. A search finishes
-//!
-//! Main thread may set values in search WHILE SEARCHING:
-//! 1. stop=use most recent SearchResult from IDS. Active search returns.
-//!
 
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::fmt::{self, Display, Write};
 use std::hash::{Hash, Hasher};
 use std::io;
@@ -24,11 +11,9 @@ use std::ops::{Index, IndexMut};
 use std::str::{FromStr, SplitWhitespace};
 
 use crate::coretypes::Move;
+use crate::error::{self, ErrorKind};
 use crate::fen::Fen;
 use crate::Position;
-
-const UCI_ID_NAME: &str = "Blunders 0.1";
-const UCI_ID_AUTHOR: &str = "Paulo L";
 
 /// UciCommands commands from an external program sent to this chess engine.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -47,9 +32,9 @@ pub enum UciCommand {
 
 impl UciCommand {
     /// Parse a single input line into a UciCommand if possible.
-    pub fn parse_command(input_str: &str) -> Result<Self, &'static str> {
+    pub fn parse_command(input_str: &str) -> error::Result<Self> {
         let mut input = input_str.split_whitespace();
-        let head = input.next().ok_or("Empty Command")?;
+        let head = input.next().ok_or(ErrorKind::UciNoCommand)?;
 
         match head {
             "uci" => Ok(UciCommand::Uci),
@@ -62,29 +47,29 @@ impl UciCommand {
             "stop" => Ok(UciCommand::Stop),
             "ponderhit" => Ok(UciCommand::PonderHit),
             "quit" => Ok(UciCommand::Quit),
-            _ => Err("Command unknown"),
+            _ => Err((ErrorKind::UciUnknownCommand, head).into()),
         }
     }
 
     /// Extract a `debug` command if possible.
     /// command: `debug [on | off]`
-    fn parse_debug(mut input: SplitWhitespace) -> Result<Self, &'static str> {
-        let debug_mode_str = input.next().ok_or("debug missing mode [on | off]")?;
+    fn parse_debug(mut input: SplitWhitespace) -> error::Result<Self> {
+        let debug_mode_str = input.next().ok_or(ErrorKind::UciDebugNoMode)?;
 
         match debug_mode_str {
             "on" => Ok(Self::Debug(true)),
             "off" => Ok(Self::Debug(false)),
-            _ => Err("debug mode invalid argument"),
+            _ => Err(ErrorKind::UciDebugIllegalMode.into()),
         }
     }
 
     /// Extract a `setoption` command if possible.
     ///command: `setoption name [id] (value x)`
-    fn parse_setoption(mut input: SplitWhitespace) -> Result<Self, &'static str> {
-        let name = input.next().ok_or("setoption missing name")?;
+    fn parse_setoption(mut input: SplitWhitespace) -> error::Result<Self> {
+        let name = input.next().ok_or(ErrorKind::UciSetOptionNoName)?;
         (name == "name")
             .then(|| ())
-            .ok_or("setoption not followed by name")?;
+            .ok_or(ErrorKind::UciSetOptionNoName)?;
 
         let mut name = String::new();
         let mut value = String::new();
@@ -104,7 +89,7 @@ impl UciCommand {
         name.pop(); // Remove trailing space.
         (name.len() > 0)
             .then(|| ())
-            .ok_or("setoption name not followed by id")?;
+            .ok_or(ErrorKind::UciSetOptionNoName)?;
 
         // input iterator is either empty, or "value" has been parsed and the rest
         // of input is the contents of value string.
@@ -116,7 +101,7 @@ impl UciCommand {
             value.pop(); // Remove trailing space.
             (value.len() > 0)
                 .then(|| ())
-                .ok_or("setoption value not followed by string")?;
+                .ok_or((ErrorKind::UciNoArgument, "expected argument after value"))?;
         }
 
         Ok(UciCommand::SetOption(RawOption {
@@ -127,34 +112,33 @@ impl UciCommand {
 
     /// Extract a `position` command if possible.
     /// command: `position [fen fen_str | startpos] (moves move_list ...)`
-    fn parse_pos(mut input: SplitWhitespace) -> Result<Self, &'static str> {
-        let position_input = input
-            .next()
-            .ok_or("position missing description [fen | startpos]")?;
+    fn parse_pos(mut input: SplitWhitespace) -> error::Result<Self> {
+        let position_input = input.next().ok_or((
+            ErrorKind::UciNoArgument,
+            "position missing description [fen | startpos]",
+        ))?;
 
         // Parse a valid position from startpos or FEN, or return an Err(_).
         let mut position = match position_input {
             "startpos" => Ok(Position::start_position()),
             "fen" => {
                 let mut fen_str = String::new();
-                let err_str = "position fen malformed";
                 for _ in 0..6 {
-                    fen_str.push_str(input.next().ok_or(err_str)?);
+                    fen_str.push_str(input.next().ok_or(ErrorKind::UciPositionMalformed)?);
                     fen_str.push(' ');
                 }
-                Position::parse_fen(&fen_str).map_err(|_| err_str)
+                Position::parse_fen(&fen_str)
             }
-            _ => Err("position description type invalid"),
+            _ => return Err(ErrorKind::UciPositionMalformed.into()),
         }?;
 
         // Check if there is a sequence of moves to apply to the position.
         if let Some("moves") = input.next() {
             for move_str in input {
                 let move_ = Move::from_str(move_str)?;
-                position
-                    .is_legal_move(move_)
-                    .then(|| ())
-                    .ok_or("position moves provided illegal move")?;
+                if !position.is_legal_move(move_) {
+                    return Err(ErrorKind::UciPositionIllegalMove.into());
+                }
 
                 position.do_move(move_);
             }
@@ -165,7 +149,7 @@ impl UciCommand {
 
     /// Extract a `go` command if possible.
     /// command: `go [wtime | btime | winc | binc | depth | nodes | mate | movetime | infinite]*`
-    fn parse_go(mut input: SplitWhitespace) -> Result<Self, &'static str> {
+    fn parse_go(mut input: SplitWhitespace) -> error::Result<Self> {
         // The following options have no arguments:
         // ponder, infinite
         // The following options must be followed with an integer value:
@@ -186,34 +170,84 @@ impl UciCommand {
         while let Some(input_str) = input.next() {
             // Attempt to parse all options with a u32 argument type.
             if HAS_U32_ARG.contains(&input_str) {
-                let argument: u32 = input
+                let argument: i64 = input
                     .next()
-                    .ok_or("go no argument provided")?
+                    .ok_or(ErrorKind::UciNoArgument)?
                     .parse()
-                    .map_err(|_| "go failed to parse integer")?;
+                    .map_err(|err| (ErrorKind::UciCannotParseInt, err))?;
 
                 match input_str {
-                    "wtime" => controls.wtime = Some(argument),
-                    "btime" => controls.btime = Some(argument),
-                    "winc" => controls.winc = Some(argument),
-                    "binc" => controls.binc = Some(argument),
-                    "depth" => controls.depth = Some(argument),
-                    "movestogo" => controls.moves_to_go = Some(argument),
-                    "mate" => controls.mate = Some(argument),
-                    "movetime" => controls.move_time = Some(argument),
-                    _ => return Err("go invalid option"),
+                    "wtime" => {
+                        controls.wtime = Some(
+                            argument
+                                .try_into()
+                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
+                        )
+                    }
+                    "btime" => {
+                        controls.btime = Some(
+                            argument
+                                .try_into()
+                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
+                        )
+                    }
+                    "winc" => {
+                        controls.winc = Some(
+                            argument
+                                .try_into()
+                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
+                        )
+                    }
+                    "binc" => {
+                        controls.binc = Some(
+                            argument
+                                .try_into()
+                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
+                        )
+                    }
+                    "depth" => {
+                        controls.depth = Some(
+                            argument
+                                .try_into()
+                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
+                        )
+                    }
+                    "movestogo" => {
+                        controls.moves_to_go = Some(
+                            argument
+                                .try_into()
+                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
+                        )
+                    }
+                    "mate" => {
+                        controls.mate = Some(
+                            argument
+                                .try_into()
+                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
+                        )
+                    }
+                    "movetime" => {
+                        controls.move_time = Some(
+                            argument
+                                .try_into()
+                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
+                        )
+                    }
+                    _ => {
+                        return Err(ErrorKind::UciInvalidOption.into());
+                    }
                 };
             } else if input_str == "nodes" {
                 let argument: u64 = input
                     .next()
-                    .ok_or("go no argument provided")?
+                    .ok_or(ErrorKind::UciNoArgument)?
                     .parse()
-                    .map_err(|_| "go failed to parse integer")?;
+                    .map_err(|err| (ErrorKind::UciCannotParseInt, err))?;
                 controls.nodes = Some(argument);
             } else if input_str == "infinite" {
                 controls.infinite = true;
             } else {
-                return Err("go invalid option");
+                return Err(ErrorKind::UciInvalidOption.into());
             }
         }
 
@@ -222,8 +256,8 @@ impl UciCommand {
 }
 
 impl FromStr for UciCommand {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    type Err = error::Error;
+    fn from_str(s: &str) -> error::Result<Self> {
         Self::parse_command(s)
     }
 }
@@ -231,7 +265,7 @@ impl FromStr for UciCommand {
 /// Engine to external program communication.
 #[derive(Debug, Clone)]
 pub enum UciResponse {
-    Id,
+    Id(String, String),
     UciOk,
     ReadyOk,
     Opt(UciOption),
@@ -240,6 +274,10 @@ pub enum UciResponse {
 }
 
 impl UciResponse {
+    pub fn new_id(name: &str, author: &str) -> Self {
+        Self::Id(name.into(), author.into())
+    }
+
     pub fn new_option(uci_opt: UciOption) -> Self {
         Self::Opt(uci_opt)
     }
@@ -265,12 +303,12 @@ impl UciResponse {
 impl Display for UciResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Id => {
+            Self::Id(name, author) => {
                 f.write_str("id name ")?;
-                f.write_str(UCI_ID_NAME)?;
+                f.write_str(name)?;
                 f.write_char('\n')?;
                 f.write_str("id author ")?;
-                f.write_str(UCI_ID_AUTHOR)?;
+                f.write_str(author)?;
                 f.write_char('\n')
             }
             Self::UciOk => f.write_str("uciok\n"),
@@ -582,14 +620,15 @@ impl UciOption {
     /// Given a RawOption, try to extract a typed value from it's stringly-typed value.
     /// The type of the parsed value must match the value of this UciOptionType value.
     /// This returns a mutable reference to self on successful update.
-    pub fn try_update(&mut self, raw_opt: &RawOption) -> Result<&mut Self, &'static str> {
+    pub fn try_update(&mut self, raw_opt: &RawOption) -> error::Result<&mut Self> {
         (self.name == raw_opt.name)
             .then(|| ())
-            .ok_or("names do not match")?;
+            .ok_or((ErrorKind::UciOptionCannotUpdate, "names do not match"))?;
 
         match self.option_type {
             UciOptionType::Check(Check { ref mut value, .. }) => {
-                *value = bool::from_str(&raw_opt.value).map_err(|_| "raw value not a bool")?;
+                *value = bool::from_str(&raw_opt.value)
+                    .map_err(|err| (ErrorKind::UciOptionCannotUpdate, err))?;
             }
             UciOptionType::Spin(Spin {
                 ref mut value,
@@ -597,12 +636,12 @@ impl UciOption {
                 max,
                 ..
             }) => {
-                let new_value =
-                    i64::from_str_radix(&raw_opt.value, 10).map_err(|_| "raw value not an int")?;
+                let new_value = i64::from_str_radix(&raw_opt.value, 10)
+                    .map_err(|err| (ErrorKind::UciOptionCannotUpdate, err))?;
                 (min..=max)
                     .contains(&new_value)
                     .then(|| ())
-                    .ok_or("value out of range")?;
+                    .ok_or((ErrorKind::UciOptionCannotUpdate, "value out of range"))?;
                 *value = new_value;
             }
             UciOptionType::Combo(Combo {
@@ -613,7 +652,7 @@ impl UciOption {
                 choices
                     .contains(&raw_opt.value)
                     .then(|| ())
-                    .ok_or("value not a valid choice")?;
+                    .ok_or((ErrorKind::UciOptionCannotUpdate, "value not a valid choice"))?;
                 *value = raw_opt.value.clone();
             }
             UciOptionType::Button(Button { ref mut pressed }) => *pressed = true,
@@ -703,10 +742,13 @@ impl UciOptions {
     /// Attempts to update a stored UciOption with the value in a RawOption.
     /// This will not create a new UciOption entry.
     /// This returns a mutable reference to the updated value in the table on successful update.
-    pub fn update(&mut self, raw_opt: &RawOption) -> Result<&mut UciOption, &'static str> {
+    pub fn update(&mut self, raw_opt: &RawOption) -> error::Result<&mut UciOption> {
         self.0
             .get_mut(&raw_opt.name)
-            .ok_or("RawOption name not a valid UciOption")?
+            .ok_or((
+                ErrorKind::UciOptionCannotUpdate,
+                "RawOption name not a valid UciOption",
+            ))?
             .try_update(&raw_opt)
     }
 }
@@ -735,8 +777,8 @@ impl Deref for UciOptions {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct SearchControls {
-    pub wtime: Option<u32>,
-    pub btime: Option<u32>,
+    pub wtime: Option<i32>,
+    pub btime: Option<i32>,
     pub winc: Option<u32>,
     pub binc: Option<u32>,
     pub moves_to_go: Option<u32>,

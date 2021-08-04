@@ -8,6 +8,8 @@ use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 use std::ops::{BitOr, Not};
 use std::str::FromStr;
 
+use crate::error::{self, ErrorKind};
+
 ///////////////
 // Constants //
 ///////////////
@@ -282,12 +284,12 @@ impl From<Color> for char {
 }
 
 impl TryFrom<char> for Color {
-    type Error = &'static str;
-    fn try_from(ch: char) -> Result<Self, Self::Error> {
+    type Error = error::Error;
+    fn try_from(ch: char) -> error::Result<Self> {
         match ch {
             'w' => Ok(Color::White),
             'b' => Ok(Color::Black),
-            _ => Err("char is not w|b"),
+            _ => Err((ErrorKind::ParseColorMalformed, "char is not w|b").into()),
         }
     }
 }
@@ -413,8 +415,8 @@ impl From<Piece> for char {
 }
 
 impl TryFrom<char> for Piece {
-    type Error = &'static str;
-    fn try_from(value: char) -> Result<Self, Self::Error> {
+    type Error = error::Error;
+    fn try_from(value: char) -> error::Result<Self> {
         let color = match value.is_ascii_uppercase() {
             true => Color::White,
             false => Color::Black,
@@ -426,7 +428,13 @@ impl TryFrom<char> for Piece {
             'B' => PieceKind::Bishop,
             'Q' => PieceKind::Queen,
             'K' => PieceKind::King,
-            _ => return Err("char is not in PRNBQKprnbqk"),
+            _ => {
+                return Err((
+                    ErrorKind::ParsePieceMalformed,
+                    "char is not in PRNBQKprnbqk",
+                )
+                    .into())
+            }
         };
         Ok(Piece { color, piece_kind })
     }
@@ -533,19 +541,22 @@ impl Display for Castling {
 
 /// Castling ::= '-' | ['K'] ['Q'] ['k'] ['q']
 impl FromStr for Castling {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    type Err = error::Error;
+    fn from_str(s: &str) -> error::Result<Self> {
         let mut chars = s.chars().take(4);
         let mut castling_rights = Castling::NONE;
 
         // First character is either '-' or in KQkq.
-        match chars.next().ok_or("No characters")? {
+        match chars
+            .next()
+            .ok_or((ErrorKind::ParseCastlingMalformed, "No characters"))?
+        {
             '-' => return Ok(castling_rights),
             'K' => castling_rights.set(Self::W_KING),
             'Q' => castling_rights.set(Self::W_QUEEN),
             'k' => castling_rights.set(Self::B_KING),
             'q' => castling_rights.set(Self::B_QUEEN),
-            _ => return Err("First char not of -KQkq"),
+            _ => return Err((ErrorKind::ParseCastlingMalformed, "First char not of -KQkq").into()),
         };
 
         // castling_rights is now valid, add rest of rights or return early.
@@ -666,8 +677,8 @@ impl Rank {
 }
 
 impl TryFrom<char> for File {
-    type Error = &'static str;
-    fn try_from(ch: char) -> Result<Self, Self::Error> {
+    type Error = error::Error;
+    fn try_from(ch: char) -> error::Result<Self> {
         match ch {
             'a' => Ok(Self::A),
             'b' => Ok(Self::B),
@@ -677,14 +688,14 @@ impl TryFrom<char> for File {
             'f' => Ok(Self::F),
             'g' => Ok(Self::G),
             'h' => Ok(Self::H),
-            _ => Err("file char not of abcdefgh"),
+            _ => Err((ErrorKind::ParseFileMalformed, "file char not of abcdefgh").into()),
         }
     }
 }
 
 impl TryFrom<char> for Rank {
-    type Error = &'static str;
-    fn try_from(ch: char) -> Result<Self, Self::Error> {
+    type Error = error::Error;
+    fn try_from(ch: char) -> error::Result<Self> {
         match ch {
             '1' => Ok(Self::R1),
             '2' => Ok(Self::R2),
@@ -694,7 +705,7 @@ impl TryFrom<char> for Rank {
             '6' => Ok(Self::R6),
             '7' => Ok(Self::R7),
             '8' => Ok(Self::R8),
-            _ => Err("rank char not of 12345678"),
+            _ => Err((ErrorKind::ParseRankMalformed, "rank char not of 12345678").into()),
         }
     }
 }
@@ -814,11 +825,11 @@ impl From<(File, Rank)> for Square {
 
 /// Square::= <fileLetter><rankNumber>
 impl FromStr for Square {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    type Err = error::Error;
+    fn from_str(s: &str) -> error::Result<Self> {
         let mut chars = s.chars();
-        let file = File::try_from(chars.next().ok_or("No fileChar")?)?;
-        let rank = Rank::try_from(chars.next().ok_or("No rankChar")?)?;
+        let file = File::try_from(chars.next().ok_or(ErrorKind::ParseSquareMalformed)?)?;
+        let rank = Rank::try_from(chars.next().ok_or(ErrorKind::ParseSquareMalformed)?)?;
         Ok(Square::from((file, rank)))
     }
 }
@@ -897,8 +908,8 @@ impl MoveInfo {
 
 /// Parses `Pure Algebraic Coordinate Notation`.
 impl FromStr for Move {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    type Err = error::Error;
+    fn from_str(s: &str) -> error::Result<Self> {
         let from_str: String = s.chars().take(2).collect();
         let from: Square = from_str.parse()?;
 

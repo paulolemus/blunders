@@ -7,6 +7,8 @@
 //! Starting Chess FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 use std::convert::TryFrom;
+use std::error;
+use std::fmt::{self, Display};
 use std::ops::RangeInclusive;
 use std::str::FromStr;
 
@@ -14,7 +16,7 @@ use crate::boardrepr::{Mailbox, PieceSets};
 use crate::coretypes::{Castling, Color, File, MoveCount, Piece, Rank, Square};
 use crate::position::Position;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum ParseFenError {
     IllFormed,
     Placement,
@@ -24,6 +26,29 @@ pub enum ParseFenError {
     HalfMoveClock,
     FullMoveNumber,
 }
+
+impl ParseFenError {
+    pub fn as_str(&self) -> &'static str {
+        use ParseFenError::*;
+        match self {
+            IllFormed => "ill formed",
+            Placement => "placement",
+            SideToMove => "side to move",
+            Castling => "castling",
+            EnPassant => "en passant",
+            HalfMoveClock => "half move clock",
+            FullMoveNumber => "full move number",
+        }
+    }
+}
+
+impl Display for ParseFenError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl error::Error for ParseFenError {}
 
 /// Implement Fen for any types which can be fully parsed from a FEN string.
 pub trait Fen: Sized {
