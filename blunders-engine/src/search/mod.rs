@@ -20,6 +20,7 @@ use std::time::Duration;
 use crate::arrayvec::display;
 use crate::coretypes::{Color, Cp, Move};
 use crate::movelist::Line;
+use crate::timeman::Mode;
 use crate::transposition::TranspositionTable;
 use crate::Position;
 
@@ -96,7 +97,8 @@ impl Display for SearchResult {
 /// Blunders Engine primary position search function. WIP.
 pub fn search(position: Position, ply: u32, tt: &mut TranspositionTable) -> SearchResult {
     assert_ne!(ply, 0);
-    ids(position, ply, tt, Arc::new(AtomicBool::new(false)))
+    let mode = Mode::depth(ply, None);
+    ids(position, mode, tt, Arc::new(AtomicBool::new(false)))
 }
 
 /// Blunders Engine non-blocking search function. This runs the search on a separate thread.
@@ -109,17 +111,15 @@ pub fn search(position: Position, ply: u32, tt: &mut TranspositionTable) -> Sear
 /// * sender: Channel to send search result over
 pub fn search_nonblocking<T: 'static + Send + From<SearchResult>>(
     position: Position,
-    ply: u32,
+    mode: Mode,
     tt: Arc<Mutex<TranspositionTable>>,
     stopper: Arc<AtomicBool>,
     sender: mpsc::Sender<T>,
 ) -> thread::JoinHandle<()> {
-    assert_ne!(ply, 0);
-
     thread::spawn(move || {
         let search_result = {
             let mut locked_tt = tt.lock().unwrap();
-            ids(position, ply, &mut locked_tt, stopper)
+            ids(position, mode, &mut locked_tt, stopper)
         };
         sender.send(search_result.into()).unwrap();
     })

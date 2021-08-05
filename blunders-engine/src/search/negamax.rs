@@ -10,6 +10,7 @@ use crate::eval::terminal;
 use crate::movelist::{Line, MoveList};
 use crate::moveorder::order_all_moves;
 use crate::search::{quiescence, SearchResult};
+use crate::timeman::Mode;
 use crate::transposition::{NodeKind, TranspositionInfo, TranspositionTable};
 use crate::zobrist::HashKind;
 use crate::Position;
@@ -279,12 +280,13 @@ fn curr_ply(frame_idx: usize) -> u32 {
 pub fn iterative_negamax(
     mut position: Position,
     ply: u32,
+    mode: Mode,
     tt: &mut TranspositionTable,
     stopper: Arc<AtomicBool>,
 ) -> Option<SearchResult> {
     // Guard: must have a valid searchable ply, and root position must not be terminal.
     assert_ne!(ply, 0);
-    assert!(ply < MAX_DEPTH as u32);
+    assert!(ply <= MAX_DEPTH as u32);
     assert_ne!(position.get_legal_moves().len(), 0);
 
     // Meta Search variables
@@ -328,8 +330,10 @@ pub fn iterative_negamax(
         // It is safe to stop at anytime outside of the processing modes below.
         if label == Label::Initialize && stop_check_counter <= 0 {
             stop_check_counter = nodes_per_stop_check;
-            stopped = stopper.load(Ordering::Acquire);
+            stopped |= stopper.load(Ordering::Acquire);
+            stopped |= mode.stop(root_player, ply);
         }
+
         // If stopped flag is ever set, breaking ends search early.
         if stopped {
             break;
@@ -368,6 +372,7 @@ pub fn iterative_negamax(
                     parent.local_pv.push(tt_info.key_move);
 
                     us.best_score = tt_info.score;
+                    us.best_move = tt_info.key_move;
 
                     frame_idx = parent_idx(frame_idx);
                     continue;

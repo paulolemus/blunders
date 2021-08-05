@@ -154,7 +154,7 @@ impl UciCommand {
         // ponder, infinite
         // The following options must be followed with an integer value:
         // wtime, btime, winc, binc, depth, nodes, mate, movetime, movestogo
-        const HAS_U32_ARG: [&'static str; 8] = [
+        const HAS_U32_ARG: [&'static str; 9] = [
             "wtime",
             "btime",
             "winc",
@@ -163,6 +163,7 @@ impl UciCommand {
             "movestogo",
             "mate",
             "movetime",
+            "nodes",
         ];
 
         let mut controls = SearchControls::new();
@@ -233,17 +234,17 @@ impl UciCommand {
                                 .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
                         )
                     }
+                    "nodes" => {
+                        controls.nodes = Some(
+                            argument
+                                .try_into()
+                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
+                        )
+                    }
                     _ => {
                         return Err(ErrorKind::UciInvalidOption.into());
                     }
                 };
-            } else if input_str == "nodes" {
-                let argument: u64 = input
-                    .next()
-                    .ok_or(ErrorKind::UciNoArgument)?
-                    .parse()
-                    .map_err(|err| (ErrorKind::UciCannotParseInt, err))?;
-                controls.nodes = Some(argument);
             } else if input_str == "infinite" {
                 controls.infinite = true;
             } else {
@@ -775,7 +776,7 @@ impl Deref for UciOptions {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct SearchControls {
     pub wtime: Option<i32>,
     pub btime: Option<i32>,

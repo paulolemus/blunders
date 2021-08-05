@@ -50,6 +50,9 @@ pub enum ErrorKind {
     ParsePieceMalformed,
     /// Piece parse string malformed.
     ParseCastlingMalformed,
+
+    /// Time Management Mode cannot be created, missing fields.
+    ModeNotSatisfied,
 }
 
 impl ErrorKind {
@@ -74,6 +77,8 @@ impl ErrorKind {
             ErrorKind::ParseColorMalformed => "parse color malformed",
             ErrorKind::ParsePieceMalformed => "parse piece malformed",
             ErrorKind::ParseCastlingMalformed => "parse castling malformed",
+
+            ErrorKind::ModeNotSatisfied => "mode not satisfied",
         }
     }
 }

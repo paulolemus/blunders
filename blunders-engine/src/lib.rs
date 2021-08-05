@@ -12,6 +12,7 @@ pub mod perft;
 pub mod position;
 pub mod search;
 pub mod threads;
+pub mod timeman;
 pub mod transposition;
 pub mod uci;
 pub mod zobrist;

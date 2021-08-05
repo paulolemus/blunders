@@ -1,5 +1,6 @@
 //! Main CLI interface to Blunders engine.
 
+use std::convert::TryFrom;
 use std::io;
 use std::panic;
 use std::process;
@@ -12,6 +13,7 @@ use std::time::Instant;
 use blunders_engine;
 use blunders_engine::arrayvec::display;
 use blunders_engine::search::{self, SearchResult};
+use blunders_engine::timeman::Mode;
 use blunders_engine::uci::{self, UciCommand, UciOption, UciOptions, UciResponse};
 use blunders_engine::{Fen, Position, TranspositionTable};
 
@@ -249,24 +251,32 @@ fn main() -> io::Result<()> {
                 }
 
                 // Begin a search with provided parameters. Only search if are no other active searches.
-                UciCommand::Go(_search_ctrl) => {
+                UciCommand::Go(search_ctrl) => {
+                    let mode = match Mode::try_from(search_ctrl) {
+                        Ok(mode) => mode,
+                        Err(err) => {
+                            uci::error(&err.to_string())?;
+                            uci::error("falling back to depth search")?;
+                            Mode::depth(7, None)
+                        }
+                    };
+
                     // TODO: When receive a go command, STOP the current search, wait for it, then start a new one
                     if search_handle.is_none() {
                         uci::debug(debug, "go starting search...")?;
                         // Ensure stopper is not set before starting search.
                         stopper.store(false, Ordering::SeqCst);
 
-                        let depth = 7;
                         let handle = search::search_nonblocking(
                             position.clone(),
-                            depth,
+                            mode,
                             Arc::clone(&tt),
                             Arc::clone(&stopper),
                             sender.clone(),
                         );
                         search_handle = Some(handle);
                     } else {
-                        uci::error("search already in progress. Cannot begin new search")?;
+                        uci::error("search already in progress, cannot begin new search")?;
                     }
                 }
             },

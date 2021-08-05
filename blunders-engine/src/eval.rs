@@ -30,7 +30,13 @@ impl PieceKind {
 // Evaluation Constants
 const CHECKMATE: Cp = Cp(Cp::MAX.0 / 2 - 1);
 const STALEMATE: Cp = Cp(0);
-const MOBILITY_CP: Cp = Cp(2);
+const MOBILITY_CP: Cp = Cp(1);
+
+impl Cp {
+    pub fn is_mate(&self) -> bool {
+        self.0.abs() == CHECKMATE.0
+    }
+}
 
 // Relative Evaluation Functions
 
