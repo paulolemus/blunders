@@ -70,7 +70,7 @@ pub(crate) fn order_all_moves(
     tt: &TranspositionTable,
 ) -> MoveList {
     let mut ordering_vec = ArrayVec::<(Move, OrderStrategy), MAX_MOVES>::new();
-    let maybe_key_move = tt.get(hash).and_then(|tt_info| Some(tt_info.key_move));
+    let maybe_key_move = tt.get(hash).and_then(|tt_entry| Some(tt_entry.key_move));
 
     // For each move, gather data needed to order, and push into a new ArrayVec.
     for legal_move in legal_moves {

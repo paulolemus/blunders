@@ -854,6 +854,16 @@ impl Move {
             promotion,
         }
     }
+
+    /// Returns a placeholder illegal chess move.
+    pub const fn illegal() -> Self {
+        Self {
+            from: Square::A1,
+            to: Square::H7,
+            promotion: None,
+        }
+    }
+
     // Getters
     pub const fn from(&self) -> &Square {
         &self.from

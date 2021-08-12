@@ -5,12 +5,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::arrayvec::display;
-use crate::coretypes::{Cp, Move, Square::*, MAX_DEPTH};
+use crate::coretypes::{Cp, Move, MAX_DEPTH};
 use crate::movelist::Line;
 use crate::search;
 use crate::search::SearchResult;
 use crate::timeman::Mode;
-use crate::transposition::{NodeKind, TranspositionInfo, TranspositionTable};
+use crate::transposition::{Entry, NodeKind, TranspositionTable};
 use crate::Position;
 
 /// Run Iterative Deepening search on a root position to depth "ply" using
@@ -20,7 +20,7 @@ use crate::Position;
 pub fn ids(
     position: Position,
     mode: Mode,
-    tt: &mut TranspositionTable,
+    tt: &TranspositionTable,
     stopper: Arc<AtomicBool>,
     debug: bool,
 ) -> SearchResult {
@@ -34,7 +34,7 @@ pub fn ids(
     let mut search_result = SearchResult {
         player: position.player,
         depth: 0,
-        best_move: Move::new(A1, H7, None),
+        best_move: Move::illegal(),
         score: Cp(0),
         pv_line: Line::new(),
         nodes,
@@ -93,25 +93,24 @@ pub fn ids(
         // assert_eq!(search_result.pv_line.len(), ids_ply as usize);
 
         // All nodes in the PV have the same score, because that score propagated up
-        // from a terminal node. TranspositionInfo for all PV nodes can be fully recreated.
+        // from a terminal node. Entry for all PV nodes can be fully recreated.
         let mut position = position.clone();
         let mut hash = hash.clone();
         let mut move_ply = ids_ply.clone();
         let mut relative_pv_score = search_result.relative_score();
         let pv_line = search_result.pv_line.clone();
 
-        // For each move in PV, TranspositionInfo is recreated from the current position,
+        // For each move in PV, Entry is recreated from the current position,
         // before applying the best move. Then the hash, position, ply, and score,
         // are updated for the next loop.
-        // The TranspositionInfo for each pv are inserted unconditionally.
+        // The Entry for each pv are inserted unconditionally.
         // TODO:
         // Check for possible bugs where the pv is incorrect.
         // This might be fixed by checking if a position exists in the tt already,
         // but has different values from what is recreated.
         for pv_move in pv_line {
-            let pv_info =
-                TranspositionInfo::new(hash, NodeKind::Pv, pv_move, move_ply, relative_pv_score);
-            tt.replace(pv_info);
+            let pv_entry = Entry::new(hash, NodeKind::Pv, pv_move, move_ply, relative_pv_score);
+            tt.replace(pv_entry);
 
             let move_info = position.do_move(pv_move);
             tt.update_hash(&mut hash, &position, &move_info);

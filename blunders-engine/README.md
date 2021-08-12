@@ -15,10 +15,10 @@ Search the start position to a depth of 8-ply using a Transposition Table with 1
 ```rust
 use blunders_engine::{search, Position, TranspositionTable};
 
-let mut tt = TranspositionTable::with_mb(10);
+let tt = TranspositionTable::with_mb(10);
 let position = Position::start_position();
 let ply = 8;
 
-let search_results = search::search(position, ply, &mut tt);
+let search_results = search::search(position, ply, &tt);
 println!("best move: {}, nodes/sec: {}", search_results.best_move, search_results.nps());
 ```

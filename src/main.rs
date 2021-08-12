@@ -6,7 +6,7 @@ use std::panic;
 use std::process;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
 
@@ -123,8 +123,10 @@ fn main() -> io::Result<()> {
     uci_options.insert(option_debug);
 
     // Engine global transposition table.
-    let tt = TranspositionTable::with_mb(uci_options["Hash"].spin().value());
-    let tt = Arc::new(Mutex::new(tt));
+    let mut tt = {
+        let mb = uci_options["Hash"].spin().value();
+        Arc::new(TranspositionTable::with_mb(mb))
+    };
     // Position to search.
     let mut position = Position::start_position();
     // If set to true, allow debugging strings to be printed.
@@ -166,12 +168,15 @@ fn main() -> io::Result<()> {
                 // The next search will be from a different game.
                 // Clearing the transposition table of all entries allows engine
                 // to enter new game without prior information.
-                UciCommand::UciNewGame => {
-                    {
-                        tt.lock().unwrap().clear();
+                UciCommand::UciNewGame => match Arc::get_mut(&mut tt) {
+                    Some(inner_tt) => {
+                        inner_tt.clear();
+                        uci::debug(debug, "transposition table cleared")?;
                     }
-                    uci::debug(debug, "transposition table cleared")?;
-                }
+                    None => {
+                        uci::error("cannot clear transposition table: currently in use")?;
+                    }
+                },
 
                 // GUI commands engine to immediately stop any active search.
                 UciCommand::Stop => {
@@ -206,20 +211,30 @@ fn main() -> io::Result<()> {
                         // Received a new hash table capacity, so reassign tt.
                         if option.name == "Hash" {
                             let mb = option.spin().value();
-                            let capacity = {
-                                let mut locked_tt = tt.lock().unwrap();
-                                *locked_tt = TranspositionTable::with_mb(mb);
-                                locked_tt.capacity()
-                            };
-                            uci::debug(debug, &format!("tt mb: {}, capacity: {}", mb, capacity))?;
+                            match Arc::get_mut(&mut tt) {
+                                Some(inner_tt) => {
+                                    *inner_tt = TranspositionTable::with_mb(mb);
+                                    let capacity = inner_tt.capacity();
+                                    let s = format!("tt mb: {}, capacity: {}", mb, capacity);
+                                    uci::debug(debug, &s)?;
+                                }
+                                None => {
+                                    uci::error("transposition table in use: cannot resize.")?;
+                                }
+                            }
 
                         // Button was pressed to clear the hash table.
                         } else if option.name == "Clear Hash" {
-                            {
-                                tt.lock().unwrap().clear();
+                            match Arc::get_mut(&mut tt) {
+                                Some(inner_tt) => {
+                                    inner_tt.clear();
+                                    uci::debug(debug, "hash table cleared")?;
+                                }
+                                None => {
+                                    uci::error("transposition table in use: cannot clear")?;
+                                }
                             }
                             option.button_mut().pressed = false;
-                            uci::debug(debug, "hash table cleared")?;
 
                         // Engine was informed if pondering is possible or not.
                         } else if option.name == "Ponder" {

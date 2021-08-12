@@ -5,13 +5,13 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::arrayvec::{self, ArrayVec};
-use crate::coretypes::{Castling, Cp, Move, MoveInfo, MoveKind, PieceKind, Square::*, MAX_DEPTH};
+use crate::coretypes::{Castling, Cp, Move, MoveInfo, MoveKind, PieceKind, MAX_DEPTH};
 use crate::eval::{draw, terminal};
 use crate::movelist::{Line, MoveList};
 use crate::moveorder::order_all_moves;
 use crate::search::{quiescence, SearchResult};
 use crate::timeman::Mode;
-use crate::transposition::{NodeKind, TranspositionInfo, TranspositionTable};
+use crate::transposition::{Entry, NodeKind, TranspositionTable};
 use crate::zobrist::HashKind;
 use crate::Position;
 
@@ -20,7 +20,7 @@ use crate::Position;
 /// Internally, Negamax treats the active player as the maxing player,
 /// however the final centipawn score of the position returned is
 /// absolute with White as maxing and Black as minning.
-pub fn negamax(mut position: Position, ply: u32, tt: &mut TranspositionTable) -> SearchResult {
+pub fn negamax(mut position: Position, ply: u32, tt: &TranspositionTable) -> SearchResult {
     assert_ne!(ply, 0);
     assert!(ply < MAX_DEPTH as u32);
 
@@ -72,7 +72,7 @@ pub fn negamax(mut position: Position, ply: u32, tt: &mut TranspositionTable) ->
 /// beta: Best (lowest) guaranteed value for opposite player.
 fn negamax_impl(
     position: &mut Position,
-    tt: &mut TranspositionTable,
+    tt: &TranspositionTable,
     hash: HashKind,
     pv_line: &mut Line,
     nodes: &mut u64,
@@ -102,11 +102,11 @@ fn negamax_impl(
     // protection against Key collisions.
     // TODO: Verify that this is bug free. It is possible this may cut the Pv line,
     //       or that returning early is incorrect.
-    else if let Some(tt_info) = tt.get(hash) {
-        if tt_info.ply >= ply && legal_moves.contains(&tt_info.key_move) {
+    else if let Some(tt_entry) = tt.get(hash) {
+        if tt_entry.ply >= ply && legal_moves.contains(&tt_entry.key_move) {
             pv_line.clear();
-            pv_line.push(tt_info.key_move);
-            return tt_info.score;
+            pv_line.push(tt_entry.key_move);
+            return tt_entry.score;
         }
 
     // Run a Quiescence Search for non-terminal leaf nodes to find a more stable
@@ -126,7 +126,7 @@ fn negamax_impl(
     // Placeholder best_move, is guaranteed to be overwritten as there is at
     // lest one legal move, and the score of that move is better than worst
     // possible score.
-    let mut best_move = Move::new(A1, H7, None);
+    let mut best_move = Move::illegal();
     let mut local_pv = Line::new();
     let mut best_score = Cp::MIN;
 
@@ -157,8 +157,8 @@ fn negamax_impl(
         // This branch will not be taken further up the tree as there is a better move.
         // Push this cut-node into the tt, with a score relative to this node's active player.
         if move_score >= beta {
-            let tt_info = TranspositionInfo::new(hash, NodeKind::Cut, legal_move, ply, move_score);
-            tt.replace(tt_info);
+            let tt_entry = Entry::new(hash, NodeKind::Cut, legal_move, ply, move_score);
+            tt.replace(tt_entry);
             return move_score;
         }
 
@@ -170,16 +170,16 @@ fn negamax_impl(
             pv_line.push(legal_move);
             arrayvec::append(pv_line, local_pv.clone());
 
-            let tt_info = TranspositionInfo::new(hash, NodeKind::Pv, legal_move, ply, best_score);
-            tt.replace(tt_info);
+            let tt_entry = Entry::new(hash, NodeKind::Pv, legal_move, ply, best_score);
+            tt.replace(tt_entry);
         }
     }
 
     // Every move for this node has been evaluated. It is possible that this node
     // was added to the tt beforehand, so we can add it on the condition that
     // It's node-kind is less important than what exists in tt.
-    let tt_info = TranspositionInfo::new(hash, NodeKind::All, best_move, ply, best_score);
-    tt.replace_by(tt_info, |replacing, slotted| {
+    let tt_entry = Entry::new(hash, NodeKind::All, best_move, ply, best_score);
+    tt.replace_by(tt_entry, |replacing, slotted| {
         replacing.node_kind >= slotted.node_kind
     });
 
@@ -212,7 +212,6 @@ struct Frame {
 /// because nodes set appropriate data before using.
 impl Default for Frame {
     fn default() -> Self {
-        let illegal_move = Move::new(A1, H7, None);
         Self {
             label: Label::Initialize,
             local_pv: Line::new(),
@@ -220,10 +219,10 @@ impl Default for Frame {
             alpha: Cp::MIN,
             beta: Cp::MAX,
             best_score: Cp::MIN,
-            best_move: illegal_move,
+            best_move: Move::illegal(),
             hash: 0,
             move_info: MoveInfo {
-                move_: illegal_move,
+                move_: Move::illegal(),
                 piece_kind: PieceKind::Pawn,
                 move_kind: MoveKind::Quiet,
                 castling: Castling::NONE,
@@ -281,7 +280,7 @@ pub fn iterative_negamax(
     mut position: Position,
     ply: u32,
     mode: Mode,
-    tt: &mut TranspositionTable,
+    tt: &TranspositionTable,
     stopper: Arc<AtomicBool>,
 ) -> Option<SearchResult> {
     // Guard: must have a valid searchable ply, and root position must not be terminal.
@@ -377,14 +376,14 @@ pub fn iterative_negamax(
 
             // Check if this position exists in tt and has been searched to/beyond our ply.
             // If so the score is usable, store this value and return to parent.
-            } else if let Some(tt_info) = tt.get(us.hash) {
-                if tt_info.ply >= remaining_ply && legal_moves.contains(&tt_info.key_move) {
+            } else if let Some(tt_entry) = tt.get(us.hash) {
+                if tt_entry.ply >= remaining_ply && legal_moves.contains(&tt_entry.key_move) {
                     parent.label = Label::Retrieve;
                     parent.local_pv.clear();
-                    parent.local_pv.push(tt_info.key_move);
+                    parent.local_pv.push(tt_entry.key_move);
 
-                    us.best_score = tt_info.score;
-                    us.best_move = tt_info.key_move;
+                    us.best_score = tt_entry.score;
+                    us.best_move = tt_entry.key_move;
 
                     frame_idx = parent_idx(frame_idx);
                     continue;
@@ -431,14 +430,14 @@ pub fn iterative_negamax(
             } else {
                 // ALL-NODE hash strategy: TODO
                 // Currently adding only if it's node-kind is less important than what's in tt.
-                let tt_info = TranspositionInfo::new(
+                let tt_entry = Entry::new(
                     us.hash,
                     NodeKind::All,
                     us.best_move,
                     remaining_ply,
                     us.best_score,
                 );
-                tt.replace_by(tt_info, |replacing, slotted| {
+                tt.replace_by(tt_entry, |replacing, slotted| {
                     replacing.node_kind >= slotted.node_kind
                 });
 
@@ -467,14 +466,14 @@ pub fn iterative_negamax(
             // This branch will not be taken further up the tree as there is a better move.
             // Push this cut-node into the tt, with an absolute score, instead of relative.
             if us.best_score >= us.beta {
-                let tt_info = TranspositionInfo::new(
+                let tt_entry = Entry::new(
                     us.hash,
                     NodeKind::Cut,
                     us.best_move,
                     remaining_ply,
                     us.best_score,
                 );
-                tt.replace(tt_info);
+                tt.replace(tt_entry);
 
                 // Early return.
                 parent.label = Label::Retrieve;
@@ -494,14 +493,14 @@ pub fn iterative_negamax(
                 parent.local_pv.push(us.best_move);
                 arrayvec::append(&mut parent.local_pv, us.local_pv.clone());
 
-                //let tt_info = TranspositionInfo::new(
+                //let tt_entry = Entry::new(
                 //    us.hash,
                 //    NodeKind::Pv,
                 //    us.best_move,
                 //    remaining_ply,
                 //    us.best_score,
                 //);
-                //tt.replace(tt_info);
+                //tt.replace(tt_entry);
             }
 
             // Default action is to attempt to continue searching this node.
@@ -538,7 +537,7 @@ pub fn iterative_negamax(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coretypes::{Color, Move};
+    use crate::coretypes::{Color, Move, Square::*};
     use crate::fen::Fen;
 
     #[test]

@@ -13,7 +13,7 @@ pub use negamax::*;
 pub use quiescence::*;
 
 use std::fmt::{self, Display};
-use std::sync::{atomic::AtomicBool, mpsc, Arc, Mutex};
+use std::sync::{atomic::AtomicBool, mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 
@@ -95,7 +95,7 @@ impl Display for SearchResult {
 }
 
 /// Blunders Engine primary position search function. WIP.
-pub fn search(position: Position, ply: u32, tt: &mut TranspositionTable) -> SearchResult {
+pub fn search(position: Position, ply: u32, tt: &TranspositionTable) -> SearchResult {
     assert_ne!(ply, 0);
     let mode = Mode::depth(ply, None);
     ids(position, mode, tt, Arc::new(AtomicBool::new(false)), true)
@@ -112,15 +112,12 @@ pub fn search(position: Position, ply: u32, tt: &mut TranspositionTable) -> Sear
 pub fn search_nonblocking<T: 'static + Send + From<SearchResult>>(
     position: Position,
     mode: Mode,
-    tt: Arc<Mutex<TranspositionTable>>,
+    tt: Arc<TranspositionTable>,
     stopper: Arc<AtomicBool>,
     sender: mpsc::Sender<T>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let search_result = {
-            let mut locked_tt = tt.lock().unwrap();
-            ids(position, mode, &mut locked_tt, stopper, true)
-        };
+        let search_result = ids(position, mode, &tt, stopper, true);
         sender.send(search_result.into()).unwrap();
     })
 }
