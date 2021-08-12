@@ -98,7 +98,7 @@ impl Display for SearchResult {
 pub fn search(position: Position, ply: u32, tt: &mut TranspositionTable) -> SearchResult {
     assert_ne!(ply, 0);
     let mode = Mode::depth(ply, None);
-    ids(position, mode, tt, Arc::new(AtomicBool::new(false)))
+    ids(position, mode, tt, Arc::new(AtomicBool::new(false)), true)
 }
 
 /// Blunders Engine non-blocking search function. This runs the search on a separate thread.
@@ -119,7 +119,7 @@ pub fn search_nonblocking<T: 'static + Send + From<SearchResult>>(
     thread::spawn(move || {
         let search_result = {
             let mut locked_tt = tt.lock().unwrap();
-            ids(position, mode, &mut locked_tt, stopper)
+            ids(position, mode, &mut locked_tt, stopper, true)
         };
         sender.send(search_result.into()).unwrap();
     })

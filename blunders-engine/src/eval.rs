@@ -51,6 +51,12 @@ pub fn terminal(position: &Position) -> Cp {
     }
 }
 
+/// Return a score representing a stalemate. Need function as stalemate value may change
+/// in the future if contempt is added.
+pub fn draw() -> Cp {
+    STALEMATE
+}
+
 /// Primary hand-crafted evaluate function for engine, with return relative to player to move.
 /// Statically evaluates a non-terminal position.
 pub fn evaluate(position: &Position) -> Cp {

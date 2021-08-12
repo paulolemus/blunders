@@ -22,6 +22,7 @@ pub fn ids(
     mode: Mode,
     tt: &mut TranspositionTable,
     stopper: Arc<AtomicBool>,
+    debug: bool,
 ) -> SearchResult {
     let hash = tt.generate_hash(&position);
     let instant = Instant::now();
@@ -61,20 +62,22 @@ pub fn ids(
 
             if search_result.stopped {
                 break;
-            } else {
-                // Print UCI info for this completed search result.
-                println!(
-                    "info depth {} score cp {} time {} nodes {} nps {} pv {}",
-                    search_result.depth,
-                    search_result.relative_score(),
-                    search_result.elapsed.as_millis(),
-                    search_result.nodes,
-                    search_result.nps(),
-                    display(&search_result.pv_line),
-                );
             }
         } else {
             break;
+        }
+
+        if debug && !search_result.stopped {
+            // Print UCI info for this completed search result.
+            println!(
+                "info depth {} score cp {} time {} nodes {} nps {} pv {}",
+                search_result.depth,
+                search_result.relative_score(),
+                search_result.elapsed.as_millis(),
+                search_result.nodes,
+                search_result.nps(),
+                display(&search_result.pv_line),
+            );
         }
 
         // Check if this completed search result contains a checkmate, to return early.

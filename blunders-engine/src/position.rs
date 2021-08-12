@@ -118,6 +118,22 @@ impl Position {
         flipped
     }
 
+    /// Returns true if the positions are the same, in context of FIDE laws for position repetition.
+    /// They are the same if the player to move, piece kind and color per square, en passant,
+    /// and castling rights are the same.
+    pub fn is_same_as(&self, other: &Self) -> bool {
+        self.player == other.player
+            && self.castling == other.castling
+            && self.en_passant == other.en_passant
+            && self.pieces == other.pieces
+    }
+
+    /// Returns true if the fifty-move rule has been reached by this position, indicating that it is drawn.
+    /// `num_legal_moves`: number of legal moves for this position.
+    pub fn fifty_move_rule(&self, num_legal_moves: usize) -> bool {
+        self.halfmoves >= 100 && num_legal_moves != 0
+    }
+
     /// Updates the En-Passant position square, and handles any en-passant capture.
     /// En Passant square is set after any double pawn push.
     fn update_en_passant(&mut self, move_: &Move, active_piece: Piece, move_info: &mut MoveInfo) {
@@ -154,7 +170,7 @@ impl Position {
     /// fullmoves is incremented after each Black player's move.
     fn update_move_counters(&mut self, move_: &Move, active_piece: &Piece) {
         // Update halfmoves
-        let is_pawn_move = *active_piece.piece_kind() == Pawn;
+        let is_pawn_move = active_piece.piece_kind == Pawn;
         let is_capture = {
             let passive_player = !active_piece.color;
             self.pieces()[passive_player]

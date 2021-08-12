@@ -65,6 +65,7 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
                 black_box(mode),
                 black_box(&mut tt),
                 black_box(stopper),
+                false,
             );
 
             assert_eq!(result.leading(), lead);
@@ -129,6 +130,7 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
                 black_box(mode),
                 black_box(&mut tt),
                 black_box(stopper),
+                false,
             );
 
             assert_eq!(result.leading(), lead);

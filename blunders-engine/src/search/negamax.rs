@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use crate::arrayvec::{self, ArrayVec};
 use crate::coretypes::{Castling, Cp, Move, MoveInfo, MoveKind, PieceKind, Square::*, MAX_DEPTH};
-use crate::eval::terminal;
+use crate::eval::{draw, terminal};
 use crate::movelist::{Line, MoveList};
 use crate::moveorder::order_all_moves;
 use crate::search::{quiescence, SearchResult};
@@ -292,6 +292,7 @@ pub fn iterative_negamax(
     // Meta Search variables
     let instant = Instant::now(); // Timer for search
     let root_player = *position.player(); // Keep copy of root player for assertions
+    let root_hash = tt.generate_hash(&position); // Keep copy of root hash for assertions
 
     // Early Stop variables
     let nodes_per_stop_check = 2000; // Number of nodes between updates to stopped flag
@@ -312,7 +313,7 @@ pub fn iterative_negamax(
     }
     // Set initial valid root parameters.
     stack[ROOT_IDX].label = Label::Initialize;
-    stack[ROOT_IDX].hash = tt.generate_hash(&position);
+    stack[ROOT_IDX].hash = root_hash;
 
     // Frame indexer, begins at 1 (root) as 0 is for global pv.
     // Incrementing -> recurse to child, Decrementing -> return to parent.
@@ -359,6 +360,17 @@ pub fn iterative_negamax(
                 parent.label = Label::Retrieve;
                 parent.local_pv.clear();
                 us.best_score = terminal(&position);
+
+                frame_idx = parent_idx(frame_idx);
+                continue;
+
+            // Check for draw by repetition or fifty-move rule.
+            // After terminal because terminal can't be repeated, mate presides over 50-move rule.
+            // Before tt lookup because a repeated position has a different score than when previously visited.
+            } else if position.fifty_move_rule(num_moves) {
+                parent.label = Label::Retrieve;
+                parent.local_pv.clear();
+                us.best_score = draw();
 
                 frame_idx = parent_idx(frame_idx);
                 continue;
@@ -495,6 +507,11 @@ pub fn iterative_negamax(
             // Default action is to attempt to continue searching this node.
             us.label = Label::Search;
         }
+    }
+
+    if !stopped {
+        // Position has been returned to root position. Hashes should be equal.
+        debug_assert_eq!(root_hash, tt.generate_hash(&position));
     }
 
     // The search may not run to completion. If at any point the Root node's PV gets updated,
