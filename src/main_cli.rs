@@ -96,9 +96,9 @@ fn main() -> io::Result<()> {
 
         // Process a player move, then process an engine move.
         if let InputKind::GameMove(move_) = input_kind {
-            let (was_legal, maybe_move_info) = position.do_legal_move(move_);
+            let maybe_move_info = position.do_legal_move(move_);
 
-            if !was_legal {
+            if maybe_move_info.is_none() {
                 println!("That move was illegal! No action taken.");
                 continue;
             }

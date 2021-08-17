@@ -7,6 +7,7 @@ Blunders is currently a work in progress.
 * Iterative negamax search with alpha-beta pruning
 * Iterative deepening search
 * Non-blocking, stoppable search
+* Move ordering
 * Transposition Table
 * Bitboard position representation
 * Incremental Zobrist hashing

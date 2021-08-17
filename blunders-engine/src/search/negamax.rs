@@ -9,7 +9,7 @@ use crate::coretypes::{Castling, Cp, Move, MoveInfo, MoveKind, PieceKind, MAX_DE
 use crate::eval::{draw, terminal};
 use crate::movelist::{Line, MoveList};
 use crate::moveorder::order_all_moves;
-use crate::search::{quiescence, SearchResult};
+use crate::search::{quiescence, History, SearchResult};
 use crate::timeman::Mode;
 use crate::transposition::{Entry, NodeKind, TranspositionTable};
 use crate::zobrist::HashKind;
@@ -187,7 +187,7 @@ fn negamax_impl(
 }
 
 /// Label represents what stage of processing a node is in.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 enum Label {
     Initialize,
     Search,
@@ -280,6 +280,7 @@ pub fn iterative_negamax(
     mut position: Position,
     ply: u32,
     mode: Mode,
+    mut history: History,
     tt: &TranspositionTable,
     stopper: Arc<AtomicBool>,
 ) -> Option<SearchResult> {
@@ -290,13 +291,17 @@ pub fn iterative_negamax(
 
     // Meta Search variables
     let instant = Instant::now(); // Timer for search
-    let root_player = *position.player(); // Keep copy of root player for assertions
+    let root_position = position.clone(); // For assertions
     let root_hash = tt.generate_hash(&position); // Keep copy of root hash for assertions
+    let root_history = history.clone();
 
     // Early Stop variables
     let nodes_per_stop_check = 2000; // Number of nodes between updates to stopped flag
     let mut stopped = false; // Indicates if search was stopped
     let mut stop_check_counter = nodes_per_stop_check; // When this hits 0, update stopped and reset
+
+    // A score assigned to draws to lean engine away from drawing (Cp 0) when slightly behind.
+    let contempt = Cp(50);
 
     // Metrics
     let mut nodes: u64 = 0; // Number of nodes created
@@ -331,7 +336,7 @@ pub fn iterative_negamax(
         if label == Label::Initialize && stop_check_counter <= 0 {
             stop_check_counter = nodes_per_stop_check;
             stopped |= stopper.load(Ordering::Acquire);
-            stopped |= mode.stop(root_player, ply);
+            stopped |= mode.stop(root_position.player, ply);
         }
 
         // If stopped flag is ever set, breaking ends search early.
@@ -366,10 +371,14 @@ pub fn iterative_negamax(
             // Check for draw by repetition or fifty-move rule.
             // After terminal because terminal can't be repeated, mate presides over 50-move rule.
             // Before tt lookup because a repeated position has a different score than when previously visited.
-            } else if position.fifty_move_rule(num_moves) {
+            // TODO:
+            // Change to twofold_repetition but avoid error where root is in history.
+            } else if position.fifty_move_rule(num_moves)
+                || history.is_threefold_repetition(us.hash)
+            {
                 parent.label = Label::Retrieve;
                 parent.local_pv.clear();
-                us.best_score = draw();
+                us.best_score = draw(root_position.player == position.player, contempt);
 
                 frame_idx = parent_idx(frame_idx);
                 continue;
@@ -416,8 +425,9 @@ pub fn iterative_negamax(
             // This position has a child position to search, initialize its frame.
             if let Some(legal_move) = us.ordered_moves.pop() {
                 us.move_info = position.do_move(legal_move);
-                let child_hash = tt.update_from_hash(us.hash, &position, &us.move_info);
+                history.push(us.hash, us.move_info.is_unrepeatable());
 
+                let child_hash = tt.update_from_hash(us.hash, &position, &us.move_info);
                 child.label = Label::Initialize;
                 child.hash = child_hash;
                 child.alpha = -us.beta;
@@ -451,10 +461,11 @@ pub fn iterative_negamax(
         //
         // Flow: (beta cutoff) ? Return best-score to parent : continue searching this node
         } else if Label::Retrieve == label {
+            position.undo_move(us.move_info);
+            history.pop();
+
             // Negate child's best score so it's relative to this node.
             let move_score = -child.best_score;
-
-            position.undo_move(us.move_info);
 
             // Update our best_* trackers if this move is best seen so far.
             if move_score > us.best_score {
@@ -511,6 +522,8 @@ pub fn iterative_negamax(
     if !stopped {
         // Position has been returned to root position. Hashes should be equal.
         debug_assert_eq!(root_hash, tt.generate_hash(&position));
+        // History modified from search should return to equal that before searching.
+        debug_assert_eq!(root_history, history);
     }
 
     // The search may not run to completion. If at any point the Root node's PV gets updated,
@@ -522,10 +535,10 @@ pub fn iterative_negamax(
         None
     } else {
         Some(SearchResult {
-            player: root_player,
+            player: root_position.player,
             depth: ply,
             best_move: stack[ROOT_IDX].best_move,
-            score: stack[ROOT_IDX].best_score * root_player.sign(),
+            score: stack[ROOT_IDX].best_score * root_position.player.sign(),
             pv_line: stack[BASE_IDX].local_pv.clone(),
             nodes,
             elapsed: instant.elapsed(),

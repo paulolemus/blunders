@@ -8,6 +8,7 @@ use crate::arrayvec::display;
 use crate::coretypes::{Cp, Move, MAX_DEPTH};
 use crate::movelist::Line;
 use crate::search;
+use crate::search::History;
 use crate::search::SearchResult;
 use crate::timeman::Mode;
 use crate::transposition::{Entry, NodeKind, TranspositionTable};
@@ -20,13 +21,13 @@ use crate::Position;
 pub fn ids(
     position: Position,
     mode: Mode,
+    history: History,
     tt: &TranspositionTable,
     stopper: Arc<AtomicBool>,
     debug: bool,
 ) -> SearchResult {
     let hash = tt.generate_hash(&position);
     let instant = Instant::now();
-    let root_player = position.player;
 
     let mut nodes = 0;
 
@@ -45,14 +46,15 @@ pub fn ids(
     // Run a search for each ply from 1 to target ply.
     // After each search, ensure that the principal variation from the previous
     // iteration is in the tt.
-    for ids_ply in 1..=MAX_DEPTH as u32 {
+    for ply in 1..=MAX_DEPTH as u32 {
         // Check if we need to stop before the current iteration.
-        if mode.stop(root_player, ids_ply) {
+        if mode.stop(position.player, ply) {
             break;
         }
 
         let stopper = Arc::clone(&stopper);
-        let maybe_result = search::iterative_negamax(position, ids_ply, mode, tt, stopper);
+        let history = history.clone();
+        let maybe_result = search::iterative_negamax(position, ply, mode, history, tt, stopper);
 
         // Use the most recent valid search_result,
         // and return early if search_result is flagged as stopped.
@@ -85,30 +87,20 @@ pub fn ids(
             break;
         }
 
-        // Before the next iteration, attempt to fill missing moves in the PV by referencing
-        // the transposition table.
-        // The length of the pv_line should be the same as the depth searched to
-        // if a game-ending line was not found.
-        // TODO: figure out how to check this correctly.
-        // assert_eq!(search_result.pv_line.len(), ids_ply as usize);
-
-        // All nodes in the PV have the same score, because that score propagated up
-        // from a terminal node. Entry for all PV nodes can be fully recreated.
-        let mut position = position.clone();
-        let mut hash = hash.clone();
-        let mut move_ply = ids_ply.clone();
-        let mut relative_pv_score = search_result.relative_score();
-        let pv_line = search_result.pv_line.clone();
-
-        // For each move in PV, Entry is recreated from the current position,
-        // before applying the best move. Then the hash, position, ply, and score,
-        // are updated for the next loop.
-        // The Entry for each pv are inserted unconditionally.
+        // Each value in the PV has the same score, so a TT Entry is remade for each
+        // position to ensure the PV is searched first in the next search of deeper ply.
+        // PV may theoretically much longer than the ply of the current search, due to TT hits.
+        // Only positions up to the current ply may be used.
         // TODO:
         // Check for possible bugs where the pv is incorrect.
         // This might be fixed by checking if a position exists in the tt already,
         // but has different values from what is recreated.
-        for pv_move in pv_line {
+        let mut position = position.clone();
+        let mut hash = hash.clone();
+        let mut move_ply = ply.clone();
+        let mut relative_pv_score = search_result.relative_score();
+
+        for &pv_move in search_result.pv_line.iter().take(move_ply as usize) {
             let pv_entry = Entry::new(hash, NodeKind::Pv, pv_move, move_ply, relative_pv_score);
             tt.replace(pv_entry);
 
@@ -117,6 +109,7 @@ pub fn ids(
             move_ply -= 1;
             relative_pv_score = -relative_pv_score;
         }
+        // TODO: Handle part of PV that is longer than depth searched.
     }
 
     // Update values with those tracked in top level.

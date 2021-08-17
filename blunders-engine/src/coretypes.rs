@@ -22,10 +22,16 @@ pub const NUM_PIECE_KINDS: usize = 12;
 
 // The max possible measured number of moves for any chess position.
 pub const MAX_MOVES: usize = 218;
+
 // The greatest depth reachable for the engine during search.
 // This also expresses the maximum number of moves than can be in a line.
 // This value may change or be removed at any time.
 pub const MAX_DEPTH: usize = 40;
+
+// The greatest number of plies supported for the engine, 600 ply, or 300 moves.
+// Supports exceptionally long games of 300 moves. If a game goes longer than
+// this, expect a crash.
+pub const MAX_HISTORY: usize = 600;
 
 /////////////////////////
 // Data and Structures //
@@ -913,6 +919,23 @@ impl MoveInfo {
     }
     pub const fn halfmoves(&self) -> &MoveCount {
         &self.halfmoves
+    }
+
+    /// Returns true if the position before moving cannot be repeated in the game tree after the move.
+    /// Positions that result from captures or pawn moves cannot be repeated after those moves
+    /// because a pawn cannot move backwards, and material cannot be restored.
+    pub fn is_unrepeatable(&self) -> bool {
+        self.is_capture() || self.is_pawn_move()
+    }
+
+    /// Returns true if this MoveInfo came from a capturing move.
+    pub fn is_capture(&self) -> bool {
+        matches!(self.move_kind, MoveKind::Capture(_))
+    }
+
+    /// Returns true if this MoveInfo came from a pawn move.
+    pub fn is_pawn_move(&self) -> bool {
+        self.piece_kind == PieceKind::Pawn
     }
 }
 

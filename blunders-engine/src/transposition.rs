@@ -67,12 +67,28 @@ fn fill_with_illegal(v: &mut Vec<TtEntry>) {
     debug_assert_eq!(v.capacity(), capacity);
 }
 
+/// Converts a size in Megabytes to a capacity.
+fn mb_to_capacity(mb: usize) -> usize {
+    (mb * 1_000_000) / mem::size_of::<TtEntry>()
+}
+
 /// Type alias for inner type of TranspositionTable.
 type TtEntry = Mutex<Entry>;
 
 /// A Transposition Table (tt) with a fixed size, memoizing previously evaluated
-/// chess positions.
+/// chess positions. The table is safely sharable between threads as immutable.
+/// Slots may be updated from an immutable reference as each slot has its own lock.
 ///
+/// Example:
+/// ```rust
+/// # use std::sync::Arc;
+/// # use blunders_engine::transposition::TranspositionTable;
+/// # use blunders_engine::transposition::Entry;
+/// let tt = Arc::new(TranspositionTable::with_capacity(100));
+/// let tt_entry = Entry::illegal();
+///
+/// tt.replace(tt_entry);
+/// ```
 /// There are some notable differences in behavior between TranspositionTable
 /// and std::collections::{HashMap, HashSet}.
 /// TT only cares about the hash value. It does check for equivalence of provided position.
@@ -95,60 +111,37 @@ impl TranspositionTable {
     pub fn new() -> Self {
         let max_capacity = Self::DEFAULT_MAX_CAPACITY;
         let ztable = ZobristTable::new();
-        let mut transpositions = Vec::with_capacity(max_capacity);
-        fill_with_illegal(&mut transpositions);
+        Self::with_capacity_and_zobrist_table(max_capacity, ztable)
+    }
 
-        Self {
-            max_capacity,
-            ztable,
-            transpositions,
-        }
+    /// Returns a reference to the zobrist table.
+    pub fn zobrist_table(&self) -> &ZobristTable {
+        &self.ztable
     }
 
     /// Returns a new TranspositionTable with a randomly generated ZobristTable
     /// with given capacity pre-allocated.
     pub fn with_capacity(max_capacity: usize) -> Self {
         let ztable = ZobristTable::new();
-        let mut transpositions = Vec::with_capacity(max_capacity);
-        fill_with_illegal(&mut transpositions);
-
-        Self {
-            max_capacity,
-            ztable,
-            transpositions,
-        }
+        Self::with_capacity_and_zobrist_table(max_capacity, ztable)
     }
 
     /// Returns a new TranspositionTable with a randomly generated ZobristTable
     /// with capacity calculated to fill given Megabytes.
     pub fn with_mb(mb: usize) -> Self {
         assert!(mb > 0);
-        let max_capacity: usize = (mb * 1_000_000) / mem::size_of::<TtEntry>();
+        let max_capacity = mb_to_capacity(mb);
         assert!(max_capacity > 0, "max capacity is not greater than 0");
 
         let ztable = ZobristTable::new();
-        let mut transpositions = Vec::with_capacity(max_capacity);
-        fill_with_illegal(&mut transpositions);
-
-        Self {
-            max_capacity,
-            ztable,
-            transpositions,
-        }
+        Self::with_capacity_and_zobrist_table(max_capacity, ztable)
     }
 
     /// Returns a new TranspositionTable with provided ZobristTable
     /// with pre-allocated default max capacity.
     pub fn with_zobrist_table(ztable: ZobristTable) -> Self {
         let max_capacity = Self::DEFAULT_MAX_CAPACITY;
-        let mut transpositions = Vec::with_capacity(max_capacity);
-        fill_with_illegal(&mut transpositions);
-
-        Self {
-            max_capacity,
-            ztable,
-            transpositions,
-        }
+        Self::with_capacity_and_zobrist_table(max_capacity, ztable)
     }
 
     /// Returns a new TranspositionTable with provided ZobristTable
@@ -179,6 +172,16 @@ impl TranspositionTable {
         }
         debug_assert_eq!(self.max_capacity, self.transpositions.capacity());
         debug_assert_eq!(self.max_capacity, self.transpositions.len());
+    }
+
+    /// Drops original table and allocates a new table of size `new_mb`.
+    /// Entries in the original table are not preserved.
+    /// Returns the table's new capacity.
+    pub fn set_mb(&mut self, new_mb: usize) -> usize {
+        let max_capacity = mb_to_capacity(new_mb);
+        let ztable = self.ztable.clone();
+        *self = Self::with_capacity_and_zobrist_table(max_capacity, ztable);
+        self.capacity()
     }
 
     /// Generate a hash for a Position with context to this TranspositionTable.

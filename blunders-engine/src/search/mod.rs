@@ -1,12 +1,14 @@
 //! Search functions.
 
 mod alpha_beta;
+mod history;
 mod ids;
 mod minimax;
 mod negamax;
 mod quiescence;
 
 pub use alpha_beta::*;
+pub use history::*;
 pub use ids::*;
 pub use minimax::*;
 pub use negamax::*;
@@ -22,7 +24,7 @@ use crate::coretypes::{Color, Cp, Move};
 use crate::movelist::Line;
 use crate::timeman::Mode;
 use crate::transposition::TranspositionTable;
-use crate::Position;
+use crate::{Game, Position};
 
 /// General information gathered from searching a position.
 /// members:
@@ -98,26 +100,44 @@ impl Display for SearchResult {
 pub fn search(position: Position, ply: u32, tt: &TranspositionTable) -> SearchResult {
     assert_ne!(ply, 0);
     let mode = Mode::depth(ply, None);
-    ids(position, mode, tt, Arc::new(AtomicBool::new(false)), true)
+    let history = History::new(&position.into(), tt.zobrist_table());
+    ids(
+        position,
+        mode,
+        history,
+        tt,
+        Arc::new(AtomicBool::new(false)),
+        true,
+    )
 }
 
 /// Blunders Engine non-blocking search function. This runs the search on a separate thread.
 /// When the search has been completed, it returns the value by sending it over the given Sender.
-/// Args:
 ///
-/// * position: Root position to search
-/// * ply: Ply to search to
-/// * tt: Shared Transposition table. This may or may not lock the table for the duration of the search
-/// * sender: Channel to send search result over
-pub fn search_nonblocking<T: 'static + Send + From<SearchResult>>(
-    position: Position,
+/// # Arguments
+///
+/// * `game`: State of the current active game
+/// * `mode`: Mode of search determines when the search stops and how deep it searches
+/// * `tt`: Shared Transposition table. This may or may not lock the table for the duration of the search
+/// * `stopper`: Tell search to stop early from an external source
+/// * `sender`: Channel to send search result over
+pub fn search_nonblocking<P, T>(
+    game: P,
     mode: Mode,
     tt: Arc<TranspositionTable>,
     stopper: Arc<AtomicBool>,
     sender: mpsc::Sender<T>,
-) -> thread::JoinHandle<()> {
+) -> thread::JoinHandle<()>
+where
+    T: 'static + Send + From<SearchResult>,
+    P: Into<Game>,
+{
+    let game: Game = game.into();
+    let position = game.position;
+    let history = History::new(&game, tt.zobrist_table());
+
     thread::spawn(move || {
-        let search_result = ids(position, mode, &tt, stopper, true);
+        let search_result = ids(position, mode, history, &tt, stopper, true);
         sender.send(search_result.into()).unwrap();
     })
 }

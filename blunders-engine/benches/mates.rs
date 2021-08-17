@@ -4,7 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use blunders_engine::coretypes::{Color::*, Move, Square::*};
 use blunders_engine::fen::Fen;
-use blunders_engine::search;
+use blunders_engine::search::{self, History};
 use blunders_engine::timeman::Mode;
 use blunders_engine::*;
 
@@ -12,6 +12,7 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
     // Setup
     let pos =
         Position::parse_fen("r4rk1/1b3ppp/pp2p3/2p5/P1B1NR1Q/3P3P/2q3P1/7K w - - 0 24").unwrap();
+    let history = History::empty();
     let ply = 6;
     let mode = Mode::depth(ply, None);
     let bm = Move::new(E4, F6, None);
@@ -46,6 +47,7 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
                 black_box(pos),
                 black_box(ply),
                 black_box(mode),
+                black_box(history.clone()),
                 black_box(&tt),
                 black_box(stopper),
             )
@@ -63,6 +65,7 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
             let result = search::ids(
                 black_box(pos),
                 black_box(mode),
+                black_box(history.clone()),
                 black_box(&tt),
                 black_box(stopper),
                 false,
@@ -78,6 +81,7 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
     // Setup
     let pos = Position::parse_fen("8/1b5p/1p2NNpk/4P3/p1B4b/P7/KP6/2r5 w - - 7 37").unwrap();
     let ply = 6;
+    let history = History::empty();
     let mode = Mode::depth(ply, None);
     let bm = Move::new(F6, G8, None);
     let lead = Some(White);
@@ -111,6 +115,7 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
                 black_box(pos),
                 black_box(ply),
                 black_box(mode),
+                black_box(history.clone()),
                 black_box(&tt),
                 black_box(stopper),
             )
@@ -128,6 +133,7 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
             let result = search::ids(
                 black_box(pos),
                 black_box(mode),
+                black_box(history.clone()),
                 black_box(&tt),
                 black_box(stopper),
                 false,

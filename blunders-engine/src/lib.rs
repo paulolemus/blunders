@@ -18,9 +18,11 @@ pub mod transposition;
 pub mod uci;
 pub mod zobrist;
 
-pub use engine::Engine;
+pub use engine::{Engine, EngineBuilder};
 pub use fen::Fen;
-pub use position::Position;
+pub use position::{Game, Position};
+pub use search::SearchResult;
+pub use timeman::Mode;
 pub use transposition::TranspositionTable;
 pub use zobrist::ZobristTable;
 
@@ -31,3 +33,8 @@ mod tests {
         assert_eq!(2 + 2, 4);
     }
 }
+
+/// Add README.md rust code to testing.
+#[doc = include_str!("../README.md")]
+#[cfg(doctest)]
+pub struct ReadmeDoctests;

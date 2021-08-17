@@ -53,6 +53,18 @@ pub enum ErrorKind {
 
     /// Time Management Mode cannot be created, missing fields.
     ModeNotSatisfied,
+
+    /// The engine can only play games with a finite static number of moves.
+    /// That limit has been exceeded.
+    MoveHistoryExceeded,
+
+    /// Engine's transposition table is being referenced from another thread.
+    EngineTranspositionTableInUse,
+    /// Engine is currently searching, so another search cannot be started.
+    EngineAlreadySearching,
+
+    // An illegal move was provided, and could not be applied to some base position.
+    GameIllegalMove,
 }
 
 impl ErrorKind {
@@ -79,6 +91,13 @@ impl ErrorKind {
             ErrorKind::ParseCastlingMalformed => "parse castling malformed",
 
             ErrorKind::ModeNotSatisfied => "mode not satisfied",
+
+            ErrorKind::MoveHistoryExceeded => "move history exceeded",
+
+            ErrorKind::EngineTranspositionTableInUse => "engine transposition table in use",
+            ErrorKind::EngineAlreadySearching => "engine already searching",
+
+            ErrorKind::GameIllegalMove => "position history illegal move",
         }
     }
 }

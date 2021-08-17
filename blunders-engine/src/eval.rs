@@ -51,10 +51,14 @@ pub fn terminal(position: &Position) -> Cp {
     }
 }
 
-/// Return a score representing a stalemate. Need function as stalemate value may change
-/// in the future if contempt is added.
-pub fn draw() -> Cp {
+/// Return a score representing a stalemate. Uses a contempt factor to indicate
+/// how bad a draw is for the engine.
+pub fn draw(is_engine: bool, contempt: Cp) -> Cp {
     STALEMATE
+        + match is_engine {
+            true => -contempt,
+            false => contempt,
+        }
 }
 
 /// Primary hand-crafted evaluate function for engine, with return relative to player to move.

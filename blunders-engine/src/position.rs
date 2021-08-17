@@ -11,9 +11,54 @@ use crate::coretypes::{
     Castling, Color, Move, MoveCount, MoveInfo, MoveKind, Piece, PieceKind, Square,
 };
 use crate::coretypes::{Color::*, PieceKind::*, Square::*};
+use crate::error::{self, ErrorKind};
 use crate::fen::Fen;
 use crate::movegen as mg;
-use crate::movelist::MoveList;
+use crate::movelist::{MoveHistory, MoveList};
+
+/// Game contains information for an in progress game:
+/// The base position the game started from, the sequence of moves that were
+/// played, and the current position.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Game {
+    pub base_position: Position,
+    pub moves: MoveHistory,
+    pub position: Position,
+}
+
+impl Game {
+    /// Create a new Game from a base position and a sequence of moves.
+    /// This generates the current position by applying the sequence of moves to the base.
+    /// If a move in the move history was illegal, Err is returned.
+    pub fn new(base_position: Position, moves: MoveHistory) -> error::Result<Self> {
+        let mut position = base_position.clone();
+
+        for move_ in &moves {
+            let maybe_move_info = position.do_legal_move(*move_);
+            if maybe_move_info.is_none() {
+                return Err(ErrorKind::GameIllegalMove.into());
+            }
+        }
+
+        Ok(Self {
+            base_position,
+            moves,
+            position,
+        })
+    }
+
+    /// Create a new game in the standard chess start position.
+    pub fn start_position() -> Self {
+        Self::from(Position::start_position())
+    }
+}
+
+/// Convert a position to a Game with no past moves.
+impl From<Position> for Game {
+    fn from(position: Position) -> Self {
+        Self::new(position, MoveHistory::new()).unwrap()
+    }
+}
 
 /// struct Position
 /// A complete data set that can represent any chess position.
@@ -347,14 +392,14 @@ impl Position {
     }
 
     /// Checks if move is legal before applying it.
-    /// If move is legal, the move is applied and returns true.
-    /// Otherwise, no action is taken and returns false.
+    /// If move is legal, the move is applied and returns the resulting MoveInfo.
+    /// Otherwise, no action is taken and returns None.
     /// This is best used as a CLI function, not in the engine.
-    pub fn do_legal_move(&mut self, move_: Move) -> (bool, Option<MoveInfo>) {
+    pub fn do_legal_move(&mut self, move_: Move) -> Option<MoveInfo> {
         if self.is_legal_move(move_) {
-            (true, Some(self.do_move(move_)))
+            Some(self.do_move(move_))
         } else {
-            (false, None)
+            None
         }
     }
 

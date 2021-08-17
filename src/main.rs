@@ -5,17 +5,13 @@ use std::io;
 use std::panic;
 use std::process;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
-use std::thread::{self, JoinHandle};
+use std::sync::mpsc;
+use std::thread;
 use std::time::Instant;
 
-use blunders_engine;
 use blunders_engine::arrayvec::display;
-use blunders_engine::search::{self, SearchResult};
-use blunders_engine::timeman::Mode;
 use blunders_engine::uci::{self, UciCommand, UciOption, UciOptions, UciResponse};
-use blunders_engine::{Fen, Position, TranspositionTable};
+use blunders_engine::{EngineBuilder, Fen, Game, Mode, SearchResult};
 
 /// Message type passed over channels.
 #[derive(Debug, Clone)]
@@ -101,34 +97,25 @@ const AUTHOR: &'static str = env!("CARGO_PKG_AUTHORS");
 fn main() -> io::Result<()> {
     println!("{} by {}", NAME_VERSION, AUTHOR);
 
-    // Hook to print errors to STDOUT.
+    // Hook to print errors to STDOUT on panic.
     panic_hook();
 
     // Engine Internal parameters
-    let mut uci_options = UciOptions::new();
     // option name Hash type spin default 1 min 1 max 16000
     // option name Clear Hash type button
     // option name Ponder type check default false
     // option name Threads type spin default 1 min 1 max 32
     // option name Debug type check default true
-    let option_hash = UciOption::new_spin("Hash", 1, 1, 16000);
-    let option_clear_hash = UciOption::new_button("Clear Hash", false);
-    let option_ponder = UciOption::new_check("Ponder", false);
-    let option_threads = UciOption::new_spin("Threads", 1, 1, 32);
-    let option_debug = UciOption::new_check("Debug", true);
-    uci_options.insert(option_hash);
-    uci_options.insert(option_clear_hash);
-    uci_options.insert(option_ponder);
-    uci_options.insert(option_threads);
-    uci_options.insert(option_debug);
+    let mut uci_options = UciOptions::new();
+    uci_options.insert(UciOption::new_spin("Hash", 1, 1, 16000));
+    uci_options.insert(UciOption::new_button("Clear Hash", false));
+    uci_options.insert(UciOption::new_check("Ponder", false));
+    uci_options.insert(UciOption::new_spin("Threads", 1, 1, 32));
+    uci_options.insert(UciOption::new_check("Debug", true));
 
-    // Engine global transposition table.
-    let mut tt = {
-        let mb = uci_options["Hash"].spin().value();
-        Arc::new(TranspositionTable::with_mb(mb))
-    };
-    // Position to search.
-    let mut position = Position::start_position();
+    // Current chess game with move history.
+    let mut game = Game::start_position();
+
     // If set to true, allow debugging strings to be printed.
     let mut debug = uci_options["Debug"].check().value;
 
@@ -139,11 +126,13 @@ fn main() -> io::Result<()> {
     let input_sender = sender.clone();
     let input_thread_handle = thread::spawn(move || input_handler(input_sender));
 
-    // Search stopper, set this to stop any active searches.
-    let stopper = Arc::new(AtomicBool::new(false));
-
-    // Only a single search at a time is allowed. Handle is stored here.
-    let mut search_handle: Option<JoinHandle<()>> = None;
+    // Main Engine instance.
+    let mut engine = EngineBuilder::new()
+        .transpositions_mb(uci_options["Hash"].spin().value())
+        .threads(uci_options["Threads"].spin().value())
+        .debug(debug)
+        .game(game.clone())
+        .build();
 
     // Message can either be A UciCommand received from external source,
     // or the results of a search. Process accordingly.
@@ -168,20 +157,15 @@ fn main() -> io::Result<()> {
                 // The next search will be from a different game.
                 // Clearing the transposition table of all entries allows engine
                 // to enter new game without prior information.
-                UciCommand::UciNewGame => match Arc::get_mut(&mut tt) {
-                    Some(inner_tt) => {
-                        inner_tt.clear();
-                        uci::debug(debug, "transposition table cleared")?;
-                    }
-                    None => {
-                        uci::error("cannot clear transposition table: currently in use")?;
-                    }
+                UciCommand::UciNewGame => match engine.new_game() {
+                    Ok(()) => uci::debug(debug, "transposition table cleared")?,
+                    Err(err) => uci::error(&err.to_string())?,
                 },
 
                 // GUI commands engine to immediately stop any active search.
                 UciCommand::Stop => {
                     uci::debug(debug, "stopping...")?;
-                    stopper.store(true, Ordering::Relaxed);
+                    engine.stop();
                 }
 
                 // Inform the engine that user has played an expected move and may
@@ -201,7 +185,8 @@ fn main() -> io::Result<()> {
 
                     // Update both engine options and global debug flag.
                     uci_options["Debug"].check_mut().value = new_debug_value;
-                    debug = uci_options["Debug"].check().value;
+                    debug = new_debug_value;
+                    engine.set_debug(new_debug_value);
                 }
 
                 // Command to change engine internal parameters.
@@ -211,30 +196,23 @@ fn main() -> io::Result<()> {
                         // Received a new hash table capacity, so reassign tt.
                         if option.name == "Hash" {
                             let mb = option.spin().value();
-                            match Arc::get_mut(&mut tt) {
-                                Some(inner_tt) => {
-                                    *inner_tt = TranspositionTable::with_mb(mb);
-                                    let capacity = inner_tt.capacity();
+
+                            match engine.try_set_transpositions_mb(mb) {
+                                Ok(capacity) => {
                                     let s = format!("tt mb: {}, capacity: {}", mb, capacity);
                                     uci::debug(debug, &s)?;
                                 }
-                                None => {
-                                    uci::error("transposition table in use: cannot resize.")?;
-                                }
-                            }
+                                Err(err) => uci::error(&err.to_string())?,
+                            };
 
                         // Button was pressed to clear the hash table.
                         } else if option.name == "Clear Hash" {
-                            match Arc::get_mut(&mut tt) {
-                                Some(inner_tt) => {
-                                    inner_tt.clear();
-                                    uci::debug(debug, "hash table cleared")?;
-                                }
-                                None => {
-                                    uci::error("transposition table in use: cannot clear")?;
-                                }
-                            }
                             option.button_mut().pressed = false;
+
+                            match engine.try_clear_transpositions() {
+                                Ok(()) => uci::debug(debug, "hash table cleared")?,
+                                Err(err) => uci::error(&err.to_string())?,
+                            };
 
                         // Engine was informed if pondering is possible or not.
                         } else if option.name == "Ponder" {
@@ -251,18 +229,19 @@ fn main() -> io::Result<()> {
                             let new_debug_value = option.check().value;
                             let response = format!("setoption Debug {}", new_debug_value);
                             uci::debug(debug | new_debug_value, &response)?;
+
                             debug = new_debug_value;
+                            engine.set_debug(new_debug_value);
                         }
                     }
-                    Err(err) => {
-                        uci::error(&err.to_string())?;
-                    }
+                    Err(err) => uci::error(&err.to_string())?,
                 },
 
                 // Set the current position.
-                UciCommand::Pos(new_position) => {
-                    position = new_position;
-                    uci::debug(debug, &format!("set position {}", position.to_fen()))?;
+                UciCommand::Pos(new_game) => {
+                    game = new_game;
+                    engine.set_game(game.clone());
+                    uci::debug(debug, &format!("set position {}", game.position.to_fen()))?;
                 }
 
                 // Begin a search with provided parameters. Only search if are no other active searches.
@@ -272,27 +251,15 @@ fn main() -> io::Result<()> {
                         Err(err) => {
                             uci::error(&err.to_string())?;
                             uci::error("falling back to depth search")?;
-                            Mode::depth(7, None)
+                            Mode::depth(6, None)
                         }
                     };
 
-                    // TODO: When receive a go command, STOP the current search, wait for it, then start a new one
-                    if search_handle.is_none() {
-                        uci::debug(debug, "go starting search...")?;
-                        // Ensure stopper is not set before starting search.
-                        stopper.store(false, Ordering::SeqCst);
-
-                        let handle = search::search_nonblocking(
-                            position.clone(),
-                            mode,
-                            Arc::clone(&tt),
-                            Arc::clone(&stopper),
-                            sender.clone(),
-                        );
-                        search_handle = Some(handle);
-                    } else {
-                        uci::error("search already in progress, cannot begin new search")?;
-                    }
+                    // TODO: consider stopping any active search to ensure new search can always start.
+                    match engine.search(mode, sender.clone()) {
+                        Ok(()) => uci::debug(debug, "go starting search...")?,
+                        Err(err) => uci::error(&err.to_string())?,
+                    };
                 }
             },
 
@@ -308,26 +275,22 @@ fn main() -> io::Result<()> {
                     search_result.nps(),
                     display(&search_result.pv_line),
                 );
-
                 UciResponse::new_best_move(search_result.best_move).send()?;
 
-                // Wait for thread to clean up.
-                uci::debug(debug, "search_result join handle waiting...")?;
+                // Wait for engine to clean up.
+                uci::debug(debug, "engine waiting...")?;
                 let instant = Instant::now();
-                search_handle.take().unwrap().join().unwrap();
-                let time_str = format!("search_result join time: {:?}", instant.elapsed());
+                engine.wait();
+                let time_str = format!("engine wait time: {:?}", instant.elapsed());
                 uci::debug(debug, &time_str)?;
             }
-        }
+        };
     }
 
     // Inform any active search to stop.
-    stopper.store(true, Ordering::SeqCst);
-    // Wait for threads to close out.
+    engine.shutdown();
+    // Wait for input thread to close out.
     input_thread_handle.join().unwrap();
-    search_handle
-        .into_iter()
-        .for_each(|handle| handle.join().unwrap());
 
     Ok(())
 }

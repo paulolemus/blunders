@@ -13,7 +13,8 @@ use std::str::{FromStr, SplitWhitespace};
 use crate::coretypes::Move;
 use crate::error::{self, ErrorKind};
 use crate::fen::Fen;
-use crate::Position;
+use crate::movelist::MoveHistory;
+use crate::position::{Game, Position};
 
 /// UciCommands commands from an external program sent to this chess engine.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -23,7 +24,7 @@ pub enum UciCommand {
     IsReady,
     SetOption(RawOption),
     UciNewGame,
-    Pos(Position),
+    Pos(Game),
     Go(SearchControls),
     Stop,
     PonderHit,
@@ -119,7 +120,7 @@ impl UciCommand {
         ))?;
 
         // Parse a valid position from startpos or FEN, or return an Err(_).
-        let mut position = match position_input {
+        let base_position = match position_input {
             "startpos" => Ok(Position::start_position()),
             "fen" => {
                 let mut fen_str = String::new();
@@ -132,19 +133,16 @@ impl UciCommand {
             _ => return Err(ErrorKind::UciPositionMalformed.into()),
         }?;
 
+        let mut moves = MoveHistory::new();
+
         // Check if there is a sequence of moves to apply to the position.
         if let Some("moves") = input.next() {
             for move_str in input {
-                let move_ = Move::from_str(move_str)?;
-                if !position.is_legal_move(move_) {
-                    return Err(ErrorKind::UciPositionIllegalMove.into());
-                }
-
-                position.do_move(move_);
+                moves.push(Move::from_str(move_str)?);
             }
         }
 
-        Ok(Self::Pos(position))
+        Game::new(base_position, moves).map(|game| UciCommand::Pos(game))
     }
 
     /// Extract a `go` command if possible.
@@ -898,7 +896,7 @@ mod tests {
     fn parse_command_pos() {
         {
             // Simple start position.
-            let start_position = Position::start_position();
+            let start_position = Game::new(Position::start_position(), MoveHistory::new()).unwrap();
             let command_start_str = "position startpos";
             let command_start1 = UciCommand::parse_command(command_start_str).unwrap();
             assert_eq!(UciCommand::Pos(start_position), command_start1);
@@ -906,14 +904,23 @@ mod tests {
 
         {
             // Derived from applying moves to start position.
-            let moves = vec![Move::new(D2, D4, None), Move::new(D7, D5, None)];
-            let mut pos = Position::start_position();
-            moves.into_iter().for_each(|move_| {
-                pos.do_move(move_);
+            let mut moves = MoveHistory::new();
+            moves.push(Move::new(D2, D4, None));
+            moves.push(Move::new(D7, D5, None));
+            let base_pos = Position::start_position();
+            let mut final_pos = base_pos.clone();
+
+            moves.iter().for_each(|move_| {
+                final_pos.do_move(*move_);
             });
+
+            let game = Game::new(base_pos, moves).unwrap();
+            let game_position = game.position.clone();
+
             let command_start_moves_str = "position startpos moves d2d4 d7d5";
             let command = UciCommand::parse_command(command_start_moves_str).unwrap();
-            assert_eq!(UciCommand::Pos(pos), command);
+            assert_eq!(UciCommand::Pos(game), command);
+            assert_eq!(game_position, final_pos);
         }
 
         {
@@ -922,23 +929,38 @@ mod tests {
             let command_str =
                 "position fen rnbqkbnr/pppp1ppp/8/4P3/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 2";
             let pos = Position::parse_fen(pos_fen_str).unwrap();
+            let game = Game::new(pos, MoveHistory::new()).unwrap();
+            let game_position = game.position;
             let command = UciCommand::parse_command(command_str).unwrap();
-            assert_eq!(UciCommand::Pos(pos), command);
+
+            assert_eq!(UciCommand::Pos(game), command);
+            assert_eq!(game_position, pos);
         }
 
         {
             // Derive from a fen string with moves applied.
-            let _base_fen_str = "rnbqkbnr/pppp1ppp/8/4P3/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 2";
+            let base_fen_str = "rnbqkbnr/pppp1ppp/8/4P3/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 2";
             let post_fen_str = "rnbqkbnr/ppp2ppp/3P4/8/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 3";
             let command_str = "position fen rnbqkbnr/pppp1ppp/8/4P3/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 2 moves d7d6 e5d6";
+            let pos_base = Position::parse_fen(base_fen_str).unwrap();
             let pos_post = Position::parse_fen(post_fen_str).unwrap();
+            let mut moves = MoveHistory::new();
+            moves.push(Move::new(D7, D6, None));
+            moves.push(Move::new(E5, D6, None));
+
+            let game = Game::new(pos_base, moves).unwrap();
+
             let command = UciCommand::parse_command(command_str).unwrap();
             println!("pos: {}", pos_post);
 
-            if let UciCommand::Pos(pos) = command {
-                println!("com: {}", pos);
+            if let UciCommand::Pos(ref inner_game) = command {
+                println!("com: {:?}", inner_game);
             };
-            assert_eq!(UciCommand::Pos(pos_post), command);
+            let game_position = game.position;
+            let game_base_position = game.base_position;
+            assert_eq!(UciCommand::Pos(game), command);
+            assert_eq!(game_position, pos_post);
+            assert_eq!(game_base_position, pos_base);
         }
     }
 
