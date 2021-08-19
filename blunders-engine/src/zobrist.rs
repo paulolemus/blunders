@@ -9,7 +9,7 @@ use crate::boardrepr::PieceSets;
 use crate::coretypes::{Castling, Color, File, Piece, PieceKind, Rank, Square, SquareIndexable};
 use crate::coretypes::{MoveInfo, MoveKind, Square::*};
 use crate::coretypes::{NUM_FILES, NUM_PIECE_KINDS, NUM_SQUARES};
-use crate::Position;
+use crate::position::{Cache, Position};
 
 /// HashKind is an alias for the underlying type of a Zobrist Hash.
 pub type HashKind = u64;
@@ -150,21 +150,27 @@ impl ZobristTable {
     /// Update a hash from a Position and its MoveInfo. The move that resulted in MoveInfo
     /// must already be applied to the position.
     /// update_hash works both directions, it can apply and remove a move from a position's hash.
-    pub fn update_hash(&self, hash: &mut HashKind, key: Key, move_info: &MoveInfo) {
+    ///
+    /// # Arguments
+    /// `hash`: The hash value to directly update.
+    /// `key`: A key taken from an updated Position.
+    /// `move_info`: The MoveInfo that was applied to some position.
+    /// `cache`: The original cache of the Position, before a move.
+    pub fn update_hash(&self, hash: &mut HashKind, key: Key, move_info: MoveInfo, cache: Cache) {
         let moved_player = !key.1;
         let passive_player = *key.1;
 
         // Always toggle player hash because player always alternates.
         *hash ^= self.player_hash;
         // Always toggle both old and new Castling, as each enumeration even none has a hash.
-        *hash ^= self[move_info.castling];
+        *hash ^= self[cache.castling];
         *hash ^= self[*key.2];
         // Always toggle piece on "from" square.
         let moved_piece = Piece::new(moved_player, move_info.piece_kind);
-        *hash ^= self[(moved_piece, move_info.move_.from)];
+        *hash ^= self[(moved_piece, move_info.from)];
 
         // Toggle both old and new en-passant, if they exist.
-        let old_ep = move_info.en_passant;
+        let old_ep = cache.en_passant;
         let new_ep = key.3;
         if let Some(ep_square) = old_ep {
             *hash ^= self[ep_square.file()];
@@ -174,23 +180,23 @@ impl ZobristTable {
         }
 
         // Toggle moved piece on "to" square. If promoted, instead toggle promoted_piece.
-        let to_piece_kind: PieceKind = match move_info.move_.promotion() {
-            Some(promoted_pk) => *promoted_pk,
+        let to_piece_kind: PieceKind = match move_info.promotion {
+            Some(promoted_pk) => promoted_pk,
             None => move_info.piece_kind,
         };
         let to_piece = Piece::new(moved_player, to_piece_kind);
-        *hash ^= self[(to_piece, move_info.move_.to)];
+        *hash ^= self[(to_piece, move_info.to)];
 
         match move_info.move_kind {
             // Toggle passive player's captured piece if a normal capture occurred.
             MoveKind::Capture(captured_pk) => {
                 let captured_piece = Piece::new(passive_player, captured_pk);
-                *hash ^= self[(captured_piece, move_info.move_.to)];
+                *hash ^= self[(captured_piece, move_info.to)];
             }
 
             // Toggle passive player's pawn if en-passant occurred.
             MoveKind::EnPassant => {
-                let ep_square = move_info.en_passant.unwrap();
+                let ep_square = cache.en_passant.unwrap();
                 let pawn_square = match ep_square.rank() {
                     Rank::R3 => ep_square.increment_rank().unwrap(),
                     _ => ep_square.decrement_rank().unwrap(),
@@ -201,7 +207,7 @@ impl ZobristTable {
 
             // Toggle both castling squares for rook.
             MoveKind::Castle => {
-                let (rook_from, rook_to) = match move_info.move_.to {
+                let (rook_from, rook_to) = match move_info.to {
                     G1 => (H1, F1),
                     C1 => (A1, D1),
                     G8 => (H8, F8),
@@ -215,7 +221,7 @@ impl ZobristTable {
 
             // Nothing extra is toggled for quiet moves.
             MoveKind::Quiet => (),
-        }
+        };
     }
 }
 
@@ -321,17 +327,18 @@ mod tests {
 
         // Check that newly updated hash and position
         // equal individually generated hash and position.
+        let cache = pos.cache();
         let move_info = pos.do_move(legal_move);
-        table.update_hash(&mut hash, Key::from(&pos), &move_info);
+        table.update_hash(&mut hash, Key::from(&pos), move_info, cache);
         assert_eq!(pos, after);
         assert_eq!(hash, hash_after);
 
         // Check that updating hash a second time undoes the previous update.
-        table.update_hash(&mut hash, Key::from(&pos), &move_info);
+        table.update_hash(&mut hash, Key::from(&pos), move_info, cache);
         assert_eq!(hash, hash_before);
 
         // Check that updating hash a third time acts like the first update.
-        table.update_hash(&mut hash, Key::from(&pos), &move_info);
+        table.update_hash(&mut hash, Key::from(&pos), move_info, cache);
         assert_eq!(hash, hash_after);
     }
 

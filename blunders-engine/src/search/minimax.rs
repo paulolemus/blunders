@@ -49,6 +49,7 @@ pub fn minimax(position: Position, ply: u32) -> SearchResult {
 /// so no pruning can occur.
 fn minimax_root(mut position: Position, ply: u32, nodes: &mut u64) -> (Cp, Move) {
     *nodes += 1;
+    let cache = position.cache();
     let legal_moves = position.get_legal_moves();
     assert_ne!(ply, 0);
     assert!(legal_moves.len() > 0);
@@ -62,7 +63,7 @@ fn minimax_root(mut position: Position, ply: u32, nodes: &mut u64) -> (Cp, Move)
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
             let move_cp = minimax_impl::<BLACK>(&mut position, ply - 1, nodes);
-            position.undo_move(move_info);
+            position.undo_move(move_info, cache);
 
             if move_cp > best_cp {
                 best_cp = move_cp;
@@ -75,7 +76,7 @@ fn minimax_root(mut position: Position, ply: u32, nodes: &mut u64) -> (Cp, Move)
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
             let move_cp = minimax_impl::<WHITE>(&mut position, ply - 1, nodes);
-            position.undo_move(move_info);
+            position.undo_move(move_info, cache);
 
             if move_cp < best_cp {
                 best_cp = move_cp;
@@ -89,6 +90,7 @@ fn minimax_root(mut position: Position, ply: u32, nodes: &mut u64) -> (Cp, Move)
 
 fn minimax_impl<const COLOR: u8>(position: &mut Position, ply: u32, nodes: &mut u64) -> Cp {
     *nodes += 1;
+    let cache = position.cache();
     let legal_moves = position.get_legal_moves();
     let num_moves = legal_moves.len();
 
@@ -107,7 +109,7 @@ fn minimax_impl<const COLOR: u8>(position: &mut Position, ply: u32, nodes: &mut 
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
             let move_cp = minimax_impl::<BLACK>(position, ply - 1, nodes);
-            position.undo_move(move_info);
+            position.undo_move(move_info, cache);
             best_cp = cmp::max(best_cp, move_cp);
         }
     } else {
@@ -116,7 +118,7 @@ fn minimax_impl<const COLOR: u8>(position: &mut Position, ply: u32, nodes: &mut 
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
             let move_cp = minimax_impl::<WHITE>(position, ply - 1, nodes);
-            position.undo_move(move_info);
+            position.undo_move(move_info, cache);
             best_cp = cmp::min(best_cp, move_cp);
         }
     }

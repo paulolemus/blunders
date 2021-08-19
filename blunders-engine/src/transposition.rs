@@ -5,8 +5,8 @@ use std::mem;
 use std::sync::Mutex;
 
 use crate::coretypes::{Cp, Move, MoveInfo};
+use crate::position::{Cache, Position};
 use crate::zobrist::{HashKind, ZobristTable};
-use crate::Position;
 
 /// The type of a node in a search tree.
 /// See [Node Types](https://www.chessprogramming.org/Node_Types).
@@ -192,8 +192,15 @@ impl TranspositionTable {
     }
 
     /// Update hash for the application of a Move on Position.
-    pub fn update_hash(&self, hash: &mut HashKind, position: &Position, move_info: &MoveInfo) {
-        self.ztable.update_hash(hash, position.into(), move_info);
+    pub fn update_hash(
+        &self,
+        hash: &mut HashKind,
+        position: &Position,
+        move_info: MoveInfo,
+        cache: Cache,
+    ) {
+        self.ztable
+            .update_hash(hash, position.into(), move_info, cache);
     }
 
     /// Generate a new hash from a Move applied to an existing Hash and Position.
@@ -201,10 +208,11 @@ impl TranspositionTable {
         &self,
         mut hash: HashKind,
         position: &Position,
-        move_info: &MoveInfo,
+        move_info: MoveInfo,
+        cache: Cache,
     ) -> HashKind {
         self.ztable
-            .update_hash(&mut hash, position.into(), move_info);
+            .update_hash(&mut hash, position.into(), move_info, cache);
         hash
     }
 

@@ -38,7 +38,7 @@ pub const MAX_HISTORY: usize = 600;
 /////////////////////////
 
 /// Counter for half-move clock and full-moves.
-pub type MoveCount = u32;
+pub type MoveCount = u16;
 
 // Type alias to make changing Cp inner type easy if needed.
 pub type CpKind = i32;
@@ -142,22 +142,29 @@ pub struct Move {
 /// Enum describing the kind of a move.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MoveKind {
-    Capture(PieceKind), // Normal capture move
-    Quiet,              // Special moves or captures, simply moved to empty square
-    Castle,             // Castled
-    EnPassant,          // En passant capture
+    /// Move resulted in a capture.
+    Capture(PieceKind),
+    /// No special moves or captures, simply moved to empty square.
+    Quiet,
+    /// This move was the special castling move.
+    Castle,
+    /// En passant capture.
+    EnPassant,
 }
 
-/// MoveInfo stores data about a position before a move, and data generated from making a Move.
-/// This allows preventing some recalculations and providing enough data to reverse the made move.
+/// MoveInfo contains extra properties of a move in context of an existing position.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct MoveInfo {
-    pub(crate) move_: Move,
+    /// Original square of moving piece.
+    pub(crate) from: Square,
+    /// Target square of moving piece.
+    pub(crate) to: Square,
+    /// Promotion piece kind.
+    pub(crate) promotion: Option<PieceKind>,
+    /// Kind of the piece that was moved.
     pub(crate) piece_kind: PieceKind,
+    /// Flag if move was a regular or special move.
     pub(crate) move_kind: MoveKind,
-    pub(crate) castling: Castling,
-    pub(crate) en_passant: Option<Square>,
-    pub(crate) halfmoves: MoveCount,
 }
 
 ////////////
@@ -493,7 +500,7 @@ impl Castling {
     }
 
     /// Removes all castling rights for a color.
-    pub fn clear_color(&mut self, color: &Color) {
+    pub fn clear_color(&mut self, color: Color) {
         match color {
             Color::White => self.clear(Self::W_SIDE),
             Color::Black => self.clear(Self::B_SIDE),
@@ -869,8 +876,26 @@ impl Move {
             promotion: None,
         }
     }
+}
 
-    // Getters
+impl From<MoveInfo> for Move {
+    fn from(move_info: MoveInfo) -> Self {
+        Self::new(move_info.from, move_info.to, move_info.promotion)
+    }
+}
+
+impl MoveInfo {
+    pub const fn new(move_: Move, moved_piece_kind: PieceKind, move_kind: MoveKind) -> Self {
+        Self {
+            from: move_.from,
+            to: move_.to,
+            promotion: move_.promotion,
+            piece_kind: moved_piece_kind,
+            move_kind,
+        }
+    }
+
+    // Immutable Getters
     pub const fn from(&self) -> &Square {
         &self.from
     }
@@ -880,45 +905,11 @@ impl Move {
     pub const fn promotion(&self) -> &Option<PieceKind> {
         &self.promotion
     }
-}
-
-impl MoveInfo {
-    pub const fn new(
-        move_: Move,
-        moved_piece_kind: PieceKind,
-        move_kind: MoveKind,
-        castling: Castling,
-        en_passant: Option<Square>,
-        halfmoves: MoveCount,
-    ) -> Self {
-        Self {
-            move_,
-            piece_kind: moved_piece_kind,
-            move_kind,
-            castling,
-            en_passant,
-            halfmoves,
-        }
-    }
-
-    // Immutable Getters
-    pub const fn move_(&self) -> &Move {
-        &self.move_
-    }
     pub const fn piece_kind(&self) -> &PieceKind {
         &self.piece_kind
     }
     pub const fn move_kind(&self) -> &MoveKind {
         &self.move_kind
-    }
-    pub const fn castling(&self) -> &Castling {
-        &self.castling
-    }
-    pub const fn en_passant(&self) -> &Option<Square> {
-        &self.en_passant
-    }
-    pub const fn halfmoves(&self) -> &MoveCount {
-        &self.halfmoves
     }
 
     /// Returns true if the position before moving cannot be repeated in the game tree after the move.
@@ -936,6 +927,15 @@ impl MoveInfo {
     /// Returns true if this MoveInfo came from a pawn move.
     pub fn is_pawn_move(&self) -> bool {
         self.piece_kind == PieceKind::Pawn
+    }
+
+    /// Returns the piece kind of the captured piece, if any.
+    pub fn captured(&self) -> Option<PieceKind> {
+        if let MoveKind::Capture(pk) = self.move_kind {
+            Some(pk)
+        } else {
+            None
+        }
     }
 }
 
@@ -1156,14 +1156,14 @@ mod tests {
     #[test]
     fn parse_move_from_str() {
         let move_: Move = "a1b2".parse().unwrap();
-        assert_eq!(*move_.from(), A1);
-        assert_eq!(*move_.to(), B2);
-        assert_eq!(*move_.promotion(), None);
+        assert_eq!(move_.from, A1);
+        assert_eq!(move_.to, B2);
+        assert_eq!(move_.promotion, None);
 
         let move_: Move = "h7h8q".parse().unwrap();
-        assert_eq!(*move_.from(), H7);
-        assert_eq!(*move_.to(), H8);
-        assert_eq!(*move_.promotion(), Some(Queen));
+        assert_eq!(move_.from, H7);
+        assert_eq!(move_.to, H8);
+        assert_eq!(move_.promotion, Some(Queen));
     }
 
     #[test]

@@ -108,11 +108,12 @@ fn perft_executor(
     debug_assert!(ply > 1);
     let mut perft_info = PerftInfo::new(0);
     let mut maybe_move = { moves.lock().unwrap().pop() };
+    let cache = position.cache();
 
     while let Some(move_) = maybe_move {
         let move_info = position.do_move(move_);
         perft_info += perft_recurse(&mut position, ply - 1);
-        position.undo_move(move_info);
+        position.undo_move(move_info, cache);
         maybe_move = moves.lock().unwrap().pop();
     }
 
@@ -122,6 +123,7 @@ fn perft_executor(
 /// Ply must be non-zero.
 fn perft_recurse(position: &mut Position, ply: u32) -> PerftInfo {
     debug_assert_ne!(ply, 0);
+    let cache = position.cache();
     if ply == 1 {
         // If we reach the depth before the end,
         // return the count of legal moves.
@@ -132,7 +134,7 @@ fn perft_recurse(position: &mut Position, ply: u32) -> PerftInfo {
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
             perft_info += perft_recurse(position, ply - 1);
-            position.undo_move(move_info);
+            position.undo_move(move_info, cache);
         }
         perft_info
     }

@@ -97,6 +97,16 @@ impl PieceSets {
         None
     }
 
+    /// Finds and returns the first PieceKind found on target square of player's pieces, or None.
+    pub fn on_player_square(&self, player: Color, sq: Square) -> Option<PieceKind> {
+        for pk in PieceKind::iter() {
+            if self[(player, pk)].has_square(sq) {
+                return Some(pk);
+            }
+        }
+        None
+    }
+
     /// Returns pretty-printed chess board representation of Self.
     /// Uses Mailbox pretty.
     pub fn pretty(&self) -> String {

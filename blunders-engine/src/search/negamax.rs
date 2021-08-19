@@ -5,15 +5,15 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::arrayvec::{self, ArrayVec};
-use crate::coretypes::{Castling, Cp, Move, MoveInfo, MoveKind, PieceKind, MAX_DEPTH};
+use crate::coretypes::{Cp, Move, MoveInfo, MoveKind, PieceKind, MAX_DEPTH};
 use crate::eval::{draw, terminal};
 use crate::movelist::{Line, MoveList};
 use crate::moveorder::order_all_moves;
+use crate::position::{Cache, Position};
 use crate::search::{quiescence, History, SearchResult};
 use crate::timeman::Mode;
 use crate::transposition::{Entry, NodeKind, TranspositionTable};
 use crate::zobrist::HashKind;
-use crate::Position;
 
 /// Negamax implementation of Minimax with alpha-beta pruning.
 /// Negamax searches to a given depth and returns the best move found.
@@ -126,6 +126,7 @@ fn negamax_impl(
     // Placeholder best_move, is guaranteed to be overwritten as there is at
     // lest one legal move, and the score of that move is better than worst
     // possible score.
+    let cache = position.cache();
     let mut best_move = Move::illegal();
     let mut local_pv = Line::new();
     let mut best_score = Cp::MIN;
@@ -134,7 +135,7 @@ fn negamax_impl(
     for legal_move in ordered_legal_moves.into_iter().rev() {
         // Get value of a move relative to active player.
         let move_info = position.do_move(legal_move);
-        let move_hash = tt.update_from_hash(hash, &position, &move_info);
+        let move_hash = tt.update_from_hash(hash, &position, move_info, cache);
         let move_score = -negamax_impl(
             position,
             tt,
@@ -145,7 +146,7 @@ fn negamax_impl(
             -beta,
             -alpha,
         );
-        position.undo_move(move_info);
+        position.undo_move(move_info, cache);
 
         // Update best_* trackers if this move is best of all seen so far.
         if move_score > best_score {
@@ -207,11 +208,13 @@ struct Frame {
     pub best_move: Move,
     pub hash: HashKind,
     pub move_info: MoveInfo,
+    pub cache: Cache,
 }
 /// A frame defaults with junk data, however this is acceptable
 /// because nodes set appropriate data before using.
 impl Default for Frame {
     fn default() -> Self {
+        let illegal_move = Move::illegal();
         Self {
             label: Label::Initialize,
             local_pv: Line::new(),
@@ -222,13 +225,13 @@ impl Default for Frame {
             best_move: Move::illegal(),
             hash: 0,
             move_info: MoveInfo {
-                move_: Move::illegal(),
+                from: illegal_move.from,
+                to: illegal_move.to,
+                promotion: illegal_move.promotion,
                 piece_kind: PieceKind::Pawn,
                 move_kind: MoveKind::Quiet,
-                castling: Castling::NONE,
-                en_passant: None,
-                halfmoves: 1,
             },
+            cache: Cache::illegal(),
         }
     }
 }
@@ -318,6 +321,7 @@ pub fn iterative_negamax(
     // Set initial valid root parameters.
     stack[ROOT_IDX].label = Label::Initialize;
     stack[ROOT_IDX].hash = root_hash;
+    stack[ROOT_IDX].cache = root_position.cache();
 
     // Frame indexer, begins at 1 (root) as 0 is for global pv.
     // Incrementing -> recurse to child, Decrementing -> return to parent.
@@ -367,13 +371,13 @@ pub fn iterative_negamax(
 
                 frame_idx = parent_idx(frame_idx);
                 continue;
-
+            }
             // Check for draw by repetition or fifty-move rule.
             // After terminal because terminal can't be repeated, mate presides over 50-move rule.
             // Before tt lookup because a repeated position has a different score than when previously visited.
             // TODO:
             // Change to twofold_repetition but avoid error where root is in history.
-            } else if position.fifty_move_rule(num_moves)
+            else if position.fifty_move_rule(num_moves)
                 || history.is_threefold_repetition(us.hash)
             {
                 parent.label = Label::Retrieve;
@@ -382,10 +386,10 @@ pub fn iterative_negamax(
 
                 frame_idx = parent_idx(frame_idx);
                 continue;
-
+            }
             // Check if this position exists in tt and has been searched to/beyond our ply.
             // If so the score is usable, store this value and return to parent.
-            } else if let Some(tt_entry) = tt.get(us.hash) {
+            else if let Some(tt_entry) = tt.get(us.hash) {
                 if tt_entry.ply >= remaining_ply && legal_moves.contains(&tt_entry.key_move) {
                     parent.label = Label::Retrieve;
                     parent.local_pv.clear();
@@ -397,9 +401,9 @@ pub fn iterative_negamax(
                     frame_idx = parent_idx(frame_idx);
                     continue;
                 }
-
+            }
             // Max depth (leaf node) reached. Statically evaluate position and return value.
-            } else if remaining_ply == 0 {
+            else if remaining_ply == 0 {
                 parent.label = Label::Retrieve;
                 parent.local_pv.clear();
 
@@ -412,6 +416,7 @@ pub fn iterative_negamax(
             // This node has not returned early, so it has moves to search.
             // Order all of this node's legal moves, and set it to search mode.
             us.ordered_moves = order_all_moves(&position, legal_moves, us.hash, tt);
+            us.cache = position.cache();
             us.label = Label::Search;
 
         // SEARCH MODE
@@ -427,7 +432,7 @@ pub fn iterative_negamax(
                 us.move_info = position.do_move(legal_move);
                 history.push(us.hash, us.move_info.is_unrepeatable());
 
-                let child_hash = tt.update_from_hash(us.hash, &position, &us.move_info);
+                let child_hash = tt.update_from_hash(us.hash, &position, us.move_info, us.cache);
                 child.label = Label::Initialize;
                 child.hash = child_hash;
                 child.alpha = -us.beta;
@@ -461,7 +466,7 @@ pub fn iterative_negamax(
         //
         // Flow: (beta cutoff) ? Return best-score to parent : continue searching this node
         } else if Label::Retrieve == label {
-            position.undo_move(us.move_info);
+            position.undo_move(us.move_info, us.cache);
             history.pop();
 
             // Negate child's best score so it's relative to this node.
@@ -470,7 +475,7 @@ pub fn iterative_negamax(
             // Update our best_* trackers if this move is best seen so far.
             if move_score > us.best_score {
                 us.best_score = move_score;
-                us.best_move = us.move_info.move_;
+                us.best_move = Move::from(us.move_info);
             }
 
             // Cut-off has occurred, no further children of this position need to be searched.
@@ -522,6 +527,7 @@ pub fn iterative_negamax(
     if !stopped {
         // Position has been returned to root position. Hashes should be equal.
         debug_assert_eq!(root_hash, tt.generate_hash(&position));
+        debug_assert_eq!(root_hash, stack[ROOT_IDX].hash);
         // History modified from search should return to equal that before searching.
         debug_assert_eq!(root_history, history);
     }

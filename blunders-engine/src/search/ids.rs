@@ -104,8 +104,9 @@ pub fn ids(
             let pv_entry = Entry::new(hash, NodeKind::Pv, pv_move, move_ply, relative_pv_score);
             tt.replace(pv_entry);
 
+            let cache = position.cache();
             let move_info = position.do_move(pv_move);
-            tt.update_hash(&mut hash, &position, &move_info);
+            tt.update_hash(&mut hash, &position, move_info, cache);
             move_ply -= 1;
             relative_pv_score = -relative_pv_score;
         }

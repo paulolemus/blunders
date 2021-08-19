@@ -59,6 +59,7 @@ pub(crate) fn alpha_beta_root(
     mut beta: Cp,
 ) -> (Cp, Move) {
     *nodes += 1;
+    let cache = position.cache();
     let legal_moves = position.get_legal_moves();
     debug_assert_ne!(ply, 0);
     debug_assert!(legal_moves.len() > 0);
@@ -69,7 +70,7 @@ pub(crate) fn alpha_beta_root(
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
             let move_cp = alpha_beta_impl::<BLACK>(&mut position, ply - 1, nodes, alpha, beta);
-            position.undo_move(move_info);
+            position.undo_move(move_info, cache);
 
             if move_cp > alpha {
                 alpha = move_cp;
@@ -81,7 +82,7 @@ pub(crate) fn alpha_beta_root(
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
             let move_cp = alpha_beta_impl::<WHITE>(&mut position, ply - 1, nodes, alpha, beta);
-            position.undo_move(move_info);
+            position.undo_move(move_info, cache);
 
             if move_cp < beta {
                 beta = move_cp;
@@ -100,6 +101,7 @@ fn alpha_beta_impl<const COLOR: u8>(
     beta: Cp,
 ) -> Cp {
     *nodes += 1;
+    let cache = position.cache();
     let legal_moves = position.get_legal_moves();
     let num_moves = legal_moves.len();
 
@@ -117,7 +119,7 @@ fn alpha_beta_impl<const COLOR: u8>(
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
             let move_cp = alpha_beta_impl::<BLACK>(position, ply - 1, nodes, alpha, beta);
-            position.undo_move(move_info);
+            position.undo_move(move_info, cache);
 
             best_cp = cmp::max(best_cp, move_cp);
             alpha = cmp::max(alpha, best_cp);
@@ -134,7 +136,7 @@ fn alpha_beta_impl<const COLOR: u8>(
         for legal_move in legal_moves {
             let move_info = position.do_move(legal_move);
             let move_cp = alpha_beta_impl::<WHITE>(position, ply - 1, nodes, alpha, beta);
-            position.undo_move(move_info);
+            position.undo_move(move_info, cache);
 
             best_cp = cmp::min(best_cp, move_cp);
             beta = cmp::min(beta, best_cp);
