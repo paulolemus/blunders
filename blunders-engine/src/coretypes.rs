@@ -878,6 +878,12 @@ impl Move {
     }
 }
 
+impl PartialEq<MoveInfo> for Move {
+    fn eq(&self, other: &MoveInfo) -> bool {
+        self.from == other.from && self.to == other.to && self.promotion == other.promotion
+    }
+}
+
 impl From<MoveInfo> for Move {
     fn from(move_info: MoveInfo) -> Self {
         Self::new(move_info.from, move_info.to, move_info.promotion)
@@ -893,6 +899,11 @@ impl MoveInfo {
             piece_kind: moved_piece_kind,
             move_kind,
         }
+    }
+
+    /// Get this MoveInfo's inner Move.
+    pub const fn move_(&self) -> Move {
+        Move::new(self.from, self.to, self.promotion)
     }
 
     // Immutable Getters

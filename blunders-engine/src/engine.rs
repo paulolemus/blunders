@@ -59,6 +59,12 @@ impl EngineBuilder {
         self
     }
 
+    /// Set the Engine's initial game state from a position with no history.
+    pub fn position(mut self, position: Position) -> Self {
+        self.game = Game::from(position);
+        self
+    }
+
     /// Set the engine's initial search thread pool size.
     pub fn threads(mut self, num_threads: usize) -> Self {
         self.num_threads = num_threads;
@@ -182,6 +188,7 @@ impl Engine {
                 mode,
                 Arc::clone(&self.tt),
                 Arc::clone(&self.stopper),
+                self.debug,
                 sender,
             );
             self.search_handle = Some(handle);

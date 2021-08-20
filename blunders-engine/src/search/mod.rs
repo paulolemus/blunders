@@ -120,12 +120,14 @@ pub fn search(position: Position, ply: u32, tt: &TranspositionTable) -> SearchRe
 /// * `mode`: Mode of search determines when the search stops and how deep it searches
 /// * `tt`: Shared Transposition table. This may or may not lock the table for the duration of the search
 /// * `stopper`: Tell search to stop early from an external source
+/// * `debug`: When true prints extra debugging information
 /// * `sender`: Channel to send search result over
 pub fn search_nonblocking<P, T>(
     game: P,
     mode: Mode,
     tt: Arc<TranspositionTable>,
     stopper: Arc<AtomicBool>,
+    debug: bool,
     sender: mpsc::Sender<T>,
 ) -> thread::JoinHandle<()>
 where
@@ -137,7 +139,7 @@ where
     let history = History::new(&game, tt.zobrist_table());
 
     thread::spawn(move || {
-        let search_result = ids(position, mode, history, &tt, stopper, true);
+        let search_result = ids(position, mode, history, &tt, stopper, debug);
         sender.send(search_result.into()).unwrap();
     })
 }

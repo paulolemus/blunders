@@ -14,14 +14,9 @@
 //! There are several strategies for move ordering which may be used.
 //! 1. Sort first by principal variation moves, then by hash moves, then by Captures (SEE)
 
-use std::cmp::Reverse;
-
 use crate::arrayvec::ArrayVec;
-use crate::coretypes::{Cp, Move, MAX_MOVES};
-use crate::movelist::MoveList;
-use crate::transposition::TranspositionTable;
-use crate::zobrist::HashKind;
-use crate::Position;
+use crate::coretypes::{Cp, Move, MoveInfo, MAX_MOVES};
+use crate::movelist::MoveInfoList;
 
 // General considerations for move ordering and searching:
 // For tt look ups during a search, a node only needs to search itself, not it's children.
@@ -39,14 +34,8 @@ use crate::Position;
 pub(crate) struct OrderStrategy {
     is_tt_move: bool,      // Move listed as best move for root position in tt.
     promotion: Option<Cp>, // Cp value of promoting piece, or none.
-    mvv_lva: (Cp, Reverse<Cp>), // Cp of most valuable victim -> least valuable aggressor.
+    mvv_lva: (bool, Cp),   // is capture, followed by mvv-lva.
                            // All other nodes remain with lowest but equal priority.
-}
-impl OrderStrategy {
-    /// Returns new OrderStrategy with all values set to false.
-    pub(crate) fn new() -> Self {
-        Default::default()
-    }
 }
 
 /// OrderStrategy defaults to all false.
@@ -55,7 +44,34 @@ impl Default for OrderStrategy {
         OrderStrategy {
             is_tt_move: false,
             promotion: None,
-            mvv_lva: (Cp(0), Reverse(Cp(0))),
+            mvv_lva: (false, Cp(0)),
+        }
+    }
+}
+
+impl From<(MoveInfo, Option<Move>)> for OrderStrategy {
+    fn from((move_info, key_move): (MoveInfo, Option<Move>)) -> Self {
+        // Give high priority to move if root position listed it in tt.
+        let is_tt_move = key_move == Some(move_info.move_());
+
+        // Set promotion CP.
+        let promotion = move_info.promotion.map(|pk| pk.centipawns());
+
+        // Sort by most-valuable-victim -> least-valuable-aggressor.
+        // A decent heuristic that prioritizes capturing enemy most valuable pieces first.
+        // Also prioritizes positive capture above all.
+        let mvv_lva = if let Some(victim) = move_info.captured() {
+            let attacker = move_info.piece_kind.centipawns();
+            let victim = victim.centipawns();
+            (true, victim - attacker)
+        } else {
+            (false, Cp(0))
+        };
+
+        Self {
+            is_tt_move,
+            promotion,
+            mvv_lva,
         }
     }
 }
@@ -63,61 +79,47 @@ impl Default for OrderStrategy {
 /// Order all moves in a container completely, in order of worst move to best move.
 /// Best moves are near the end to allow for iterating from best to worst move by using
 /// `while let Some(move_) = move_list.pop() ...` or `for move_ in move_list.into_iter().rev() ...`
-pub(crate) fn order_all_moves(
-    position: &Position,
-    legal_moves: MoveList,
-    hash: HashKind,
-    tt: &TranspositionTable,
-) -> MoveList {
-    let mut ordering_vec = ArrayVec::<(Move, OrderStrategy), MAX_MOVES>::new();
-    let maybe_key_move = tt.get(hash).and_then(|tt_entry| Some(tt_entry.key_move));
-
-    // For each move, gather data needed to order, and push into a new ArrayVec.
-    for legal_move in legal_moves {
-        let mut order_strategy = OrderStrategy::new();
-
-        // Give high priority to move if root position listed it in tt.
-        if let Some(key_move) = maybe_key_move {
-            order_strategy.is_tt_move = legal_move == key_move;
-        }
-
-        // Set promotion flag.
-        order_strategy.promotion = legal_move.promotion.map(|pk| pk.centipawns());
-
-        // Check if there were any captures, by looking at "to" square.
-        // Note this ignores en-passant captures.
-        // Two easy methods for sorting:
-        // sort by most valuable victim followed by its least valuable aggressor.
-        // sort by the greatest difference in score, so 1 ply winning trades first.
-        if let Some(victim) = position.pieces.on_square(legal_move.to) {
-            let attacker = position.pieces.on_square(legal_move.from).unwrap();
-            order_strategy.mvv_lva = (
-                victim.piece_kind.centipawns(),
-                Reverse(attacker.piece_kind.centipawns()),
-            );
-        }
-
-        ordering_vec.push((legal_move, order_strategy));
-    }
+///
+/// # Arguments
+///
+/// * `legal_moves`: List of MoveInfos for all legal moves of current position.
+/// * `maybe_key_move`: Transposition Table move for current position.
+pub fn order_all_moves(legal_moves: MoveInfoList, maybe_key_move: Option<Move>) -> MoveInfoList {
+    let mut ordering_vec: ArrayVec<(MoveInfo, OrderStrategy), MAX_MOVES> = legal_moves
+        .into_iter()
+        .map(|move_info| (move_info, OrderStrategy::from((move_info, maybe_key_move))))
+        .collect();
 
     // Sort all moves using their OrderStrategy as a key.
     ordering_vec.sort_unstable_by_key(|pair| pair.1);
 
-    // Extract Moves from ordering_vec.
-    let mut ordered_move_list = MoveList::new();
-    ordering_vec
-        .into_iter()
-        .for_each(|pair| ordered_move_list.push(pair.0));
+    // Convert ordering_vec back into a MoveInfoList with sorted moves.
+    ordering_vec.into_iter().map(|pair| pair.0).collect()
+}
 
-    ordered_move_list
+/// Pick and return the best move from a move list without allocation.
+/// When run to completion, this acts as a selection sort.
+pub fn pick_best_move(legal_moves: &mut MoveInfoList, key_move: Option<Move>) -> Option<MoveInfo> {
+    legal_moves
+        .iter()
+        .enumerate()
+        .max_by(|left, right| {
+            let left = OrderStrategy::from((*left.1, key_move));
+            let right = OrderStrategy::from((*right.1, key_move));
+
+            left.cmp(&right)
+        })
+        .map(|(index, _)| index)
+        .map(|index| legal_moves.swap_remove(index))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coretypes::{PieceKind, Square::*};
+    use crate::coretypes::{Move, PieceKind, Square::*};
     use crate::fen::Fen;
     use crate::transposition::NodeKind;
+    use crate::Position;
 
     #[test]
     fn order_all_moves_one_capture() {
@@ -125,12 +127,15 @@ mod tests {
             .unwrap();
         let capture = Move::new(E5, D4, None);
         let num_moves = 24; // Checked manually.
-        let tt = TranspositionTable::new();
-        let hash = tt.generate_hash(&pos);
-        let mut ordered_legal_moves = order_all_moves(&pos, pos.get_legal_moves(), hash, &tt);
+        let legal_moves = pos
+            .get_legal_moves()
+            .into_iter()
+            .map(|move_| pos.move_info(move_))
+            .collect();
+        let mut ordered_legal_moves = order_all_moves(legal_moves, None);
 
         assert_eq!(ordered_legal_moves.len(), num_moves);
-        assert_eq!(ordered_legal_moves.pop().unwrap(), capture);
+        assert_eq!(ordered_legal_moves.pop().unwrap().move_(), capture);
     }
 
     #[test]
@@ -141,11 +146,11 @@ mod tests {
 
     #[test]
     fn order_strategy_cmp() {
-        let os = OrderStrategy::new();
-        let mut gt_os = OrderStrategy::new();
+        let os = OrderStrategy::default();
+        let mut gt_os = OrderStrategy::default();
         gt_os.is_tt_move = true;
 
-        let mut lt_os = OrderStrategy::new();
+        let mut lt_os = OrderStrategy::default();
         lt_os.promotion = Some(PieceKind::Queen.centipawns());
 
         assert!(gt_os > os);

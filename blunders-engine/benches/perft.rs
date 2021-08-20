@@ -129,7 +129,7 @@ pub fn criterion_perft_large_benchmark(c: &mut Criterion) {
 
 criterion_group! {
     name = small_benches;
-    config = Criterion::default().without_plots().sample_size(80);
+    config = Criterion::default().without_plots().sample_size(70);
     targets = criterion_perft_small_benchmark
 }
 criterion_group! {

@@ -7,7 +7,7 @@ use std::time::Instant;
 use crate::arrayvec::{self, ArrayVec};
 use crate::coretypes::{Cp, Move, MoveInfo, MoveKind, PieceKind, MAX_DEPTH};
 use crate::eval::{draw, terminal};
-use crate::movelist::{Line, MoveList};
+use crate::movelist::{Line, MoveInfoList};
 use crate::moveorder::order_all_moves;
 use crate::position::{Cache, Position};
 use crate::search::{quiescence, History, SearchResult};
@@ -81,8 +81,13 @@ fn negamax_impl(
     beta: Cp,
 ) -> Cp {
     *nodes += 1;
+    let mut q_nodes = 0; // TODO: Consolidate metrics.
+
     let legal_moves = position.get_legal_moves();
     let num_moves = legal_moves.len();
+
+    // Save tt lookup from nested if.
+    let mut hash_move = None;
 
     // Search can return when any of the following are encountered:
     // * Checkmate / Stalemate (terminal node)
@@ -108,6 +113,7 @@ fn negamax_impl(
             pv_line.push(tt_entry.key_move);
             return tt_entry.score;
         }
+        hash_move = Some(tt_entry.key_move);
 
     // Run a Quiescence Search for non-terminal leaf nodes to find a more stable
     // evaluation than a static evaluation.
@@ -115,12 +121,17 @@ fn negamax_impl(
     // because this leaf node has no best move, and is not in history.
     } else if ply == 0 {
         pv_line.clear();
-        return quiescence(position, alpha, beta);
+        let q_ply = 10;
+        return quiescence(position, alpha, beta, q_ply, &mut q_nodes);
     }
 
     // Move Ordering
     // Sort legal moves with estimated best move first.
-    let ordered_legal_moves = order_all_moves(position, legal_moves, hash, tt);
+    let legal_moves = legal_moves
+        .into_iter()
+        .map(|move_| position.move_info(move_))
+        .collect();
+    let ordered_legal_moves = order_all_moves(legal_moves, hash_move);
     debug_assert_eq!(num_moves, ordered_legal_moves.len());
 
     // Placeholder best_move, is guaranteed to be overwritten as there is at
@@ -132,10 +143,10 @@ fn negamax_impl(
     let mut best_score = Cp::MIN;
 
     // For each child of current position, recursively find maxing move.
-    for legal_move in ordered_legal_moves.into_iter().rev() {
+    for legal_move_info in ordered_legal_moves.into_iter().rev() {
         // Get value of a move relative to active player.
-        let move_info = position.do_move(legal_move);
-        let move_hash = tt.update_from_hash(hash, &position, move_info, cache);
+        position.do_move_info(legal_move_info);
+        let move_hash = tt.update_from_hash(hash, &position, legal_move_info, cache);
         let move_score = -negamax_impl(
             position,
             tt,
@@ -146,19 +157,20 @@ fn negamax_impl(
             -beta,
             -alpha,
         );
-        position.undo_move(move_info, cache);
+        position.undo_move(legal_move_info, cache);
 
         // Update best_* trackers if this move is best of all seen so far.
         if move_score > best_score {
             best_score = move_score;
-            best_move = legal_move;
+            best_move = legal_move_info.move_();
         }
 
         // Cut-off has occurred, no further children of this position need to be searched.
         // This branch will not be taken further up the tree as there is a better move.
         // Push this cut-node into the tt, with a score relative to this node's active player.
         if move_score >= beta {
-            let tt_entry = Entry::new(hash, NodeKind::Cut, legal_move, ply, move_score);
+            let cut_move = legal_move_info.move_();
+            let tt_entry = Entry::new(hash, NodeKind::Cut, cut_move, ply, move_score);
             tt.replace(tt_entry);
             return move_score;
         }
@@ -168,10 +180,10 @@ fn negamax_impl(
         if best_score > alpha {
             alpha = best_score;
             pv_line.clear();
-            pv_line.push(legal_move);
+            pv_line.push(best_move);
             arrayvec::append(pv_line, local_pv.clone());
 
-            let tt_entry = Entry::new(hash, NodeKind::Pv, legal_move, ply, best_score);
+            let tt_entry = Entry::new(hash, NodeKind::Pv, best_move, ply, best_score);
             tt.replace(tt_entry);
         }
     }
@@ -201,7 +213,7 @@ enum Label {
 struct Frame {
     pub label: Label,
     pub local_pv: Line,
-    pub ordered_moves: MoveList,
+    pub legal_moves: MoveInfoList,
     pub alpha: Cp,
     pub beta: Cp,
     pub best_score: Cp,
@@ -218,7 +230,7 @@ impl Default for Frame {
         Self {
             label: Label::Initialize,
             local_pv: Line::new(),
-            ordered_moves: MoveList::new(),
+            legal_moves: MoveInfoList::new(),
             alpha: Cp::MIN,
             beta: Cp::MAX,
             best_score: Cp::MIN,
@@ -272,7 +284,9 @@ fn curr_ply(frame_idx: usize) -> u32 {
     (frame_idx - 1) as u32
 }
 
-/// Iterative Negamax implementation with alpha-beta pruning.
+/// Iterative fail-soft Negamax implementation with alpha-beta pruning and transposition table lookup.
+///
+/// In fail-soft, the return value of a call can exceed its given bounds alpha and beta (score < alpha, score > beta).
 ///
 /// Why change from recursive to iterative?
 /// * Need to be able to STOP searching at any time.
@@ -307,7 +321,8 @@ pub fn iterative_negamax(
     let contempt = Cp(50);
 
     // Metrics
-    let mut nodes: u64 = 0; // Number of nodes created
+    let mut nodes: u64 = 0; // Number of nodes in main search.
+    let mut q_nodes: u64 = 0; // Number of nodes created in quiescence.
 
     // Stack holds frame data, where each ply gets one frame.
     // Size is +1 because the 0th index holds the PV so far for root position.
@@ -362,6 +377,9 @@ pub fn iterative_negamax(
             let legal_moves = position.get_legal_moves();
             let num_moves = legal_moves.len();
 
+            // Save TT lookup to avoid re-locking.
+            let mut hash_move = None;
+
             // This position has no best move.
             // Store its evaluation and tell parent to retrieve value.
             if num_moves == 0 {
@@ -401,13 +419,15 @@ pub fn iterative_negamax(
                     frame_idx = parent_idx(frame_idx);
                     continue;
                 }
+                hash_move = Some(tt_entry.key_move);
             }
             // Max depth (leaf node) reached. Statically evaluate position and return value.
             else if remaining_ply == 0 {
                 parent.label = Label::Retrieve;
                 parent.local_pv.clear();
 
-                us.best_score = quiescence(&position, Cp::MIN, Cp::MAX);
+                let q_ply = 10;
+                us.best_score = quiescence(&mut position, us.alpha, us.beta, q_ply, &mut q_nodes);
 
                 frame_idx = parent_idx(frame_idx);
                 continue;
@@ -415,7 +435,13 @@ pub fn iterative_negamax(
 
             // This node has not returned early, so it has moves to search.
             // Order all of this node's legal moves, and set it to search mode.
-            us.ordered_moves = order_all_moves(&position, legal_moves, us.hash, tt);
+            // Optional: Either Sort all moves first, or pick best each time.
+            let legal_moves: MoveInfoList = legal_moves
+                .into_iter()
+                .map(|move_| position.move_info(move_))
+                .collect();
+
+            us.legal_moves = order_all_moves(legal_moves, hash_move);
             us.cache = position.cache();
             us.label = Label::Search;
 
@@ -428,8 +454,9 @@ pub fn iterative_negamax(
         // Flow: (Moves to search) ? recurse to child : return eval to parent
         } else if Label::Search == label {
             // This position has a child position to search, initialize its frame.
-            if let Some(legal_move) = us.ordered_moves.pop() {
-                us.move_info = position.do_move(legal_move);
+            if let Some(legal_move) = us.legal_moves.pop() {
+                us.move_info = legal_move;
+                position.do_move_info(legal_move);
                 history.push(us.hash, us.move_info.is_unrepeatable());
 
                 let child_hash = tt.update_from_hash(us.hash, &position, us.move_info, us.cache);
@@ -475,7 +502,7 @@ pub fn iterative_negamax(
             // Update our best_* trackers if this move is best seen so far.
             if move_score > us.best_score {
                 us.best_score = move_score;
-                us.best_move = Move::from(us.move_info);
+                us.best_move = us.move_info.move_();
             }
 
             // Cut-off has occurred, no further children of this position need to be searched.
@@ -508,15 +535,6 @@ pub fn iterative_negamax(
                 parent.local_pv.clear();
                 parent.local_pv.push(us.best_move);
                 arrayvec::append(&mut parent.local_pv, us.local_pv.clone());
-
-                //let tt_entry = Entry::new(
-                //    us.hash,
-                //    NodeKind::Pv,
-                //    us.best_move,
-                //    remaining_ply,
-                //    us.best_score,
-                //);
-                //tt.replace(tt_entry);
             }
 
             // Default action is to attempt to continue searching this node.
