@@ -13,36 +13,46 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
         .transpositions_mb(100);
 
     // Benchmarks
+    let mut result = Default::default();
     c.bench_function("search start position ttd 2", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            engine.search_sync(black_box(Mode::depth(2, None)))
+            result = engine.search_sync(black_box(Mode::depth(2, None)));
         });
     });
+    println!("{}", result);
+
     c.bench_function("search start position ttd 3", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            engine.search_sync(black_box(Mode::depth(3, None)))
+            result = engine.search_sync(black_box(Mode::depth(3, None)));
         });
     });
+    println!("{}", result);
+
     c.bench_function("search start position ttd 4", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            engine.search_sync(black_box(Mode::depth(4, None)))
+            result = engine.search_sync(black_box(Mode::depth(4, None)));
         });
     });
+    println!("{}", result);
+
     c.bench_function("search start position ttd 5", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            engine.search_sync(black_box(Mode::depth(5, None)))
+            result = engine.search_sync(black_box(Mode::depth(5, None)));
         });
     });
+    println!("{}", result);
+
     c.bench_function("search start position ttd 6", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            engine.search_sync(black_box(Mode::depth(6, None)))
+            result = engine.search_sync(black_box(Mode::depth(6, None)));
         });
     });
+    println!("{}", result);
 }
 
 pub fn start_pos_search_time_to_depth_long(c: &mut Criterion) {
@@ -54,18 +64,22 @@ pub fn start_pos_search_time_to_depth_long(c: &mut Criterion) {
         .transpositions_mb(100);
 
     // Benchmarks
+    let mut result = Default::default();
     c.bench_function("search start position ttd 7", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            engine.search_sync(black_box(Mode::depth(7, None)))
+            result = engine.search_sync(black_box(Mode::depth(7, None)));
         });
     });
+    println!("{}", result);
+
     c.bench_function("search start position ttd 8", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            engine.search_sync(black_box(Mode::depth(8, None)))
+            result = engine.search_sync(black_box(Mode::depth(8, None)));
         });
     });
+    println!("{}", result);
 }
 
 criterion_group! {

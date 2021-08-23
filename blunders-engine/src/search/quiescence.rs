@@ -50,7 +50,6 @@ pub fn quiescence(
     ply: u8,
     nodes: &mut u64,
 ) -> Cp {
-    *nodes += 1;
     let mut best_score = evaluate(position);
 
     // Depth limited search.
@@ -75,6 +74,7 @@ pub fn quiescence(
         .collect();
 
     while let Some(capture) = pick_best_move(&mut legal_captures, None) {
+        *nodes += 1;
         position.do_move_info(capture);
         let score = -quiescence(position, -beta, -alpha, ply - 1, nodes);
         position.undo_move(capture, cache);

@@ -20,22 +20,23 @@ pub fn minimax(position: Position, ply: u32) -> SearchResult {
     assert_ne!(ply, 0);
 
     let instant = Instant::now();
-    let mut pv_line = Line::new();
+    let mut pv = Line::new();
     let mut nodes = 0;
 
     let (score, best_move) = minimax_root(position, ply, &mut nodes);
 
-    pv_line.push(best_move);
+    pv.push(best_move);
 
     SearchResult {
         player: position.player,
         depth: ply,
         best_move,
         score,
-        pv_line,
+        pv,
         nodes,
         elapsed: instant.elapsed(),
         stopped: false,
+        ..Default::default()
     }
 }
 

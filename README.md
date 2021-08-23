@@ -77,7 +77,7 @@ blunders/target/release>
 Testing is done through `cargo`. There are several commands that can be run to test all crates. Note that there are extra debug assertions so it may be worth it to test in both debug and release modes.
 
 Run relatively quick tests: `cargo test --all` or `cargo test --all --release`  
-Run expensive tests: `cargo test --all -- --ignored` or `cargo test --all --release -- --ignored`
+Run all tests: `cargo test --all -- --include-ignored` or `cargo test --all --release -- --include-ignored`
 
 # Benchmarking Blunders
 

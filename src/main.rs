@@ -267,13 +267,16 @@ fn main() -> io::Result<()> {
             Message::Search(search_result) => {
                 uci::debug(debug, "search_result begin")?;
                 println!(
-                    "info depth {} score cp {} time {} nodes {} nps {} pv {}",
+                    "info depth {} score cp {} time {} nodes {} nps {} pv {} string q_nodes {} q_nps {} q_ratio {}",
                     search_result.depth,
                     search_result.relative_score(),
                     search_result.elapsed.as_millis(),
                     search_result.nodes,
                     search_result.nps(),
-                    display(&search_result.pv_line),
+                    display(&search_result.pv),
+                    search_result.q_nodes,
+                    search_result.q_nps(),
+                    search_result.quiescence_ratio(),
                 );
                 UciResponse::new_best_move(search_result.best_move).send()?;
 

@@ -26,25 +26,28 @@ use crate::timeman::Mode;
 use crate::transposition::TranspositionTable;
 use crate::{Game, Position};
 
-/// General information gathered from searching a position.
-/// members:
-/// `best_move`: Best move to make for a position discovered.
-/// `score`: The centipawn evaluation of making the best move, with absolute Cp (+White, -Black).
-/// `pv_line`: The principal variation, or the line of play following the best move.
-/// `player`: Active player of searched root position.
-/// `depth`: Ply that was searched to. Currently this can be either partially or fully searched.
-/// `nodes`: The number of nodes visited in the search.
-/// `elapsed`: Time taken to complete a search.
-/// `stopped`: Indicates if search was stopped part way.
+/// The results found from running a search on some root position.
 #[derive(Debug, Clone)]
 pub struct SearchResult {
+    /// The best move to make for a position discovered from search.
     pub best_move: Move,
+    /// The centipawn score of making the best move, with absolute Cp (+White, -Black).
     pub score: Cp,
-    pub pv_line: Line,
+    /// The principal variation, or a sequence of the best moves that result in an evaluation of at least `score` Cp.
+    pub pv: Line,
+    /// The player to move for the root position that was searched.
     pub player: Color,
-    pub depth: u32, // Same as Ply
+    /// Depth (aka ply, half move) that was searched to. This depth is only fully searched if the `stopped` flag is false.
+    pub depth: u32,
+    /// Total number of nodes visited in a search, including main search nodes and quiescence nodes.
     pub nodes: u64,
+    /// Total number of nodes visited in a quiescence search.
+    pub q_nodes: u64,
+    /// Total time elapsed from the start to the end of a search.
     pub elapsed: Duration,
+    /// Total time elapsed spent in quiescence search, within main search.
+    pub q_elapsed: Duration,
+    /// Flag that indicates this search was aborted.
     pub stopped: bool,
 }
 
@@ -52,6 +55,22 @@ impl SearchResult {
     /// Get average nodes per second of search.
     pub fn nps(&self) -> f64 {
         (self.nodes as f64 / self.elapsed.as_secs_f64()).round()
+    }
+
+    /// Get average nodes per second of search for only quiescence search.
+    pub fn q_nps(&self) -> f64 {
+        (self.q_nodes as f64 / self.q_elapsed.as_secs_f64()).round()
+    }
+
+    /// Returns the percentage of elapsed time of search that was in quiescence.
+    ///
+    /// Example: elapsed=2.0s, q_elapsed=0.5s, quiescence_ratio=0.25
+    pub fn quiescence_ratio(&self) -> f64 {
+        assert!(
+            self.q_elapsed <= self.elapsed,
+            "logical error for q_elapsed to be greater than elapsed"
+        );
+        self.q_elapsed.as_secs_f64() / self.elapsed.as_secs_f64()
     }
 
     /// Converts the score of the search into one that is relative to search's root player.
@@ -74,21 +93,41 @@ impl SearchResult {
     }
 }
 
+/// Note that this default is technically illegal and does not represent any actual search.
+impl Default for SearchResult {
+    fn default() -> Self {
+        Self {
+            best_move: Move::illegal(),
+            score: Cp(0),
+            pv: Line::new(),
+            player: Color::White,
+            depth: 0,
+            nodes: 0,
+            q_nodes: 0,
+            elapsed: Duration::ZERO,
+            q_elapsed: Duration::ZERO,
+            stopped: false,
+        }
+    }
+}
+
 impl Display for SearchResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut displayed = String::new();
         displayed.push_str("SearchResult {\n");
         displayed.push_str(&format!("    best_move: {}\n", self.best_move));
         displayed.push_str(&format!("    abs_score: {}\n", self.absolute_score()));
-        displayed.push_str(&format!("    pv_line  : {}\n", display(&self.pv_line)));
+        displayed.push_str(&format!("    pv       : {}\n", display(&self.pv)));
         displayed.push_str(&format!("    player   : {}\n", self.player));
         displayed.push_str(&format!("    depth    : {}\n", self.depth));
         displayed.push_str(&format!("    nodes    : {}\n", self.nodes));
+        displayed.push_str(&format!("    nps      : {}\n", self.nps()));
         displayed.push_str(&format!(
             "    elapsed  : {}.{}s\n",
             self.elapsed.as_secs(),
             self.elapsed.subsec_millis()
         ));
+        displayed.push_str(&format!("    q_ratio  : {}\n", self.quiescence_ratio()));
         displayed.push_str(&format!("    stopped  : {}\n", self.stopped));
         displayed.push_str("}\n");
 

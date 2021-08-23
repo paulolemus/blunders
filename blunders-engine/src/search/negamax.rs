@@ -2,7 +2,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::arrayvec::{self, ArrayVec};
 use crate::coretypes::{Cp, Move, MoveInfo, MoveKind, PieceKind, MAX_DEPTH};
@@ -28,14 +28,14 @@ pub fn negamax(mut position: Position, ply: u32, tt: &TranspositionTable) -> Sea
     let hash = tt.generate_hash(&position);
     let instant = Instant::now();
 
-    let mut pv_line = Line::new();
+    let mut pv = Line::new();
     let mut nodes = 0;
 
     let best_score = negamax_impl(
         &mut position,
         tt,
         hash,
-        &mut pv_line,
+        &mut pv,
         &mut nodes,
         ply,
         Cp::MIN,
@@ -45,12 +45,12 @@ pub fn negamax(mut position: Position, ply: u32, tt: &TranspositionTable) -> Sea
     SearchResult {
         player: root_player,
         depth: ply,
-        best_move: *pv_line.get(0).unwrap(),
+        best_move: *pv.get(0).unwrap(),
         score: best_score * root_player.sign(),
-        pv_line,
+        pv,
         nodes,
         elapsed: instant.elapsed(),
-        stopped: false,
+        ..Default::default()
     }
 }
 
@@ -58,14 +58,14 @@ pub fn negamax(mut position: Position, ply: u32, tt: &TranspositionTable) -> Sea
 /// negamax_impl returns the max possible score of the current maxing player.
 /// Therefore, when interpreting the score of a child node, the score needs to be negated.
 ///
-/// negamax_impl stores the principal variation of the current move into the pv_line parameter.
+/// negamax_impl stores the principal variation of the current move into the pv parameter.
 ///
 /// Parameters:
 ///
 /// position: current position to search.
 /// tt: Transposition Table used for recalling search history.
 /// hash: Incrementally updatable hash of provided position.
-/// pv_line: Line of moves in principal variation.
+/// pv: Line of moves in principal variation.
 /// nodes: Counter for number of nodes visited in search.
 /// ply: remaining depth to search to.
 /// alpha: Best (greatest) guaranteed value for current player.
@@ -74,7 +74,7 @@ fn negamax_impl(
     position: &mut Position,
     tt: &TranspositionTable,
     hash: HashKind,
-    pv_line: &mut Line,
+    pv: &mut Line,
     nodes: &mut u64,
     ply: u32,
     mut alpha: Cp,
@@ -96,9 +96,9 @@ fn negamax_impl(
     //
     // An eval is returned with respect to the current player.
     // (+Cp good, -Cp bad)
-    // Terminal and leaf nodes have no following moves so pv_line of parent is cleared.
+    // Terminal and leaf nodes have no following moves so pv of parent is cleared.
     if num_moves == 0 {
-        pv_line.clear();
+        pv.clear();
         return terminal(&position);
     }
     // Check if current move exists in tt. If so, we might be able to return that value
@@ -109,18 +109,18 @@ fn negamax_impl(
     //       or that returning early is incorrect.
     else if let Some(tt_entry) = tt.get(hash) {
         if tt_entry.ply >= ply && legal_moves.contains(&tt_entry.key_move) {
-            pv_line.clear();
-            pv_line.push(tt_entry.key_move);
+            pv.clear();
+            pv.push(tt_entry.key_move);
             return tt_entry.score;
         }
         hash_move = Some(tt_entry.key_move);
 
     // Run a Quiescence Search for non-terminal leaf nodes to find a more stable
     // evaluation than a static evaluation.
-    // The parent of this node receives an empty pv_line,
+    // The parent of this node receives an empty pv,
     // because this leaf node has no best move, and is not in history.
     } else if ply == 0 {
-        pv_line.clear();
+        pv.clear();
         let q_ply = 10;
         return quiescence(position, alpha, beta, q_ply, &mut q_nodes);
     }
@@ -179,9 +179,9 @@ fn negamax_impl(
         // Update this node in tt as a PV node.
         if best_score > alpha {
             alpha = best_score;
-            pv_line.clear();
-            pv_line.push(best_move);
-            arrayvec::append(pv_line, local_pv.clone());
+            pv.clear();
+            pv.push(best_move);
+            arrayvec::append(pv, local_pv.clone());
 
             let tt_entry = Entry::new(hash, NodeKind::Pv, best_move, ply, best_score);
             tt.replace(tt_entry);
@@ -302,16 +302,13 @@ pub fn iterative_negamax(
     stopper: Arc<AtomicBool>,
 ) -> Option<SearchResult> {
     // Guard: must have a valid searchable ply, and root position must not be terminal.
-    assert_ne!(ply, 0);
-    assert!(ply <= MAX_DEPTH as u32);
+    assert!(0 < ply && ply <= MAX_DEPTH as u32);
     assert_ne!(position.get_legal_moves().len(), 0);
 
     // Meta Search variables
-    let instant = Instant::now(); // Timer for search
     let root_position = position.clone(); // For assertions
     let root_hash = tt.generate_hash(&position); // Keep copy of root hash for assertions
     let root_history = history.clone();
-
     // Early Stop variables
     let nodes_per_stop_check = 2000; // Number of nodes between updates to stopped flag
     let mut stopped = false; // Indicates if search was stopped
@@ -321,6 +318,8 @@ pub fn iterative_negamax(
     let contempt = Cp(50);
 
     // Metrics
+    let instant = Instant::now(); // Timer for search.
+    let mut q_elapsed = Duration::ZERO; // Time spent in quiescence.
     let mut nodes: u64 = 0; // Number of nodes in main search.
     let mut q_nodes: u64 = 0; // Number of nodes created in quiescence.
 
@@ -427,7 +426,9 @@ pub fn iterative_negamax(
                 parent.local_pv.clear();
 
                 let q_ply = 10;
+                let q_instant = Instant::now();
                 us.best_score = quiescence(&mut position, us.alpha, us.beta, q_ply, &mut q_nodes);
+                q_elapsed += q_instant.elapsed();
 
                 frame_idx = parent_idx(frame_idx);
                 continue;
@@ -558,14 +559,19 @@ pub fn iterative_negamax(
     if stack[BASE_IDX].local_pv.len() == 0 {
         None
     } else {
+        let best_move = stack[ROOT_IDX].best_move;
+        assert_ne!(best_move, Move::illegal());
+
         Some(SearchResult {
             player: root_position.player,
             depth: ply,
-            best_move: stack[ROOT_IDX].best_move,
+            best_move,
             score: stack[ROOT_IDX].best_score * root_position.player.sign(),
-            pv_line: stack[BASE_IDX].local_pv.clone(),
-            nodes,
+            pv: stack[BASE_IDX].local_pv.clone(),
+            nodes: nodes + q_nodes,
+            q_nodes,
             elapsed: instant.elapsed(),
+            q_elapsed,
             stopped,
         })
     }
@@ -588,7 +594,7 @@ mod tests {
         let result = negamax(position, 6, &mut tt);
         assert_eq!(result.leading(), Some(Color::White));
         assert_eq!(result.best_move, Move::new(E4, F6, None));
-        println!("{:?}", result.pv_line);
+        println!("{:?}", result.pv);
     }
 
     #[test]

@@ -5,8 +5,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::arrayvec::display;
-use crate::coretypes::{Cp, Move, MAX_DEPTH};
-use crate::movelist::Line;
+use crate::coretypes::MAX_DEPTH;
 use crate::search;
 use crate::search::History;
 use crate::search::SearchResult;
@@ -29,18 +28,11 @@ pub fn ids(
     let hash = tt.generate_hash(&position);
     let instant = Instant::now();
 
-    let mut nodes = 0;
-
     // Invalid default values, will be overwritten after each loop.
     let mut search_result = SearchResult {
         player: position.player,
-        depth: 0,
-        best_move: Move::illegal(),
-        score: Cp(0),
-        pv_line: Line::new(),
-        nodes,
-        elapsed: instant.elapsed(),
         stopped: true,
+        ..Default::default()
     };
 
     // Run a search for each ply from 1 to target ply.
@@ -56,10 +48,12 @@ pub fn ids(
         let history = history.clone();
         let maybe_result = search::iterative_negamax(position, ply, mode, history, tt, stopper);
 
-        // Use the most recent valid search_result,
-        // and return early if search_result is flagged as stopped.
-        if let Some(result) = maybe_result {
-            nodes += result.nodes;
+        // Update search_result from deeper iteration, and return early if it's flagged as stop.
+        // Need to update nodes, q_nodes, and q_elapsed to get running total.
+        if let Some(mut result) = maybe_result {
+            result.nodes += search_result.nodes;
+            result.q_nodes += search_result.q_nodes;
+            result.q_elapsed += search_result.q_elapsed;
             search_result = result;
 
             if search_result.stopped {
@@ -78,7 +72,7 @@ pub fn ids(
                 search_result.elapsed.as_millis(),
                 search_result.nodes,
                 search_result.nps(),
-                display(&search_result.pv_line),
+                display(&search_result.pv),
             );
         }
 
@@ -100,7 +94,7 @@ pub fn ids(
         let mut move_ply = ply.clone();
         let mut relative_pv_score = search_result.relative_score();
 
-        for &pv_move in search_result.pv_line.iter().take(move_ply as usize) {
+        for &pv_move in search_result.pv.iter().take(move_ply as usize) {
             let pv_entry = Entry::new(hash, NodeKind::Pv, pv_move, move_ply, relative_pv_score);
             tt.replace(pv_entry);
 
@@ -114,7 +108,6 @@ pub fn ids(
     }
 
     // Update values with those tracked in top level.
-    search_result.nodes = nodes;
     search_result.elapsed = instant.elapsed();
 
     search_result
