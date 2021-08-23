@@ -266,17 +266,24 @@ fn main() -> io::Result<()> {
             // A search has finished and the results have been returned.
             Message::Search(search_result) => {
                 uci::debug(debug, "search_result begin")?;
+                let extras = format!(
+                    "string q_nodes {} q_nps {} q_ratio {:.2} tt_cuts {} tt_hits {} cut_ratio {:.2}",
+                    search_result.q_nodes,
+                    search_result.q_nps(),
+                    search_result.quiescence_ratio(),
+                    search_result.tt_cuts,
+                    search_result.tt_hits,
+                    search_result.tt_cut_ratio()
+                );
                 println!(
-                    "info depth {} score cp {} time {} nodes {} nps {} pv {} string q_nodes {} q_nps {} q_ratio {}",
+                    "info depth {} score cp {} time {} nodes {} nps {} pv {} {}",
                     search_result.depth,
                     search_result.relative_score(),
                     search_result.elapsed.as_millis(),
                     search_result.nodes,
                     search_result.nps(),
                     display(&search_result.pv),
-                    search_result.q_nodes,
-                    search_result.q_nps(),
-                    search_result.quiescence_ratio(),
+                    extras
                 );
                 UciResponse::new_best_move(search_result.best_move).send()?;
 

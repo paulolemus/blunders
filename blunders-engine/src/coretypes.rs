@@ -26,7 +26,7 @@ pub const MAX_MOVES: usize = 218;
 // The greatest depth reachable for the engine during search.
 // This also expresses the maximum number of moves than can be in a line.
 // This value may change or be removed at any time.
-pub const MAX_DEPTH: usize = 40;
+pub const MAX_DEPTH: PlyKind = 40;
 
 // The greatest number of plies supported for the engine, 600 ply, or 300 moves.
 // Supports exceptionally long games of 300 moves. If a game goes longer than
@@ -36,6 +36,9 @@ pub const MAX_HISTORY: usize = 600;
 /////////////////////////
 // Data and Structures //
 /////////////////////////
+
+/// Type alias for max ply/depth.
+pub type PlyKind = u8;
 
 /// Counter for half-move clock and full-moves.
 pub type MoveCount = u16;

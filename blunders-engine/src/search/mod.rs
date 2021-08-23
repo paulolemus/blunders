@@ -20,7 +20,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::arrayvec::display;
-use crate::coretypes::{Color, Cp, Move};
+use crate::coretypes::{Color, Cp, Move, PlyKind};
 use crate::movelist::Line;
 use crate::timeman::Mode;
 use crate::transposition::TranspositionTable;
@@ -38,7 +38,7 @@ pub struct SearchResult {
     /// The player to move for the root position that was searched.
     pub player: Color,
     /// Depth (aka ply, half move) that was searched to. This depth is only fully searched if the `stopped` flag is false.
-    pub depth: u32,
+    pub depth: PlyKind,
     /// Total number of nodes visited in a search, including main search nodes and quiescence nodes.
     pub nodes: u64,
     /// Total number of nodes visited in a quiescence search.
@@ -49,9 +49,31 @@ pub struct SearchResult {
     pub q_elapsed: Duration,
     /// Flag that indicates this search was aborted.
     pub stopped: bool,
+
+    /// Number of times that beta was exceeded in main search resulting in a cut-off.
+    pub beta_cutoffs: u64,
+    /// Number of times that alpha was increased in main search.
+    pub alpha_increases: u64,
+    /// Number of times a position was found in the transposition table.
+    pub tt_hits: u64,
+    /// Number of times a tt hit score could be used and returned immediately.
+    pub tt_cuts: u64,
 }
 
 impl SearchResult {
+    /// Add the following metrics from `other` to this Result:
+    /// nodes, q_nodes, elapsed, q_elapsed, beta_cutoffs, alpha_increases, tt_hits, tt_cuts.
+    pub fn add_metrics(&mut self, other: Self) {
+        self.nodes += other.nodes;
+        self.q_nodes += other.q_nodes;
+        self.elapsed += other.elapsed;
+        self.q_elapsed += other.q_elapsed;
+        self.beta_cutoffs += other.beta_cutoffs;
+        self.alpha_increases += other.alpha_increases;
+        self.tt_hits += other.tt_hits;
+        self.tt_cuts += other.tt_cuts;
+    }
+
     /// Get average nodes per second of search.
     pub fn nps(&self) -> f64 {
         (self.nodes as f64 / self.elapsed.as_secs_f64()).round()
@@ -71,6 +93,11 @@ impl SearchResult {
             "logical error for q_elapsed to be greater than elapsed"
         );
         self.q_elapsed.as_secs_f64() / self.elapsed.as_secs_f64()
+    }
+
+    /// Returns the percentage of tt hits that result in tt cuts.
+    pub fn tt_cut_ratio(&self) -> f64 {
+        self.tt_cuts as f64 / self.tt_hits as f64
     }
 
     /// Converts the score of the search into one that is relative to search's root player.
@@ -107,6 +134,10 @@ impl Default for SearchResult {
             elapsed: Duration::ZERO,
             q_elapsed: Duration::ZERO,
             stopped: false,
+            beta_cutoffs: 0,
+            alpha_increases: 0,
+            tt_hits: 0,
+            tt_cuts: 0,
         }
     }
 }
@@ -127,8 +158,13 @@ impl Display for SearchResult {
             self.elapsed.as_secs(),
             self.elapsed.subsec_millis()
         ));
-        displayed.push_str(&format!("    q_ratio  : {}\n", self.quiescence_ratio()));
+        displayed.push_str(&format!("    q_ratio  : {:.2}\n", self.quiescence_ratio()));
         displayed.push_str(&format!("    stopped  : {}\n", self.stopped));
+        displayed.push_str(&format!("    beta_cuts: {}\n", self.beta_cutoffs));
+        displayed.push_str(&format!("    alpha_inc: {}\n", self.alpha_increases));
+        displayed.push_str(&format!("    tt_cuts  : {}\n", self.tt_cuts));
+        displayed.push_str(&format!("    tt_hits  : {}\n", self.tt_hits));
+        displayed.push_str(&format!("    tt_ratio : {:.2}\n", self.tt_cut_ratio()));
         displayed.push_str("}\n");
 
         write!(f, "{}", displayed)
@@ -136,7 +172,7 @@ impl Display for SearchResult {
 }
 
 /// Blunders Engine primary position search function. WIP.
-pub fn search(position: Position, ply: u32, tt: &TranspositionTable) -> SearchResult {
+pub fn search(position: Position, ply: PlyKind, tt: &TranspositionTable) -> SearchResult {
     assert_ne!(ply, 0);
     let mode = Mode::depth(ply, None);
     let history = History::new(&position.into(), tt.zobrist_table());

@@ -3,7 +3,7 @@
 use std::convert::TryFrom;
 use std::time::Instant;
 
-use crate::coretypes::Color;
+use crate::coretypes::{Color, PlyKind};
 use crate::error::{self, ErrorKind};
 use crate::uci::SearchControls;
 
@@ -25,7 +25,7 @@ pub enum Mode {
 
 impl Mode {
     /// Returns true if a search should be stopped.
-    pub fn stop(&self, root_player: Color, ply: u32) -> bool {
+    pub fn stop(&self, root_player: Color, ply: PlyKind) -> bool {
         match self {
             Mode::Infinite => Infinite::stop(),
             Mode::Depth(depth_mode) => depth_mode.stop(ply),
@@ -40,7 +40,7 @@ impl Mode {
     }
 
     /// Returns a new Depth Mode.
-    pub fn depth(ply: u32, movetime: Option<u32>) -> Self {
+    pub fn depth(ply: PlyKind, movetime: Option<u32>) -> Self {
         Self::Depth(Depth {
             depth: ply,
             instant: Instant::now(),
@@ -49,7 +49,7 @@ impl Mode {
     }
 
     /// Returns a new MoveTime mode.
-    pub fn movetime(movetime: u32, ply: Option<u32>) -> Self {
+    pub fn movetime(movetime: u32, ply: Option<PlyKind>) -> Self {
         Self::MoveTime(MoveTime {
             movetime,
             instant: Instant::now(),
@@ -63,7 +63,7 @@ impl Mode {
         winc: Option<u32>,
         binc: Option<u32>,
         moves_to_go: Option<u32>,
-        ply: Option<u32>,
+        ply: Option<PlyKind>,
     ) -> Self {
         Self::Standard(Standard {
             wtime,
@@ -116,14 +116,14 @@ impl Infinite {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct Depth {
-    pub depth: u32,
+    pub depth: PlyKind,
     instant: Instant,
     movetime: Option<u32>,
 }
 
 impl Depth {
     /// Depth mode stops when its depth limit is passed, or optionally if movetime is met.
-    fn stop(&self, ply: u32) -> bool {
+    fn stop(&self, ply: PlyKind) -> bool {
         if ply > self.depth {
             return true;
         }
@@ -148,12 +148,12 @@ impl Depth {
 pub struct MoveTime {
     movetime: u32,
     instant: Instant,
-    depth: Option<u32>,
+    depth: Option<PlyKind>,
 }
 
 impl MoveTime {
     /// MoveTime mode stops after a given time has passed, or optionally if its depth is passed.
-    fn stop(&self, ply: u32) -> bool {
+    fn stop(&self, ply: PlyKind) -> bool {
         let elapsed_ms = self.instant.elapsed().as_millis();
         if elapsed_ms >= (self.movetime as u128).saturating_sub(OVERHEAD) {
             return true;
@@ -182,13 +182,13 @@ pub struct Standard {
     winc: Option<u32>,
     binc: Option<u32>,
     moves_to_go: Option<u32>,
-    depth: Option<u32>,
+    depth: Option<PlyKind>,
 }
 
 impl Standard {
     /// Standard stops after using some heuristic to determine how much of remaining time to use.
     /// Optionally, stops when a depth is passed.
-    fn stop(&self, root_player: Color, ply: u32) -> bool {
+    fn stop(&self, root_player: Color, ply: PlyKind) -> bool {
         let target_elapsed = self.target_elapsed_ms(root_player);
         let elapsed_ms = self.instant.elapsed().as_millis();
 

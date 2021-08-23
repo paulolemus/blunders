@@ -10,7 +10,7 @@ use std::ops::Deref;
 use std::ops::{Index, IndexMut};
 use std::str::{FromStr, SplitWhitespace};
 
-use crate::coretypes::Move;
+use crate::coretypes::{Move, PlyKind};
 use crate::error::{self, ErrorKind};
 use crate::fen::Fen;
 use crate::movelist::MoveHistory;
@@ -781,7 +781,7 @@ pub struct SearchControls {
     pub winc: Option<u32>,
     pub binc: Option<u32>,
     pub moves_to_go: Option<u32>,
-    pub depth: Option<u32>,
+    pub depth: Option<PlyKind>,
     pub nodes: Option<u64>,
     pub mate: Option<u32>,
     pub move_time: Option<u32>,

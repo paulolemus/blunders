@@ -31,3 +31,7 @@ harness = false
 [[bench]]
 name = "ttd"
 harness = false
+
+[[bench]]
+name = "zobrist"
+harness = false

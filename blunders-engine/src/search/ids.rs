@@ -38,7 +38,7 @@ pub fn ids(
     // Run a search for each ply from 1 to target ply.
     // After each search, ensure that the principal variation from the previous
     // iteration is in the tt.
-    for ply in 1..=MAX_DEPTH as u32 {
+    for ply in 1..=MAX_DEPTH {
         // Check if we need to stop before the current iteration.
         if mode.stop(position.player, ply) {
             break;
@@ -51,9 +51,7 @@ pub fn ids(
         // Update search_result from deeper iteration, and return early if it's flagged as stop.
         // Need to update nodes, q_nodes, and q_elapsed to get running total.
         if let Some(mut result) = maybe_result {
-            result.nodes += search_result.nodes;
-            result.q_nodes += search_result.q_nodes;
-            result.q_elapsed += search_result.q_elapsed;
+            result.add_metrics(search_result);
             search_result = result;
 
             if search_result.stopped {

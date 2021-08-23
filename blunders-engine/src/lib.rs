@@ -18,6 +18,7 @@ pub mod transposition;
 pub mod uci;
 pub mod zobrist;
 
+pub use coretypes::{File, Move, Rank, Square};
 pub use engine::{Engine, EngineBuilder};
 pub use fen::Fen;
 pub use position::{Game, Position};

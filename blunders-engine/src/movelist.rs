@@ -17,7 +17,7 @@ pub type MoveInfoList = ArrayVec<MoveInfo, MAX_MOVES>;
 /// Line is a sequence of legal moves that can be applied to a position. Useful for retaining a principal variation
 /// found from a search.
 /// Mainly used for retaining a principal variation found through search.
-pub type Line = ArrayVec<Move, MAX_DEPTH>;
+pub type Line = ArrayVec<Move, { MAX_DEPTH as usize }>;
 
 /// MoveHistory stores the sequence of moves that have been applied to some base position.
 /// The size limit of this is the longest contiguous game that Blunders can support.

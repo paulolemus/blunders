@@ -4,7 +4,7 @@ use std::cmp;
 use std::time::Instant;
 
 use crate::coretypes::Color::*;
-use crate::coretypes::{Cp, Move, Square};
+use crate::coretypes::{Cp, Move, PlyKind, Square};
 use crate::eval::{evaluate_abs, terminal_abs};
 use crate::movelist::Line;
 use crate::search::SearchResult;
@@ -16,7 +16,7 @@ const BLACK: u8 = Black as u8;
 /// Base minimax call. This function assumes that the current player in the passed position
 /// is the engine.
 /// It returns the best move and score for the position in the search tree.
-pub fn minimax(position: Position, ply: u32) -> SearchResult {
+pub fn minimax(position: Position, ply: PlyKind) -> SearchResult {
     assert_ne!(ply, 0);
 
     let instant = Instant::now();
@@ -48,7 +48,7 @@ pub fn minimax(position: Position, ply: u32) -> SearchResult {
 /// 2. Only one of Alpha and Beta can be updated from a nodes children.
 /// Thus, for the root position either Alpha or Beta will stay infinitely bounded,
 /// so no pruning can occur.
-fn minimax_root(mut position: Position, ply: u32, nodes: &mut u64) -> (Cp, Move) {
+fn minimax_root(mut position: Position, ply: PlyKind, nodes: &mut u64) -> (Cp, Move) {
     *nodes += 1;
     let cache = position.cache();
     let legal_moves = position.get_legal_moves();
@@ -89,7 +89,7 @@ fn minimax_root(mut position: Position, ply: u32, nodes: &mut u64) -> (Cp, Move)
     (best_cp, best_move)
 }
 
-fn minimax_impl<const COLOR: u8>(position: &mut Position, ply: u32, nodes: &mut u64) -> Cp {
+fn minimax_impl<const COLOR: u8>(position: &mut Position, ply: PlyKind, nodes: &mut u64) -> Cp {
     *nodes += 1;
     let cache = position.cache();
     let legal_moves = position.get_legal_moves();

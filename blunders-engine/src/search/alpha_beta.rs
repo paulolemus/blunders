@@ -4,7 +4,7 @@ use std::cmp;
 use std::time::Instant;
 
 use crate::coretypes::Color::*;
-use crate::coretypes::{Cp, Move, Square};
+use crate::coretypes::{Cp, Move, PlyKind, Square};
 use crate::eval::{evaluate_abs, terminal_abs};
 use crate::movelist::Line;
 use crate::search::SearchResult;
@@ -13,7 +13,7 @@ use crate::Position;
 /// Base alpha_beta call. This function assumes that the current player in the passed position
 /// is the engine.
 /// It returns the best move and score for the position in the search tree.
-pub fn alpha_beta(position: Position, ply: u32) -> SearchResult {
+pub fn alpha_beta(position: Position, ply: PlyKind) -> SearchResult {
     debug_assert_ne!(ply, 0);
 
     let mut pv = Line::new();
@@ -53,7 +53,7 @@ const BLACK: u8 = Black as u8;
 /// so no pruning can occur.
 pub(crate) fn alpha_beta_root(
     mut position: Position,
-    ply: u32,
+    ply: PlyKind,
     nodes: &mut u64,
     mut alpha: Cp,
     mut beta: Cp,
@@ -95,7 +95,7 @@ pub(crate) fn alpha_beta_root(
 
 fn alpha_beta_impl<const COLOR: u8>(
     position: &mut Position,
-    ply: u32,
+    ply: PlyKind,
     nodes: &mut u64,
     alpha: Cp,
     beta: Cp,

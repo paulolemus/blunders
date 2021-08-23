@@ -2,7 +2,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use blunders_engine::{EngineBuilder, Mode, Position};
+use blunders_engine::{EngineBuilder, Mode, Move, Position};
 
 pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
     // Setup
@@ -20,7 +20,9 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
             result = engine.search_sync(black_box(Mode::depth(2, None)));
         });
     });
-    println!("{}", result);
+    if result.best_move != Move::illegal() {
+        println!("{}", result);
+    }
 
     c.bench_function("search start position ttd 3", |b| {
         b.iter(|| {
@@ -28,7 +30,9 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
             result = engine.search_sync(black_box(Mode::depth(3, None)));
         });
     });
-    println!("{}", result);
+    if result.best_move != Move::illegal() {
+        println!("{}", result);
+    }
 
     c.bench_function("search start position ttd 4", |b| {
         b.iter(|| {
@@ -36,7 +40,9 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
             result = engine.search_sync(black_box(Mode::depth(4, None)));
         });
     });
-    println!("{}", result);
+    if result.best_move != Move::illegal() {
+        println!("{}", result);
+    }
 
     c.bench_function("search start position ttd 5", |b| {
         b.iter(|| {
@@ -44,7 +50,9 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
             result = engine.search_sync(black_box(Mode::depth(5, None)));
         });
     });
-    println!("{}", result);
+    if result.best_move != Move::illegal() {
+        println!("{}", result);
+    }
 
     c.bench_function("search start position ttd 6", |b| {
         b.iter(|| {
@@ -52,7 +60,9 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
             result = engine.search_sync(black_box(Mode::depth(6, None)));
         });
     });
-    println!("{}", result);
+    if result.best_move != Move::illegal() {
+        println!("{}", result);
+    }
 }
 
 pub fn start_pos_search_time_to_depth_long(c: &mut Criterion) {
@@ -71,7 +81,9 @@ pub fn start_pos_search_time_to_depth_long(c: &mut Criterion) {
             result = engine.search_sync(black_box(Mode::depth(7, None)));
         });
     });
-    println!("{}", result);
+    if result.best_move != Move::illegal() {
+        println!("{}", result);
+    }
 
     c.bench_function("search start position ttd 8", |b| {
         b.iter(|| {
@@ -79,7 +91,9 @@ pub fn start_pos_search_time_to_depth_long(c: &mut Criterion) {
             result = engine.search_sync(black_box(Mode::depth(8, None)));
         });
     });
-    println!("{}", result);
+    if result.best_move != Move::illegal() {
+        println!("{}", result);
+    }
 }
 
 criterion_group! {

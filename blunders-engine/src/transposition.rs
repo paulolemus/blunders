@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::mem;
 use std::sync::Mutex;
 
-use crate::coretypes::{Cp, Move, MoveInfo};
+use crate::coretypes::{Cp, Move, MoveInfo, PlyKind};
 use crate::position::{Cache, Position};
 use crate::zobrist::{HashKind, ZobristTable};
 
@@ -23,13 +23,19 @@ pub struct Entry {
     pub hash: HashKind,      // Full hash value for a position.
     pub node_kind: NodeKind, // Type of Node this position has in search tree.
     pub key_move: Move,      // Best move or refutation move.
-    pub ply: u32,            // The depth searched to in this Position's subtree.
+    pub ply: PlyKind,        // The depth searched to in this Position's subtree.
     pub score: Cp,           // Score in centipawns for hashed position.
 }
 
 impl Entry {
     /// Returns new Entry from provided information.
-    pub fn new(hash: HashKind, node_kind: NodeKind, key_move: Move, ply: u32, score: Cp) -> Self {
+    pub fn new(
+        hash: HashKind,
+        node_kind: NodeKind,
+        key_move: Move,
+        ply: PlyKind,
+        score: Cp,
+    ) -> Self {
         Self {
             hash,
             node_kind,

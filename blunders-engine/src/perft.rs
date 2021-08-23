@@ -9,6 +9,7 @@ use std::ops::{Add, AddAssign};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use crate::coretypes::PlyKind;
 use crate::movelist::MoveList;
 use crate::position::Position;
 
@@ -43,7 +44,7 @@ impl AddAssign for PerftInfo {
 // Count the number of nodes at a certain depth.
 // This ignores higher terminal nodes.
 // In other words, it counts the number of paths to the given depth.
-pub fn perft(mut position: Position, ply: u32, threads: usize) -> PerftInfo {
+pub fn perft(mut position: Position, ply: PlyKind, threads: usize) -> PerftInfo {
     // Guard easy to calculate inputs.
     if ply == 0 {
         // Ever only 1 position at 0 ply.
@@ -101,7 +102,7 @@ pub fn perft(mut position: Position, ply: u32, threads: usize) -> PerftInfo {
 #[inline(always)]
 fn perft_executor(
     mut position: Position,
-    ply: u32,
+    ply: PlyKind,
     moves: Arc<Mutex<MoveList>>,
     total_perft_info: Arc<Mutex<PerftInfo>>,
 ) {
@@ -121,7 +122,7 @@ fn perft_executor(
 }
 
 /// Ply must be non-zero.
-fn perft_recurse(position: &mut Position, ply: u32) -> PerftInfo {
+fn perft_recurse(position: &mut Position, ply: PlyKind) -> PerftInfo {
     debug_assert_ne!(ply, 0);
     let cache = position.cache();
     if ply == 1 {

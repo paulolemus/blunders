@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::arrayvec::{self, ArrayVec};
-use crate::coretypes::{Cp, Move, MoveInfo, MoveKind, PieceKind, MAX_DEPTH};
+use crate::coretypes::{Cp, Move, MoveInfo, MoveKind, PieceKind, PlyKind, MAX_DEPTH};
 use crate::eval::{draw, terminal};
 use crate::movelist::{Line, MoveInfoList};
 use crate::moveorder::order_all_moves;
@@ -20,9 +20,8 @@ use crate::zobrist::HashKind;
 /// Internally, Negamax treats the active player as the maxing player,
 /// however the final centipawn score of the position returned is
 /// absolute with White as maxing and Black as minning.
-pub fn negamax(mut position: Position, ply: u32, tt: &TranspositionTable) -> SearchResult {
-    assert_ne!(ply, 0);
-    assert!(ply < MAX_DEPTH as u32);
+pub fn negamax(mut position: Position, ply: PlyKind, tt: &TranspositionTable) -> SearchResult {
+    assert!(0 < ply && ply < MAX_DEPTH);
 
     let root_player = *position.player();
     let hash = tt.generate_hash(&position);
@@ -76,7 +75,7 @@ fn negamax_impl(
     hash: HashKind,
     pv: &mut Line,
     nodes: &mut u64,
-    ply: u32,
+    ply: PlyKind,
     mut alpha: Cp,
     beta: Cp,
 ) -> Cp {
@@ -279,9 +278,9 @@ fn child_idx(frame_idx: usize) -> usize {
 
 /// Convert a frame index to a ply.
 #[inline(always)]
-fn curr_ply(frame_idx: usize) -> u32 {
+fn curr_ply(frame_idx: usize) -> PlyKind {
     debug_assert!(frame_idx > 0);
-    (frame_idx - 1) as u32
+    (frame_idx - 1) as PlyKind
 }
 
 /// Iterative fail-soft Negamax implementation with alpha-beta pruning and transposition table lookup.
@@ -295,14 +294,14 @@ fn curr_ply(frame_idx: usize) -> u32 {
 /// * Easy to stop without risk of corrupting transposition table entries.
 pub fn iterative_negamax(
     mut position: Position,
-    ply: u32,
+    ply: PlyKind,
     mode: Mode,
     mut history: History,
     tt: &TranspositionTable,
     stopper: Arc<AtomicBool>,
 ) -> Option<SearchResult> {
     // Guard: must have a valid searchable ply, and root position must not be terminal.
-    assert!(0 < ply && ply <= MAX_DEPTH as u32);
+    assert!(0 < ply && ply <= MAX_DEPTH);
     assert_ne!(position.get_legal_moves().len(), 0);
 
     // Meta Search variables
@@ -322,12 +321,16 @@ pub fn iterative_negamax(
     let mut q_elapsed = Duration::ZERO; // Time spent in quiescence.
     let mut nodes: u64 = 0; // Number of nodes in main search.
     let mut q_nodes: u64 = 0; // Number of nodes created in quiescence.
+    let mut alpha_incs = 0; // Number of times alpha gets improved, anywhere.
+    let mut beta_cuts = 0; // Number of times a beta cut-off occurs.
+    let mut tt_hits = 0; // Number of times a position was found in tt.
+    let mut tt_cuts = 0; // Number of times a tt hit was returned immediately.
 
     // Stack holds frame data, where each ply gets one frame.
     // Size is +1 because the 0th index holds the PV so far for root position.
     const BASE_IDX: usize = 0; // Root passes PV to this parent frame
     const ROOT_IDX: usize = 1; // Root position data frame
-    let mut stack: ArrayVec<Frame, { MAX_DEPTH + 1 }> = ArrayVec::new();
+    let mut stack: ArrayVec<Frame, { (MAX_DEPTH + 1) as usize }> = ArrayVec::new();
     // Fill stack with default values to navigate, opposed to pushing and popping.
     while !stack.is_full() {
         stack.push(Default::default());
@@ -407,7 +410,9 @@ pub fn iterative_negamax(
             // Check if this position exists in tt and has been searched to/beyond our ply.
             // If so the score is usable, store this value and return to parent.
             else if let Some(tt_entry) = tt.get(us.hash) {
+                tt_hits += 1;
                 if tt_entry.ply >= remaining_ply && legal_moves.contains(&tt_entry.key_move) {
+                    tt_cuts += 1;
                     parent.label = Label::Retrieve;
                     parent.local_pv.clear();
                     parent.local_pv.push(tt_entry.key_move);
@@ -510,6 +515,7 @@ pub fn iterative_negamax(
             // This branch will not be taken further up the tree as there is a better move.
             // Push this cut-node into the tt, with an absolute score, instead of relative.
             if us.best_score >= us.beta {
+                beta_cuts += 1;
                 let tt_entry = Entry::new(
                     us.hash,
                     NodeKind::Cut,
@@ -527,9 +533,8 @@ pub fn iterative_negamax(
 
             // New local PV has been found. Update alpha and store new Line.
             // Update this node in tt as a PV node.
-            // TODO: This might not be sound, since we are storing a value
-            // where node is only partially checked.
             if us.best_score > us.alpha {
+                alpha_incs += 1;
                 us.alpha = us.best_score;
 
                 // Give parent updated PV by appending child PV to our best move.
@@ -573,6 +578,10 @@ pub fn iterative_negamax(
             elapsed: instant.elapsed(),
             q_elapsed,
             stopped,
+            alpha_increases: alpha_incs,
+            beta_cutoffs: beta_cuts,
+            tt_hits,
+            tt_cuts,
         })
     }
 }

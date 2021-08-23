@@ -15,7 +15,7 @@
 //! Quiescence search searches a small sub-tree of the leaf node to evaluate
 //! quiet position, so the evaluation of the original leaf node is more stable.
 
-use crate::coretypes::Cp;
+use crate::coretypes::{Cp, PlyKind};
 use crate::eval::evaluate;
 use crate::movelist::MoveInfoList;
 use crate::moveorder::pick_best_move;
@@ -47,7 +47,7 @@ pub fn quiescence(
     position: &mut Position,
     mut alpha: Cp,
     beta: Cp,
-    ply: u8,
+    ply: PlyKind,
     nodes: &mut u64,
 ) -> Cp {
     let mut best_score = evaluate(position);
