@@ -147,6 +147,22 @@ impl Position {
         &self.fullmoves
     }
 
+    /// Return the number of moves played in this game so far, from the fullmove counter.
+    pub fn moves_played(&self) -> MoveCount {
+        self.fullmoves * 2
+            - 1
+            - match self.player {
+                Color::White => 1,
+                Color::Black => 0,
+            }
+    }
+
+    /// Returns the age of this position.
+    /// Age is the same as moves_played(), except wrapped into a u8.
+    pub(crate) fn age(&self) -> u8 {
+        (self.moves_played() % u8::MAX as MoveCount) as u8
+    }
+
     /// Create a new position where the relative position is the same for the active player,
     /// but the player gets switched.
     /// This is equivalent to a vertical flip and color swap for all pieces,
@@ -992,5 +1008,27 @@ mod tests {
 
         assert_eq!(w_giuoco.color_flip(), b_giuoco);
         assert_eq!(b_giuoco.color_flip(), w_giuoco);
+    }
+
+    #[test]
+    fn moves_played() {
+        let mut pos = Position::start_position();
+        let line = vec![
+            Move::new(D2, D4, None),
+            Move::new(D7, D5, None),
+            Move::new(E2, E4, None),
+            Move::new(D5, E4, None),
+            Move::new(B1, C3, None),
+            Move::new(F7, F5, None),
+            Move::new(C1, F4, None),
+        ];
+
+        assert_eq!(pos.moves_played(), 0);
+
+        for (moves_played, move_) in line.into_iter().enumerate() {
+            let res = pos.do_legal_move(move_);
+            assert!(res.is_some());
+            assert_eq!(pos.moves_played(), moves_played as MoveCount + 1);
+        }
     }
 }

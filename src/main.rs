@@ -267,13 +267,14 @@ fn main() -> io::Result<()> {
             Message::Search(search_result) => {
                 uci::debug(debug, "search_result begin")?;
                 let extras = format!(
-                    "string q_nodes {} q_nps {} q_ratio {:.2} tt_cuts {} tt_hits {} cut_ratio {:.2}",
+                    "string q_nodes {} q_nps {} q_ratio {:.2} tt_cuts {} tt_hits {} cut_ratio {:.2} pv_nodes {}",
                     search_result.q_nodes,
                     search_result.q_nps(),
                     search_result.quiescence_ratio(),
                     search_result.tt_cuts,
                     search_result.tt_hits,
-                    search_result.tt_cut_ratio()
+                    search_result.tt_cut_ratio(),
+                    search_result.pv_nodes,
                 );
                 println!(
                     "info depth {} score cp {} time {} nodes {} nps {} pv {} {}",

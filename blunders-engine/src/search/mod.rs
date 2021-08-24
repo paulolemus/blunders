@@ -50,10 +50,12 @@ pub struct SearchResult {
     /// Flag that indicates this search was aborted.
     pub stopped: bool,
 
-    /// Number of times that beta was exceeded in main search resulting in a cut-off.
-    pub beta_cutoffs: u64,
-    /// Number of times that alpha was increased in main search.
-    pub alpha_increases: u64,
+    /// Number of nodes where a beta-cutoff was performed.
+    pub cut_nodes: u64,
+    /// Number of nodes that improved local alpha value without reaching beta.
+    pub pv_nodes: u64,
+    /// Number of nodes that did not improve alpha or result in a cutoff.
+    pub all_nodes: u64,
     /// Number of times a position was found in the transposition table.
     pub tt_hits: u64,
     /// Number of times a tt hit score could be used and returned immediately.
@@ -68,8 +70,10 @@ impl SearchResult {
         self.q_nodes += other.q_nodes;
         self.elapsed += other.elapsed;
         self.q_elapsed += other.q_elapsed;
-        self.beta_cutoffs += other.beta_cutoffs;
-        self.alpha_increases += other.alpha_increases;
+
+        self.cut_nodes += other.cut_nodes;
+        self.pv_nodes += other.pv_nodes;
+        self.all_nodes += other.all_nodes;
         self.tt_hits += other.tt_hits;
         self.tt_cuts += other.tt_cuts;
     }
@@ -134,8 +138,9 @@ impl Default for SearchResult {
             elapsed: Duration::ZERO,
             q_elapsed: Duration::ZERO,
             stopped: false,
-            beta_cutoffs: 0,
-            alpha_increases: 0,
+            cut_nodes: 0,
+            pv_nodes: 0,
+            all_nodes: 0,
             tt_hits: 0,
             tt_cuts: 0,
         }
@@ -160,8 +165,9 @@ impl Display for SearchResult {
         ));
         displayed.push_str(&format!("    q_ratio  : {:.2}\n", self.quiescence_ratio()));
         displayed.push_str(&format!("    stopped  : {}\n", self.stopped));
-        displayed.push_str(&format!("    beta_cuts: {}\n", self.beta_cutoffs));
-        displayed.push_str(&format!("    alpha_inc: {}\n", self.alpha_increases));
+        displayed.push_str(&format!("    pv_nodes : {}\n", self.pv_nodes));
+        displayed.push_str(&format!("    cut_nodes: {}\n", self.cut_nodes));
+        displayed.push_str(&format!("    all_nodes: {}\n", self.all_nodes));
         displayed.push_str(&format!("    tt_cuts  : {}\n", self.tt_cuts));
         displayed.push_str(&format!("    tt_hits  : {}\n", self.tt_hits));
         displayed.push_str(&format!("    tt_ratio : {:.2}\n", self.tt_cut_ratio()));

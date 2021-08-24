@@ -27,6 +27,7 @@ pub fn ids(
 ) -> SearchResult {
     let hash = tt.generate_hash(&position);
     let instant = Instant::now();
+    let age = position.age();
 
     // Invalid default values, will be overwritten after each loop.
     let mut search_result = SearchResult {
@@ -94,7 +95,7 @@ pub fn ids(
 
         for &pv_move in search_result.pv.iter().take(move_ply as usize) {
             let pv_entry = Entry::new(hash, NodeKind::Pv, pv_move, move_ply, relative_pv_score);
-            tt.replace(pv_entry);
+            tt.replace(pv_entry, age);
 
             let cache = position.cache();
             let move_info = position.do_move(pv_move);

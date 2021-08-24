@@ -2,7 +2,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::arrayvec::{self, ArrayVec};
 use crate::coretypes::{Cp, Move, MoveInfo, MoveKind, PieceKind, PlyKind, MAX_DEPTH};
@@ -26,6 +26,7 @@ pub fn negamax(mut position: Position, ply: PlyKind, tt: &TranspositionTable) ->
     let root_player = *position.player();
     let hash = tt.generate_hash(&position);
     let instant = Instant::now();
+    let age = position.age();
 
     let mut pv = Line::new();
     let mut nodes = 0;
@@ -39,6 +40,7 @@ pub fn negamax(mut position: Position, ply: PlyKind, tt: &TranspositionTable) ->
         ply,
         Cp::MIN,
         Cp::MAX,
+        age,
     );
 
     SearchResult {
@@ -78,9 +80,9 @@ fn negamax_impl(
     ply: PlyKind,
     mut alpha: Cp,
     beta: Cp,
+    age: u8,
 ) -> Cp {
     *nodes += 1;
-    let mut q_nodes = 0; // TODO: Consolidate metrics.
 
     let legal_moves = position.get_legal_moves();
     let num_moves = legal_moves.len();
@@ -106,13 +108,13 @@ fn negamax_impl(
     // protection against Key collisions.
     // TODO: Verify that this is bug free. It is possible this may cut the Pv line,
     //       or that returning early is incorrect.
-    else if let Some(tt_entry) = tt.get(hash) {
-        if tt_entry.ply >= ply && legal_moves.contains(&tt_entry.key_move) {
+    else if let Some(entry) = tt.get(hash) {
+        if entry.ply >= ply && legal_moves.contains(&entry.key_move) {
             pv.clear();
-            pv.push(tt_entry.key_move);
-            return tt_entry.score;
+            pv.push(entry.key_move);
+            return entry.score;
         }
-        hash_move = Some(tt_entry.key_move);
+        hash_move = Some(entry.key_move);
 
     // Run a Quiescence Search for non-terminal leaf nodes to find a more stable
     // evaluation than a static evaluation.
@@ -121,7 +123,7 @@ fn negamax_impl(
     } else if ply == 0 {
         pv.clear();
         let q_ply = 10;
-        return quiescence(position, alpha, beta, q_ply, &mut q_nodes);
+        return quiescence(position, alpha, beta, q_ply, nodes);
     }
 
     // Move Ordering
@@ -140,6 +142,7 @@ fn negamax_impl(
     let mut best_move = Move::illegal();
     let mut local_pv = Line::new();
     let mut best_score = Cp::MIN;
+    let mut alpha_raised = false;
 
     // For each child of current position, recursively find maxing move.
     for legal_move_info in ordered_legal_moves.into_iter().rev() {
@@ -155,6 +158,7 @@ fn negamax_impl(
             ply - 1,
             -beta,
             -alpha,
+            age,
         );
         position.undo_move(legal_move_info, cache);
 
@@ -169,31 +173,34 @@ fn negamax_impl(
         // Push this cut-node into the tt, with a score relative to this node's active player.
         if move_score >= beta {
             let cut_move = legal_move_info.move_();
-            let tt_entry = Entry::new(hash, NodeKind::Cut, cut_move, ply, move_score);
-            tt.replace(tt_entry);
+            let entry = Entry::new(hash, NodeKind::Cut, cut_move, ply, move_score);
+            tt.replace_by(entry, age, replace_scheme);
             return move_score;
         }
 
         // A new local PV line has been found. Update alpha and store new Line.
-        // Update this node in tt as a PV node.
         if best_score > alpha {
+            alpha_raised = true;
             alpha = best_score;
             pv.clear();
             pv.push(best_move);
             arrayvec::append(pv, local_pv.clone());
-
-            let tt_entry = Entry::new(hash, NodeKind::Pv, best_move, ply, best_score);
-            tt.replace(tt_entry);
         }
     }
 
-    // Every move for this node has been evaluated. It is possible that this node
-    // was added to the tt beforehand, so we can add it on the condition that
-    // It's node-kind is less important than what exists in tt.
-    let tt_entry = Entry::new(hash, NodeKind::All, best_move, ply, best_score);
-    tt.replace_by(tt_entry, |replacing, slotted| {
-        replacing.node_kind >= slotted.node_kind
-    });
+    // Every move for this node has been evaluated, and best_score did not exceed beta.
+    let node_kind = match alpha_raised {
+        true => NodeKind::Pv,
+        false => NodeKind::All,
+    };
+    let entry = Entry::new(hash, node_kind, best_move, ply, best_score);
+
+    // Always replace with a PV node, otherwise replace conditionally.
+    if node_kind == NodeKind::Pv {
+        tt.replace(entry, age);
+    } else {
+        tt.replace_by(entry, age, replace_scheme);
+    }
 
     best_score
 }
@@ -220,6 +227,7 @@ struct Frame {
     pub hash: HashKind,
     pub move_info: MoveInfo,
     pub cache: Cache,
+    pub alpha_raised: bool,
 }
 /// A frame defaults with junk data, however this is acceptable
 /// because nodes set appropriate data before using.
@@ -243,6 +251,7 @@ impl Default for Frame {
                 move_kind: MoveKind::Quiet,
             },
             cache: Cache::illegal(),
+            alpha_raised: false,
         }
     }
 }
@@ -283,6 +292,16 @@ fn curr_ply(frame_idx: usize) -> PlyKind {
     (frame_idx - 1) as PlyKind
 }
 
+/// TT entry replacement scheme, assuming PV node are unconditionally replaced elsewhere.
+/// This is a replacement scheme assuming new_entry is All or Cut.
+/// Goals:
+/// * Always replace entries from previous searches.
+/// * Prioritize deeper searched nodes.
+#[inline]
+fn replace_scheme(new_entry: &Entry, new_age: u8, existing: &Entry, existing_age: u8) -> bool {
+    new_age != existing_age || (existing.node_kind != NodeKind::Pv && new_entry.ply >= existing.ply)
+}
+
 /// Iterative fail-soft Negamax implementation with alpha-beta pruning and transposition table lookup.
 ///
 /// In fail-soft, the return value of a call can exceed its given bounds alpha and beta (score < alpha, score > beta).
@@ -305,9 +324,12 @@ pub fn iterative_negamax(
     assert_ne!(position.get_legal_moves().len(), 0);
 
     // Meta Search variables
+    let instant = Instant::now(); // Timer for search.
     let root_position = position.clone(); // For assertions
     let root_hash = tt.generate_hash(&position); // Keep copy of root hash for assertions
     let root_history = history.clone();
+    let age = position.age();
+
     // Early Stop variables
     let nodes_per_stop_check = 2000; // Number of nodes between updates to stopped flag
     let mut stopped = false; // Indicates if search was stopped
@@ -316,15 +338,11 @@ pub fn iterative_negamax(
     // A score assigned to draws to lean engine away from drawing (Cp 0) when slightly behind.
     let contempt = Cp(50);
 
-    // Metrics
-    let instant = Instant::now(); // Timer for search.
-    let mut q_elapsed = Duration::ZERO; // Time spent in quiescence.
-    let mut nodes: u64 = 0; // Number of nodes in main search.
-    let mut q_nodes: u64 = 0; // Number of nodes created in quiescence.
-    let mut alpha_incs = 0; // Number of times alpha gets improved, anywhere.
-    let mut beta_cuts = 0; // Number of times a beta cut-off occurs.
-    let mut tt_hits = 0; // Number of times a position was found in tt.
-    let mut tt_cuts = 0; // Number of times a tt hit was returned immediately.
+    // Update Metrics in SearchResult.
+    let mut metrics = SearchResult::default();
+    metrics.player = root_position.player;
+    metrics.depth = ply;
+    metrics.stopped = false;
 
     // Stack holds frame data, where each ply gets one frame.
     // Size is +1 because the 0th index holds the PV so far for root position.
@@ -374,7 +392,7 @@ pub fn iterative_negamax(
         // Flow: Return eval to parent || set self to search mode
         if Label::Initialize == label {
             stop_check_counter -= 1;
-            nodes += 1;
+            metrics.nodes += 1;
 
             let legal_moves = position.get_legal_moves();
             let num_moves = legal_moves.len();
@@ -409,21 +427,21 @@ pub fn iterative_negamax(
             }
             // Check if this position exists in tt and has been searched to/beyond our ply.
             // If so the score is usable, store this value and return to parent.
-            else if let Some(tt_entry) = tt.get(us.hash) {
-                tt_hits += 1;
-                if tt_entry.ply >= remaining_ply && legal_moves.contains(&tt_entry.key_move) {
-                    tt_cuts += 1;
+            else if let Some(entry) = tt.get(us.hash) {
+                metrics.tt_hits += 1;
+                if entry.ply >= remaining_ply && legal_moves.contains(&entry.key_move) {
+                    metrics.tt_cuts += 1;
                     parent.label = Label::Retrieve;
                     parent.local_pv.clear();
-                    parent.local_pv.push(tt_entry.key_move);
+                    parent.local_pv.push(entry.key_move);
 
-                    us.best_score = tt_entry.score;
-                    us.best_move = tt_entry.key_move;
+                    us.best_score = entry.score;
+                    us.best_move = entry.key_move;
 
                     frame_idx = parent_idx(frame_idx);
                     continue;
                 }
-                hash_move = Some(tt_entry.key_move);
+                hash_move = Some(entry.key_move);
             }
             // Max depth (leaf node) reached. Statically evaluate position and return value.
             else if remaining_ply == 0 {
@@ -432,8 +450,11 @@ pub fn iterative_negamax(
 
                 let q_ply = 10;
                 let q_instant = Instant::now();
+                let mut q_nodes = 0;
                 us.best_score = quiescence(&mut position, us.alpha, us.beta, q_ply, &mut q_nodes);
-                q_elapsed += q_instant.elapsed();
+                metrics.q_elapsed += q_instant.elapsed();
+                metrics.nodes += q_nodes;
+                metrics.q_nodes += q_nodes;
 
                 frame_idx = parent_idx(frame_idx);
                 continue;
@@ -471,23 +492,37 @@ pub fn iterative_negamax(
                 child.alpha = -us.beta;
                 child.beta = -us.alpha;
                 child.best_score = Cp::MIN;
+                child.alpha_raised = false;
 
                 frame_idx = child_idx(frame_idx);
 
             // Every move for this node has been evaluated, so its complete score is returned.
             } else {
-                // ALL-NODE hash strategy: TODO
-                // Currently adding only if it's node-kind is less important than what's in tt.
-                let tt_entry = Entry::new(
+                let node_kind = match us.alpha_raised {
+                    true => {
+                        metrics.pv_nodes += 1;
+                        NodeKind::Pv
+                    }
+                    false => {
+                        metrics.all_nodes += 1;
+                        NodeKind::All
+                    }
+                };
+
+                let entry = Entry::new(
                     us.hash,
-                    NodeKind::All,
+                    node_kind,
                     us.best_move,
                     remaining_ply,
                     us.best_score,
                 );
-                tt.replace_by(tt_entry, |replacing, slotted| {
-                    replacing.node_kind >= slotted.node_kind
-                });
+
+                // Always replace PV nodes, and replace others conditionally.
+                if node_kind == NodeKind::Pv {
+                    tt.replace(entry, age);
+                } else {
+                    tt.replace_by(entry, age, replace_scheme);
+                }
 
                 parent.label = Label::Retrieve;
                 frame_idx = parent_idx(frame_idx);
@@ -513,17 +548,16 @@ pub fn iterative_negamax(
 
             // Cut-off has occurred, no further children of this position need to be searched.
             // This branch will not be taken further up the tree as there is a better move.
-            // Push this cut-node into the tt, with an absolute score, instead of relative.
             if us.best_score >= us.beta {
-                beta_cuts += 1;
-                let tt_entry = Entry::new(
+                metrics.cut_nodes += 1;
+                let entry = Entry::new(
                     us.hash,
                     NodeKind::Cut,
                     us.best_move,
                     remaining_ply,
                     us.best_score,
                 );
-                tt.replace(tt_entry);
+                tt.replace_by(entry, age, replace_scheme);
 
                 // Early return.
                 parent.label = Label::Retrieve;
@@ -534,7 +568,7 @@ pub fn iterative_negamax(
             // New local PV has been found. Update alpha and store new Line.
             // Update this node in tt as a PV node.
             if us.best_score > us.alpha {
-                alpha_incs += 1;
+                us.alpha_raised = true;
                 us.alpha = us.best_score;
 
                 // Give parent updated PV by appending child PV to our best move.
@@ -565,24 +599,19 @@ pub fn iterative_negamax(
         None
     } else {
         let best_move = stack[ROOT_IDX].best_move;
+        let score = stack[ROOT_IDX].best_score * root_position.player.sign();
+        let pv = stack[BASE_IDX].local_pv.clone();
         assert_ne!(best_move, Move::illegal());
+        assert_eq!(metrics.player, root_position.player);
+        assert_eq!(metrics.depth, ply);
 
-        Some(SearchResult {
-            player: root_position.player,
-            depth: ply,
-            best_move,
-            score: stack[ROOT_IDX].best_score * root_position.player.sign(),
-            pv: stack[BASE_IDX].local_pv.clone(),
-            nodes: nodes + q_nodes,
-            q_nodes,
-            elapsed: instant.elapsed(),
-            q_elapsed,
-            stopped,
-            alpha_increases: alpha_incs,
-            beta_cutoffs: beta_cuts,
-            tt_hits,
-            tt_cuts,
-        })
+        metrics.elapsed = instant.elapsed();
+        metrics.best_move = best_move;
+        metrics.score = score;
+        metrics.pv = pv;
+        metrics.stopped = stopped;
+
+        Some(metrics)
     }
 }
 
@@ -615,5 +644,12 @@ mod tests {
         let b_signed = cp * Color::Black.sign();
         assert_eq!(w_signed, Cp(40));
         assert_eq!(b_signed, Cp(-40));
+    }
+
+    #[test]
+    fn nodetype_ordering() {
+        // Negamax replacement scheme assumes PV nodes are greater than others.
+        assert!(NodeKind::Pv > NodeKind::All);
+        assert!(NodeKind::Pv > NodeKind::Cut);
     }
 }
