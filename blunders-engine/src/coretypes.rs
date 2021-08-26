@@ -605,6 +605,7 @@ impl File {
             _ => None,
         }
     }
+
     /// Get the character representation of File, in lowercase.
     pub const fn to_char(&self) -> char {
         match self {
@@ -752,11 +753,17 @@ pub struct SquareIterator {
 impl Square {
     /// Square enum variants cover all u8 values from 0-63 inclusive.
     /// WARNING: Uses `unsafe`.
-    /// TODO: Change to const safe code covering all cases using match in macro.
     pub fn from_u8(value: u8) -> Option<Self> {
         // If value is in valid range, transmute, otherwise return None.
-        (value <= Square::H8 as u8).then(|| unsafe { transmute::<u8, Square>(value) })
+        (value <= Square::H8 as u8).then(|| unsafe { Self::unchecked_from_u8(value) })
     }
+
+    /// Convert a u8 to a Square, assuming the given value is equal to a Square discriminant.
+    /// WARNING: VERY UNSAFE.
+    unsafe fn unchecked_from_u8(value: u8) -> Square {
+        transmute::<u8, Square>(value)
+    }
+
     pub fn from_idx<I: SquareIndexable>(indexable: I) -> Option<Square> {
         Self::from_u8(indexable.idx() as u8)
     }

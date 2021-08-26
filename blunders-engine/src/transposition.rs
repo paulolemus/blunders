@@ -455,15 +455,16 @@ mod tests {
     use super::*;
     use crate::coretypes::Square::*;
 
-    #[test]
-    fn size_of_requirements() {
-        // Want a single entry to fit into L1 cache line?
-        // Need to verify that this is how this works, not sure since Mutex is used.
-        use std::mem::size_of;
-        let size = size_of::<TtEntry>();
-        println!("size_of::<TtEntry>() = {}", size);
-        //assert!(size <= 64);
-    }
+    // TODO
+    //#[test]
+    //fn size_of_requirements() {
+    //    // Want a single entry to fit into L1 cache line?
+    //    // Need to verify that this is how this works, not sure since Mutex is used.
+    //    use std::mem::size_of;
+    //    let size = size_of::<TtEntry>();
+    //    println!("size_of::<TtEntry>() = {}", size);
+    //    assert!(size <= 64);
+    //}
 
     #[test]
     fn new_tt_no_panic() {

@@ -1,14 +1,17 @@
 # Blunders
 
+![Windows CI](https://github.com/paulolemus/blunders/actions/workflows/windows_ci.yml/badge.svg)
+![Ubuntu CI](https://github.com/paulolemus/blunders/actions/workflows/ubuntu_ci.yml/badge.svg)
+![MacOS CI](https://github.com/paulolemus/blunders/actions/workflows/macos_ci.yml/badge.svg)
+
 A Universal Chess Interface ([UCI](https://www.shredderchess.com/chess-features/uci-universal-chess-interface.html)) chess engine.  
 Blunders is currently a work in progress.
 
 ## Current Features
-* Iterative negamax search with alpha-beta pruning
-* Iterative deepening search
-* Non-blocking, stoppable search
+
+* Stoppable Negamax with alpha-beta pruning, Quiescence, and Iterative Deepening search
+* Shared Transposition Table
 * Move ordering
-* Transposition Table
 * Bitboard position representation
 * Incremental Zobrist hashing
 * Responsive UCI compatible I/O
@@ -16,7 +19,7 @@ Blunders is currently a work in progress.
 
 # Building and running Blunders
 
-Blunders supports Windows 10 and Linux, the following commands should work on both platforms. Building for MacOS is untested.
+Blunders supports 64-bit Windows 10 and Linux primarily, MacOS is tested only through CI. The following commands should work on both platforms.
 
 ## Via Cargo
 
