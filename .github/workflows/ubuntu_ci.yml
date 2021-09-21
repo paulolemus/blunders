@@ -27,7 +27,12 @@ jobs:
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         
-    - name: Build
+    - name: Build Debug
       run: cargo build --all --verbose
-    - name: Run tests
+    - name: Build Release
+      run: cargo build --release --all --verbose
+
+    - name: Run Debug Tests
       run: cargo test --all --verbose
+    - name: Run Release Tests
+      run: cargo test --release --all --verbose -- --include-ignored

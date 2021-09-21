@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::fmt::{self, Display, Write};
 use std::mem::replace;
 use std::mem::transmute; // unsafe
-use std::ops::{Add, AddAssign, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, Mul, Neg, RangeInclusive, Sub};
 use std::ops::{BitOr, Not};
 use std::str::FromStr;
 
@@ -44,7 +44,7 @@ pub type PlyKind = u8;
 pub type MoveCount = u16;
 
 // Type alias to make changing Cp inner type easy if needed.
-pub type CpKind = i32;
+pub type CpKind = i16;
 
 /// Centipawn, a common unit of measurement in chess, where 100 Centipawn == 1 Pawn.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
@@ -203,12 +203,69 @@ impl<I: SquareIndexable> SquareIndexable for &I {
 //////////////////////
 
 impl Cp {
-    pub const MIN: Cp = Self(CpKind::MIN + 1); // + 1 to avoid overflow error on negate.
-    pub const MAX: Cp = Self(CpKind::MAX);
+    /// Value of of legal range of Centipawn score.
+    pub const ILLEGAL: Cp = Cp(CpKind::MAX);
+    /// Min legal value in Cp range. MIN == -MAX.
+    /// +2 to avoid negate overflow and leave space for illegal value.
+    pub const MIN: Cp = Cp(CpKind::MIN + 2);
+    /// Max legal value in Cp range. MAX == -MIN.
+    pub const MAX: Cp = Cp(CpKind::MAX - 1);
+
+    /// Base checkmate score is 3/4 of max value, out of score range.
+    pub const CHECKMATE: Cp = Cp((Cp::MAX.0 / 4) * 3);
+    /// Minimum absolute value checkmate score.
+    pub const CHECKMATE_MIN: Cp = Cp(Cp::CHECKMATE.0 - MAX_DEPTH as CpKind);
+    /// Max absolute value checkmate score.
+    pub const CHECKMATE_MAX: Cp = Cp(Cp::MAX.0 - 1);
+    /// Base stalemate score.
+    pub const STALEMATE: Cp = Cp(0);
+
+    /// Normal score min value, disjoint from checkmate scores.
+    pub const SCORE_MIN: Cp = Cp(-Cp::CHECKMATE_MIN.0 + 1);
+    /// Normal score max value, disjoint from checkmate scores.
+    pub const SCORE_MAX: Cp = Cp(Cp::CHECKMATE_MIN.0 - 1);
 
     /// Returns the sign of Centipawn value, either 1, -1, or 0.
     pub const fn signum(&self) -> CpKind {
         self.0.signum()
+    }
+
+    /// Returns absolute value of Centipawn score.
+    pub const fn abs(&self) -> Cp {
+        Cp(self.0.abs())
+    }
+
+    /// Returns the range of absolute value scores which represent a checkmate.
+    /// This is necessary because the different from the base checkmate score
+    /// is used to determine the distance to the checkmate.
+    pub const fn checkmate_range() -> RangeInclusive<Cp> {
+        RangeInclusive::new(Cp::CHECKMATE_MIN, Cp::CHECKMATE_MAX)
+    }
+
+    /// Returns the range of all scores that can result from evaluating a position.
+    /// This range is disjoint with Checkmate scores.
+    pub const fn score_range() -> RangeInclusive<Cp> {
+        RangeInclusive::new(Cp::SCORE_MIN, Cp::SCORE_MAX)
+    }
+
+    /// Returns the legal range of all Centipawn scores, including checkmate and score ranges.
+    pub const fn legal_range() -> RangeInclusive<Cp> {
+        RangeInclusive::new(Cp::MIN, Cp::MAX)
+    }
+
+    /// Returns true if Centipawn score represents a checkmate.
+    pub fn is_mate(&self) -> bool {
+        Cp::checkmate_range().contains(&self.abs())
+    }
+
+    /// Returns true if this Centipawn score is an eval score, not mate.
+    pub fn is_score(&self) -> bool {
+        Cp::score_range().contains(&self)
+    }
+
+    /// Returns true if this Centipawn score is illegal.
+    pub fn is_legal(&self) -> bool {
+        Cp::legal_range().contains(self)
     }
 }
 
@@ -238,7 +295,7 @@ impl Mul for Cp {
 impl Mul<u32> for Cp {
     type Output = Cp;
     fn mul(self, rhs: u32) -> Self::Output {
-        Self(self.0 * rhs as i32)
+        Self(self.0 * rhs as CpKind)
     }
 }
 impl Neg for Cp {
@@ -1011,6 +1068,54 @@ mod tests {
     fn logical_not_color() {
         assert_eq!(!Color::White, Color::Black);
         assert_eq!(!Color::Black, Color::White);
+    }
+
+    #[test]
+    fn cp_disjoint_ranges() {
+        // Assert that Illegal is not in any legal range.
+        let illegal = Cp::ILLEGAL;
+        assert!(!illegal.is_legal());
+        assert!(!illegal.is_score());
+        assert!(!illegal.is_mate());
+        assert!(!Cp::legal_range().contains(&illegal));
+
+        /// Returns true if ranges have any overlap.
+        fn overlapping(left: &RangeInclusive<Cp>, right: &RangeInclusive<Cp>) -> bool {
+            (left.start() >= right.start() && left.start() <= right.end())
+                || (left.end() >= right.start() && left.end() <= right.end())
+        }
+
+        /// Returns true if left is a subset of right.
+        fn is_subset(subset: &RangeInclusive<Cp>, superset: &RangeInclusive<Cp>) -> bool {
+            subset.start() >= superset.start() && subset.end() <= superset.end()
+        }
+        let score_range = Cp::score_range();
+        let legal_range = Cp::legal_range();
+        let mate_range = Cp::checkmate_range();
+
+        // Check that score is disjoint from mate, and joint with legal.
+        assert!(!overlapping(&score_range, &mate_range));
+        assert!(is_subset(&score_range, &legal_range));
+        assert!(is_subset(&mate_range, &legal_range));
+
+        // Check that range bounds make sense.
+        assert!(Cp::MIN < Cp::MAX);
+        assert_eq!(Cp::MIN, -Cp::MAX);
+        assert_eq!(Cp::MAX, -Cp::MIN);
+        assert_eq!(Cp::MIN.signum(), -1);
+        assert_eq!(Cp::MAX.signum(), 1);
+
+        assert!(Cp::CHECKMATE_MIN < Cp::CHECKMATE_MAX);
+        assert!(Cp::CHECKMATE_MIN < Cp::CHECKMATE);
+        assert!(Cp::CHECKMATE < Cp::CHECKMATE_MAX);
+        assert_eq!(Cp::CHECKMATE_MIN.signum(), 1);
+
+        assert!(Cp::legal_range().contains(&Cp::STALEMATE));
+
+        // Check for enough space in the checkmate bounds for distance to root.
+        let mate_score = Cp::CHECKMATE;
+        assert!((mate_score + Cp(MAX_DEPTH as CpKind)).is_mate());
+        assert!((mate_score - Cp(MAX_DEPTH as CpKind)).is_mate());
     }
 
     #[test]

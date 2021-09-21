@@ -91,11 +91,10 @@ fn panic_hook() {
     }));
 }
 
-const NAME_VERSION: &'static str = concat!(env!("CARGO_PKG_NAME"), ' ', env!("CARGO_PKG_VERSION"));
-const AUTHOR: &'static str = env!("CARGO_PKG_AUTHORS");
-
 fn main() -> io::Result<()> {
-    println!("{} by {}", NAME_VERSION, AUTHOR);
+    let name_version = concat!(env!("CARGO_PKG_NAME"), ' ', env!("CARGO_PKG_VERSION"));
+    let author = env!("CARGO_PKG_AUTHORS");
+    println!("{} by {}", name_version, author);
 
     // Hook to print errors to STDOUT on panic.
     panic_hook();
@@ -142,7 +141,7 @@ fn main() -> io::Result<()> {
                 // GUI is telling engine to use UCI protocol.
                 // It requires a response of Id, available options, and an acknowledgement.
                 UciCommand::Uci => {
-                    UciResponse::new_id(NAME_VERSION, AUTHOR).send()?;
+                    UciResponse::new_id(name_version, author).send()?;
                     for uci_opt in uci_options.values() {
                         UciResponse::new_option(uci_opt.clone()).send()?;
                     }

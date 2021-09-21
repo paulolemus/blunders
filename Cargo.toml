@@ -1,13 +1,15 @@
 [package]
 authors = ["Paulo Lemus <plemus@hawaii.edu>"]
-default-run = "blunders"
 description = "UCI chess engine application"
-edition = "2018"
 keywords = ["chess", "engine", "checkmate", "game", "uci"]
-name = "blunders"
-publish = false
+repository = "https://github.com/paulolemus/blunders"
+homepage = "https://github.com/paulolemus/blunders"
+edition = "2018"
 readme = "README.md"
 license = "GPL-3.0-only"
+name = "blunders"
+default-run = "blunders"
+publish = false
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

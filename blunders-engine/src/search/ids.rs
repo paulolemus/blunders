@@ -94,7 +94,7 @@ pub fn ids(
         let mut relative_pv_score = search_result.relative_score();
 
         for &pv_move in search_result.pv.iter().take(move_ply as usize) {
-            let pv_entry = Entry::new(hash, NodeKind::Pv, pv_move, move_ply, relative_pv_score);
+            let pv_entry = Entry::new(hash, pv_move, relative_pv_score, move_ply, NodeKind::Pv);
             tt.replace(pv_entry, age);
 
             let cache = position.cache();

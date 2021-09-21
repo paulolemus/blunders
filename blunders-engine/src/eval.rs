@@ -22,21 +22,13 @@ impl PieceKind {
             Bishop => 310, // slightly prefer bishop over 3 default pawns
             Rook => 510,
             Queen => 950,
-            King => 400_000,
+            King => 10_000,
         })
     }
 }
 
 // Evaluation Constants
-const CHECKMATE: Cp = Cp(Cp::MAX.0 / 2 - 1);
-const STALEMATE: Cp = Cp(0);
 const MOBILITY_CP: Cp = Cp(1);
-
-impl Cp {
-    pub fn is_mate(&self) -> bool {
-        self.0.abs() == CHECKMATE.0
-    }
-}
 
 // Relative Evaluation Functions
 
@@ -45,16 +37,16 @@ impl Cp {
 pub fn terminal(position: &Position) -> Cp {
     // Checkmate position is strictly bad for player to move.
     if position.is_checkmate() {
-        -CHECKMATE
+        -Cp::CHECKMATE
     } else {
-        STALEMATE
+        Cp::STALEMATE
     }
 }
 
 /// Return a score representing a stalemate. Uses a contempt factor to indicate
 /// how bad a draw is for the engine.
 pub fn draw(is_engine: bool, contempt: Cp) -> Cp {
-    STALEMATE
+    Cp::STALEMATE
         + match is_engine {
             true => -contempt,
             false => contempt,
@@ -74,11 +66,11 @@ pub fn evaluate(position: &Position) -> Cp {
 pub fn terminal_abs(position: &Position) -> Cp {
     if position.is_checkmate() {
         match position.player {
-            White => -CHECKMATE,
-            Black => CHECKMATE,
+            White => -Cp::CHECKMATE,
+            Black => Cp::CHECKMATE,
         }
     } else {
-        STALEMATE
+        Cp::STALEMATE
     }
 }
 
@@ -135,7 +127,7 @@ pub fn king_safety(position: &Position) -> Cp {
     let w_value = b_king_open_squares * w_num_sliding / 2;
     let b_value = w_king_open_squares * b_num_sliding / 2;
 
-    let value_diff = Cp(w_value as i32 - b_value as i32);
+    let value_diff = Cp(w_value as CpKind - b_value as CpKind);
     cp += value_diff;
 
     cp
@@ -147,7 +139,7 @@ pub fn mobility(position: &Position) -> Cp {
     let b_attacks = position.attacks(Black, position.pieces().occupied());
 
     let attack_surface_area_diff =
-        w_attacks.count_squares() as i32 - b_attacks.count_squares() as i32;
+        w_attacks.count_squares() as CpKind - b_attacks.count_squares() as CpKind;
 
     Cp(attack_surface_area_diff) * MOBILITY_CP
 }
@@ -160,8 +152,8 @@ pub fn pass_pawns(position: &Position) -> Cp {
     const RANK_CP: [CpKind; NUM_RANKS] = [0, 0, 1, 2, 10, 50, 250, 900];
     let w_passed: Bitboard = pass_pawns_bb(position, White);
     let b_passed: Bitboard = pass_pawns_bb(position, Black);
-    let w_num_passed = w_passed.count_squares() as i32;
-    let b_num_passed = b_passed.count_squares() as i32;
+    let w_num_passed = w_passed.count_squares() as CpKind;
+    let b_num_passed = b_passed.count_squares() as CpKind;
 
     // Sum the bonus rank value of each pass pawn.
     let w_rank_bonus = w_passed
@@ -409,6 +401,7 @@ const fn w_pass_pawn_pattern_idx(square: usize) -> Bitboard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Fen;
 
     #[test]
     fn start_pos_equal_eval() {
@@ -433,5 +426,17 @@ mod tests {
         // Negated
         assert_eq!((-min).signum(), 1);
         assert_eq!((-max).signum(), -1);
+    }
+
+    #[test]
+    fn large_eval_in_score_range() {
+        // Evaluate a position with largest possible advantage for one player.
+        // Score should sit within legal and score ranges, and outside of checkmate range.
+        let pos = Position::parse_fen("4k3/8/8/8/8/8/QQQQ1QQQ/QQQQKQQQ w - - 0 1").unwrap();
+        let score = evaluate(&pos);
+        assert!(score.is_score());
+        assert!(score.is_legal());
+        assert!(!score.is_mate());
+        println!("MAX POSSIBLE SCORE: {}", score);
     }
 }

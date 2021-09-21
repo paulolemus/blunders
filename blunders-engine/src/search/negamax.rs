@@ -173,7 +173,7 @@ fn negamax_impl(
         // Push this cut-node into the tt, with a score relative to this node's active player.
         if move_score >= beta {
             let cut_move = legal_move_info.move_();
-            let entry = Entry::new(hash, NodeKind::Cut, cut_move, ply, move_score);
+            let entry = Entry::new(hash, cut_move, move_score, ply, NodeKind::Cut);
             tt.replace_by(entry, age, replace_scheme);
             return move_score;
         }
@@ -193,7 +193,7 @@ fn negamax_impl(
         true => NodeKind::Pv,
         false => NodeKind::All,
     };
-    let entry = Entry::new(hash, node_kind, best_move, ply, best_score);
+    let entry = Entry::new(hash, best_move, best_score, ply, node_kind);
 
     // Always replace with a PV node, otherwise replace conditionally.
     if node_kind == NodeKind::Pv {
@@ -511,10 +511,10 @@ pub fn iterative_negamax(
 
                 let entry = Entry::new(
                     us.hash,
-                    node_kind,
                     us.best_move,
-                    remaining_ply,
                     us.best_score,
+                    remaining_ply,
+                    node_kind,
                 );
 
                 // Always replace PV nodes, and replace others conditionally.
@@ -552,10 +552,10 @@ pub fn iterative_negamax(
                 metrics.cut_nodes += 1;
                 let entry = Entry::new(
                     us.hash,
-                    NodeKind::Cut,
                     us.best_move,
-                    remaining_ply,
                     us.best_score,
+                    remaining_ply,
+                    NodeKind::Cut,
                 );
                 tt.replace_by(entry, age, replace_scheme);
 
