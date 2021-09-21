@@ -48,6 +48,7 @@ pub type CpKind = i16;
 
 /// Centipawn, a common unit of measurement in chess, where 100 Centipawn == 1 Pawn.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+#[repr(transparent)]
 pub struct Cp(pub CpKind);
 
 /// Color can represent the color of a piece, or a player.
@@ -397,18 +398,6 @@ impl Iterator for ColorIterator {
 }
 
 impl PieceKind {
-    /// FEN compliant conversion, defaults as white pieces.
-    pub const fn to_char(&self) -> char {
-        match self {
-            PieceKind::Pawn => 'P',
-            PieceKind::Rook => 'R',
-            PieceKind::Knight => 'N',
-            PieceKind::Bishop => 'B',
-            PieceKind::Queen => 'Q',
-            PieceKind::King => 'K',
-        }
-    }
-
     /// Returns true if PieceKind can slide, false otherwise.
     /// Sliding piece_kinds are Rooks, Bishops, and Queens.
     pub const fn is_sliding(&self) -> bool {
@@ -421,6 +410,20 @@ impl PieceKind {
 
     pub const fn iter() -> PieceKindIterator {
         PieceKindIterator::new()
+    }
+}
+
+/// FEN compliant conversion, defaults as white pieces.
+impl From<PieceKind> for char {
+    fn from(piece_kind: PieceKind) -> Self {
+        match piece_kind {
+            PieceKind::Pawn => 'P',
+            PieceKind::Rook => 'R',
+            PieceKind::Knight => 'N',
+            PieceKind::Bishop => 'B',
+            PieceKind::Queen => 'Q',
+            PieceKind::King => 'K',
+        }
     }
 }
 
@@ -465,25 +468,14 @@ impl Piece {
     pub const fn new(color: Color, piece_kind: PieceKind) -> Self {
         Piece { color, piece_kind }
     }
-    /// Immutable Getters.
-    pub const fn color(&self) -> &Color {
-        &self.color
-    }
-    pub const fn piece_kind(&self) -> &PieceKind {
-        &self.piece_kind
-    }
-
-    pub const fn to_char(&self) -> char {
-        match self.color {
-            Color::White => self.piece_kind.to_char(),
-            Color::Black => self.piece_kind.to_char().to_ascii_lowercase(),
-        }
-    }
 }
 
 impl From<Piece> for char {
     fn from(piece: Piece) -> Self {
-        piece.to_char()
+        match piece.color {
+            Color::White => char::from(piece.piece_kind),
+            Color::Black => char::from(piece.piece_kind).to_ascii_lowercase(),
+        }
     }
 }
 
@@ -647,35 +639,6 @@ impl FromStr for Castling {
 }
 
 impl File {
-    /// File enum variants cover all u8 values from 0-7 inclusive.
-    pub const fn from_u8(value: u8) -> Option<Self> {
-        use File::*;
-        match value {
-            0 => Some(A),
-            1 => Some(B),
-            2 => Some(C),
-            3 => Some(D),
-            4 => Some(E),
-            5 => Some(F),
-            6 => Some(G),
-            7 => Some(H),
-            _ => None,
-        }
-    }
-
-    /// Get the character representation of File, in lowercase.
-    pub const fn to_char(&self) -> char {
-        match self {
-            Self::A => 'a',
-            Self::B => 'b',
-            Self::C => 'c',
-            Self::D => 'd',
-            Self::E => 'e',
-            Self::F => 'f',
-            Self::G => 'g',
-            Self::H => 'h',
-        }
-    }
     /// Get the File after the current file, or None if at the end.
     pub const fn after(self) -> Option<Self> {
         use File::*;
@@ -706,46 +669,37 @@ impl File {
     }
 }
 
-impl Rank {
-    /// Rank enum variants cover all u8 values from 0-7 inclusive.
-    pub const fn from_u8(value: u8) -> Option<Self> {
-        use Rank::*;
+/// Get the character representation of File in lowercase.
+impl From<File> for char {
+    fn from(file: File) -> Self {
+        match file {
+            File::A => 'a',
+            File::B => 'b',
+            File::C => 'c',
+            File::D => 'd',
+            File::E => 'e',
+            File::F => 'f',
+            File::G => 'g',
+            File::H => 'h',
+        }
+    }
+}
+
+/// File enum variants cover all u8 values from 0-7 inclusive.
+impl TryFrom<u8> for File {
+    type Error = ();
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        use File::*;
         match value {
-            0 => Some(R1),
-            1 => Some(R2),
-            2 => Some(R3),
-            3 => Some(R4),
-            4 => Some(R5),
-            5 => Some(R6),
-            6 => Some(R7),
-            7 => Some(R8),
-            _ => None,
-        }
-    }
-    pub const fn to_char(&self) -> char {
-        match self {
-            Self::R1 => '1',
-            Self::R2 => '2',
-            Self::R3 => '3',
-            Self::R4 => '4',
-            Self::R5 => '5',
-            Self::R6 => '6',
-            Self::R7 => '7',
-            Self::R8 => '8',
-        }
-    }
-    /// Flips the orientation of the board.
-    pub const fn flip(&self) -> Self {
-        use Rank::*;
-        match self {
-            R1 => R8,
-            R2 => R7,
-            R3 => R6,
-            R4 => R5,
-            R5 => R4,
-            R6 => R3,
-            R7 => R2,
-            R8 => R1,
+            0 => Ok(A),
+            1 => Ok(B),
+            2 => Ok(C),
+            3 => Ok(D),
+            4 => Ok(E),
+            5 => Ok(F),
+            6 => Ok(G),
+            7 => Ok(H),
+            _ => Err(()),
         }
     }
 }
@@ -767,6 +721,63 @@ impl TryFrom<char> for File {
     }
 }
 
+impl Display for File {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_char(char::from(*self))
+    }
+}
+
+impl Rank {
+    /// Flips the orientation of the board.
+    pub const fn flip(&self) -> Self {
+        use Rank::*;
+        match self {
+            R1 => R8,
+            R2 => R7,
+            R3 => R6,
+            R4 => R5,
+            R5 => R4,
+            R6 => R3,
+            R7 => R2,
+            R8 => R1,
+        }
+    }
+}
+
+impl From<Rank> for char {
+    fn from(rank: Rank) -> Self {
+        match rank {
+            Rank::R1 => '1',
+            Rank::R2 => '2',
+            Rank::R3 => '3',
+            Rank::R4 => '4',
+            Rank::R5 => '5',
+            Rank::R6 => '6',
+            Rank::R7 => '7',
+            Rank::R8 => '8',
+        }
+    }
+}
+
+/// Rank enum variants cover all u8 values from 0-7 inclusive.
+impl TryFrom<u8> for Rank {
+    type Error = ();
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        use Rank::*;
+        match value {
+            0 => Ok(R1),
+            1 => Ok(R2),
+            2 => Ok(R3),
+            3 => Ok(R4),
+            4 => Ok(R5),
+            5 => Ok(R6),
+            6 => Ok(R7),
+            7 => Ok(R8),
+            _ => Err(()),
+        }
+    }
+}
+
 impl TryFrom<char> for Rank {
     type Error = error::Error;
     fn try_from(ch: char) -> error::Result<Self> {
@@ -784,15 +795,9 @@ impl TryFrom<char> for Rank {
     }
 }
 
-impl Display for File {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_char(self.to_char())
-    }
-}
-
 impl Display for Rank {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_char(self.to_char())
+        f.write_char(char::from(*self))
     }
 }
 
@@ -808,21 +813,14 @@ pub struct SquareIterator {
 }
 
 impl Square {
-    /// Square enum variants cover all u8 values from 0-63 inclusive.
-    /// WARNING: Uses `unsafe`.
-    pub fn from_u8(value: u8) -> Option<Self> {
-        // If value is in valid range, transmute, otherwise return None.
-        (value <= Square::H8 as u8).then(|| unsafe { Self::unchecked_from_u8(value) })
-    }
-
     /// Convert a u8 to a Square, assuming the given value is equal to a Square discriminant.
-    /// WARNING: VERY UNSAFE.
-    unsafe fn unchecked_from_u8(value: u8) -> Square {
+    /// WARNING: VERY UNSAFE. Causes UB for any value not equal to a variant.
+    unsafe fn from_u8_unchecked(value: u8) -> Square {
         transmute::<u8, Square>(value)
     }
 
     pub fn from_idx<I: SquareIndexable>(indexable: I) -> Option<Square> {
-        Self::from_u8(indexable.idx() as u8)
+        Self::try_from(indexable.idx() as u8).ok()
     }
 
     pub const fn iter() -> SquareIterator {
@@ -830,11 +828,11 @@ impl Square {
     }
 
     pub fn file(&self) -> File {
-        File::from_u8(self.file_u8()).unwrap()
+        File::try_from(self.file_u8()).unwrap()
     }
 
     pub fn rank(&self) -> Rank {
-        Rank::from_u8(self.rank_u8()).unwrap()
+        Rank::try_from(self.rank_u8()).unwrap()
     }
 
     /// Returns 0-based file (0,1,2,3,4,5,6,7), not 1-based chess file.
@@ -849,13 +847,13 @@ impl Square {
 
     /// Returns the Square with the Rank increased by one, "A3 -> A4".
     pub fn increment_rank(&self) -> Option<Self> {
-        let maybe_rank = Rank::from_u8(self.rank_u8() + 1);
+        let maybe_rank = Rank::try_from(self.rank_u8() + 1).ok();
         maybe_rank.and_then(|rank| Self::from_idx((self.file(), rank)))
     }
 
     /// Returns the Square with the Rank decreased by one, "A3 -> A2".
     pub fn decrement_rank(&self) -> Option<Self> {
-        let maybe_rank = Rank::from_u8(self.rank_u8().wrapping_sub(1));
+        let maybe_rank = Rank::try_from(self.rank_u8().wrapping_sub(1)).ok();
         maybe_rank.and_then(|rank| Self::from_idx((self.file(), rank)))
     }
 
@@ -865,35 +863,16 @@ impl Square {
     }
 }
 
-impl SquareIterator {
-    const fn new() -> Self {
-        Self {
-            square_discriminant: Square::A1 as u8,
-        }
-    }
-    const fn from_square(square: Square) -> Self {
-        Self {
-            square_discriminant: square as u8,
-        }
-    }
-}
-
-impl Iterator for SquareIterator {
-    type Item = Square;
-    fn next(&mut self) -> Option<Self::Item> {
-        let maybe_item = Square::from_u8(self.square_discriminant);
-        if self.square_discriminant <= Square::H8 as u8 {
-            self.square_discriminant += 1;
-        }
-        return maybe_item;
-    }
-}
-
-impl IntoIterator for Square {
-    type Item = Square;
-    type IntoIter = SquareIterator;
-    fn into_iter(self) -> Self::IntoIter {
-        Self::IntoIter::from_square(self)
+/// Square enum variants cover all u8 values from 0-63 inclusive.
+/// WARNING: Uses `unsafe`.
+impl TryFrom<u8> for Square {
+    type Error = ();
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        // If value is in valid range, transmute, otherwise return None.
+        // This is safe unless discriminants of Square are changed.
+        (value <= Square::H8 as u8)
+            .then(|| unsafe { Self::from_u8_unchecked(value) })
+            .ok_or(())
     }
 }
 
@@ -926,6 +905,38 @@ impl SquareIndexable for Square {
     }
 }
 
+impl IntoIterator for Square {
+    type Item = Square;
+    type IntoIter = SquareIterator;
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter::from_square(self)
+    }
+}
+
+impl SquareIterator {
+    const fn new() -> Self {
+        Self {
+            square_discriminant: Square::A1 as u8,
+        }
+    }
+    const fn from_square(square: Square) -> Self {
+        Self {
+            square_discriminant: square as u8,
+        }
+    }
+}
+
+impl Iterator for SquareIterator {
+    type Item = Square;
+    fn next(&mut self) -> Option<Self::Item> {
+        let maybe_item = Square::try_from(self.square_discriminant).ok();
+        if self.square_discriminant <= Square::H8 as u8 {
+            self.square_discriminant += 1;
+        }
+        return maybe_item;
+    }
+}
+
 impl Move {
     pub const fn new(from: Square, to: Square, promotion: Option<PieceKind>) -> Self {
         Self {
@@ -954,6 +965,47 @@ impl PartialEq<MoveInfo> for Move {
 impl From<MoveInfo> for Move {
     fn from(move_info: MoveInfo) -> Self {
         Self::new(move_info.from, move_info.to, move_info.promotion)
+    }
+}
+
+/// Parses `Pure Algebraic Coordinate Notation`.
+impl FromStr for Move {
+    type Err = error::Error;
+    fn from_str(s: &str) -> error::Result<Self> {
+        let from_str: String = s.chars().take(2).collect();
+        let from: Square = from_str.parse()?;
+
+        let to_str: String = s.chars().skip(2).take(2).collect();
+        let to: Square = to_str.parse()?;
+
+        let maybe_promotion = s.chars().nth(4);
+        let promotion = match maybe_promotion {
+            Some('q') => Some(PieceKind::Queen),
+            Some('r') => Some(PieceKind::Rook),
+            Some('b') => Some(PieceKind::Bishop),
+            Some('n') => Some(PieceKind::Knight),
+            _ => None,
+        };
+
+        Ok(Self {
+            from,
+            to,
+            promotion,
+        })
+    }
+}
+
+/// # Example
+/// Move { from: A7, to: B8, promotion: Some(Queen) } -> `a7b8q`.
+impl Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut s = String::with_capacity(5);
+        s.push_str(&self.from.to_string());
+        s.push_str(&self.to.to_string());
+        if let Some(piece_kind) = self.promotion {
+            s.push(char::from(piece_kind).to_ascii_lowercase());
+        }
+        write!(f, "{}", s)
     }
 }
 
@@ -1014,47 +1066,6 @@ impl MoveInfo {
         } else {
             None
         }
-    }
-}
-
-/// Parses `Pure Algebraic Coordinate Notation`.
-impl FromStr for Move {
-    type Err = error::Error;
-    fn from_str(s: &str) -> error::Result<Self> {
-        let from_str: String = s.chars().take(2).collect();
-        let from: Square = from_str.parse()?;
-
-        let to_str: String = s.chars().skip(2).take(2).collect();
-        let to: Square = to_str.parse()?;
-
-        let maybe_promotion = s.chars().nth(4);
-        let promotion = match maybe_promotion {
-            Some('q') => Some(PieceKind::Queen),
-            Some('r') => Some(PieceKind::Rook),
-            Some('b') => Some(PieceKind::Bishop),
-            Some('n') => Some(PieceKind::Knight),
-            _ => None,
-        };
-
-        Ok(Self {
-            from,
-            to,
-            promotion,
-        })
-    }
-}
-
-/// # Example
-/// Move { from: A7, to: B8, promotion: Some(Queen) } -> `a7b8q`.
-impl Display for Move {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut s = String::with_capacity(5);
-        s.push_str(&self.from.to_string());
-        s.push_str(&self.to.to_string());
-        if let Some(piece_kind) = self.promotion {
-            s.push(piece_kind.to_char().to_ascii_lowercase());
-        }
-        write!(f, "{}", s)
     }
 }
 

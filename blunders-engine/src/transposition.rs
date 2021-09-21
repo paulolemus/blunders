@@ -7,7 +7,7 @@ use std::mem;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
-use crate::coretypes::{Cp, Move, MoveInfo, PlyKind};
+use crate::coretypes::{Cp, Move, MoveInfo, PieceKind::*, PlyKind, Square};
 use crate::position::{Cache, Position};
 use crate::zobrist::{HashKind, ZobristTable};
 
@@ -321,27 +321,39 @@ impl TwoBucket for LockBucket {
 /// node_kind: u8, 1/8
 /// optional_age: u8, 1/8
 ///
+/// # Move Serialization
+/// from: u8, 1/8
+/// to: u8, 1/8
+/// promotion: match u8, 1/8
+///
 /// # Current Data Format Packed U64
 /// Hex F = 0b1111
 /// u64 hex: FFFFFFFFFFFFFFFF
 ///
-/// age <- node_kind <- ply <- score <- key_move
+/// age <- node_kind <- ply <- score <- key_move =
+/// age <- node_kind <- ply <- score <- promotion, to, from
 #[rustfmt::skip]
 #[allow(dead_code)] // For assertion bytes.
 mod adf {
-    pub const MOVE_MASK: u64      = 0x0000000000FFFFFF;
+    pub const FROM_MASK: u64      = 0x00000000000000FF;
+    pub const TO_MASK: u64        = 0x000000000000FF00;
+    pub const PROMOTION_MASK: u64 = 0x0000000000FF0000;
     pub const SCORE_MASK: u64     = 0x000000FFFF000000;
     pub const PLY_MASK: u64       = 0x0000FF0000000000;
     pub const NODE_KIND_MASK: u64 = 0x00FF000000000000;
     pub const AGE_MASK: u64       = 0xFF00000000000000;
 
-    pub const MOVE_SHIFT: u8      = 0;
+    pub const FROM_SHIFT: u8      = 0;
+    pub const TO_SHIFT: u8        = 8;
+    pub const PROMOTION_SHIFT: u8 = 16;
     pub const SCORE_SHIFT: u8     = 24;
     pub const PLY_SHIFT: u8       = 40;
     pub const NODE_KIND_SHIFT: u8 = 48;
     pub const AGE_SHIFT: u8       = 56;
 
-    pub const MOVE_BYTES: usize           = 3;
+    pub const FROM_BYTES: usize           = 1;
+    pub const TO_BYTES: usize             = 1;
+    pub const PROMOTION_BYTES: usize      = 1;
     pub const SCORE_BYTES: usize          = 2;
     pub const PLY_BYTES: usize            = 1;
     pub const NODE_KIND_BYTES: usize      = 1;
@@ -407,34 +419,49 @@ impl LoadedAtomicEntry {
 
     /// Returns the unpacked Entry of this LoadedAtomicEntry.
     fn entry(&self) -> Entry {
-        unsafe { self.unpack().0 }
+        self.unpack().0
     }
 
     #[inline]
-    fn pack_move(move_: Move, shift: u8) -> u64 {
-        const MOVE_SIZE: usize = mem::size_of::<Move>();
-        debug_assert_eq!(MOVE_SIZE, adf::MOVE_BYTES, "move sizes mismatched");
-
-        let move_array: [u8; MOVE_SIZE] = unsafe {
-            // Completely safe, just taking the raw bits of move_.
-            mem::transmute(move_)
+    fn pack_move(move_: Move) -> u64 {
+        let from_u8 = move_.from as u8;
+        let to_u8 = move_.to as u8;
+        let promotion_u8 = match move_.promotion {
+            None => 0,
+            Some(King) => 1,
+            Some(Pawn) => 2,
+            Some(Knight) => 3,
+            Some(Rook) => 4,
+            Some(Queen) => 5,
+            Some(Bishop) => 6,
         };
 
-        let mut packed: u64 = 0;
-        for (idx, byte) in IntoIterator::into_iter(move_array).enumerate() {
-            packed |= Self::pack_u8(byte, (8 * idx) as u8);
-        }
-
-        packed << shift
+        let from_pack = Self::pack_u8(from_u8, adf::FROM_SHIFT);
+        let to_pack = Self::pack_u8(to_u8, adf::TO_SHIFT);
+        let promotion_pack = Self::pack_u8(promotion_u8, adf::PROMOTION_SHIFT);
+        from_pack | to_pack | promotion_pack
     }
 
-    /// The parameters must be correctly formed otherwise garbage/malformed
-    /// data will be transmuted into a Move causing undefined behavior.
-    unsafe fn unpack_move(packed_data: u64, shift: u8, mask: u64) -> Move {
-        const MOVE_SIZE: usize = mem::size_of::<Move>();
-        let raw_move: [u8; 8] = ((packed_data & mask) >> shift).to_ne_bytes();
-        let move_array: [u8; MOVE_SIZE] = [raw_move[0], raw_move[1], raw_move[2]];
-        mem::transmute(move_array)
+    /// Promotion unpacking must mirror the packing in Self::pack_move(..).
+    fn unpack_move(packed: u64) -> Move {
+        let from_u8 = Self::unpack_u8(packed, adf::FROM_SHIFT, adf::FROM_MASK);
+        let to_u8 = Self::unpack_u8(packed, adf::TO_SHIFT, adf::TO_MASK);
+        let promo_u8 = Self::unpack_u8(packed, adf::PROMOTION_SHIFT, adf::PROMOTION_MASK);
+
+        let from = Square::try_from(from_u8).unwrap();
+        let to = Square::try_from(to_u8).unwrap();
+        let promotion = match promo_u8 {
+            0 => None,
+            1 => Some(King),
+            2 => Some(Pawn),
+            3 => Some(Knight),
+            4 => Some(Rook),
+            5 => Some(Queen),
+            6 => Some(Bishop),
+            _ => None,
+        };
+
+        Move::new(from, to, promotion)
     }
 
     #[inline]
@@ -463,7 +490,7 @@ impl LoadedAtomicEntry {
         let hash = entry.hash;
         let mut data: u64 = 0;
 
-        data |= Self::pack_move(entry.key_move, adf::MOVE_SHIFT);
+        data |= Self::pack_move(entry.key_move);
         data |= Self::pack_i16(entry.score.0, adf::SCORE_SHIFT, adf::SCORE_MASK);
         data |= Self::pack_u8(entry.ply, adf::PLY_SHIFT);
         data |= Self::pack_u8(entry.node_kind as u8, adf::NODE_KIND_SHIFT);
@@ -473,12 +500,12 @@ impl LoadedAtomicEntry {
     }
 
     /// Unpack requires that AtomicEntry packed data was packed from a valid Entry.
-    unsafe fn unpack(&self) -> (Entry, AgeKind) {
+    fn unpack(&self) -> (Entry, AgeKind) {
         let data = self.data;
         let hash_xor_data = self.hash_xor_data;
         let hash: u64 = data ^ hash_xor_data;
 
-        let key_move = Self::unpack_move(data, adf::MOVE_SHIFT, adf::MOVE_MASK);
+        let key_move = Self::unpack_move(data);
         let score = Cp(Self::unpack_i16(data, adf::SCORE_SHIFT, adf::SCORE_MASK));
         let ply: PlyKind = Self::unpack_u8(data, adf::PLY_SHIFT, adf::PLY_MASK);
         let node_kind = NodeKind::try_from(Self::unpack_u8(
@@ -587,8 +614,7 @@ impl TwoBucket for AtomicBucket {
         F: FnOnce(&Entry, u8, &Entry, u8) -> bool,
     {
         let priority = self.priority.load(Ordering::Acquire);
-        // TODO: Verify safety.
-        let (existing_entry, existing_age) = unsafe { priority.unpack() };
+        let (existing_entry, existing_age) = priority.unpack();
 
         match should_replace(&entry, age, &existing_entry, existing_age) {
             true => self.replace(entry, age),
@@ -615,8 +641,7 @@ impl TwoBucket for AtomicBucket {
         F: FnOnce(&Entry, u8, &Entry, u8) -> bool,
     {
         let priority = self.priority.load(Ordering::Acquire);
-        // TODO: Verify safety.
-        let (existing_entry, existing_age) = unsafe { priority.unpack() };
+        let (existing_entry, existing_age) = priority.unpack();
 
         if should_replace(&entry, age, &existing_entry, existing_age) {
             self.replace(entry, age);
@@ -961,7 +986,7 @@ impl<Bucket: TwoBucket> TranspositionTable<Bucket> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coretypes::{PieceKind::*, Square::*};
+    use crate::coretypes::{PieceKind, Square::*};
     use std::mem::size_of;
 
     #[test]
@@ -969,7 +994,9 @@ mod tests {
         //! AtomicEntry requires an exact data layout for struct that it packs.
         //! This test ensures that if there is a change in the data layout externally,
         //! it does not result in unexpected behavior as the test fails.
-        assert_eq!(adf::MOVE_BYTES, size_of::<Move>());
+        assert_eq!(adf::FROM_BYTES, size_of::<Square>());
+        assert_eq!(adf::TO_BYTES, size_of::<Square>());
+        assert_eq!(adf::PROMOTION_BYTES, size_of::<Option<PieceKind>>());
         assert_eq!(adf::SCORE_BYTES, size_of::<Cp>());
         assert_eq!(adf::PLY_BYTES, size_of::<PlyKind>());
         assert_eq!(adf::NODE_KIND_BYTES, size_of::<NodeKind>());
@@ -978,17 +1005,12 @@ mod tests {
 
     #[test]
     fn loaded_atomic_entry() {
-        const ENTRY_SIZE: usize = size_of::<Entry>();
         {
             // Illegal entry test.
             let entry = Entry::illegal();
             let loaded = LoadedAtomicEntry::from(entry);
             assert_eq!(entry.hash, loaded.hash());
             assert_eq!(entry, loaded.entry());
-
-            let raw_entry: [u8; ENTRY_SIZE] = unsafe { mem::transmute(entry) };
-            let raw_loaded: [u8; ENTRY_SIZE] = unsafe { mem::transmute(loaded.entry()) };
-            assert_eq!(raw_entry, raw_loaded);
         }
         {
             // Random entry test.
@@ -996,13 +1018,9 @@ mod tests {
             let age: AgeKind = 7;
 
             let loaded = LoadedAtomicEntry::from((entry, age));
-            let (loaded_entry, loaded_age) = unsafe { loaded.unpack() };
+            let (loaded_entry, loaded_age) = loaded.unpack();
             assert_eq!(entry, loaded_entry);
             assert_eq!(age, loaded_age);
-
-            let raw_entry: [u8; ENTRY_SIZE] = unsafe { mem::transmute(entry) };
-            let raw_loaded: [u8; ENTRY_SIZE] = unsafe { mem::transmute(loaded_entry) };
-            assert_eq!(raw_entry, raw_loaded);
         }
         {
             // Random entry test with negative.
@@ -1016,13 +1034,9 @@ mod tests {
             let age: AgeKind = 7;
 
             let loaded = LoadedAtomicEntry::from((entry, age));
-            let (loaded_entry, loaded_age) = unsafe { loaded.unpack() };
+            let (loaded_entry, loaded_age) = loaded.unpack();
             assert_eq!(entry, loaded_entry);
             assert_eq!(age, loaded_age);
-
-            let raw_entry: [u8; ENTRY_SIZE] = unsafe { mem::transmute(entry) };
-            let raw_loaded: [u8; ENTRY_SIZE] = unsafe { mem::transmute(loaded_entry) };
-            assert_eq!(raw_entry, raw_loaded);
         }
     }
 

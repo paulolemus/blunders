@@ -37,6 +37,7 @@
 //! Pass Pawns
 //!
 
+use std::convert::TryFrom;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, Not};
 
 use crate::coretypes::{File, Rank, Square, Square::*, SquareIndexable};
@@ -163,7 +164,7 @@ impl Bitboard {
     /// Returns the lowest square that exists in bitboard, or None if bitboard has no squares.
     #[inline(always)]
     pub fn get_lowest_square(&self) -> Option<Square> {
-        Square::from_u8(self.0.trailing_zeros() as u8)
+        Square::try_from(self.0.trailing_zeros() as u8).ok()
     }
 
     /// Remove all squares in other from self.
@@ -258,8 +259,8 @@ impl Bitboard {
         for _ in 0..num_ones {
             let square_value = bits.0.trailing_zeros() as u8;
             bits.clear_lowest_square();
-            let square = Square::from_u8(square_value);
-            debug_assert!(square_value < 64u8 && square.is_some());
+            let square = Square::try_from(square_value);
+            debug_assert!(square_value < 64u8 && square.is_ok());
             vec.push(square.unwrap());
         }
         vec
