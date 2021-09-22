@@ -9,7 +9,7 @@ readme = "README.md"
 license = "GPL-3.0-only"
 name = "blunders"
 default-run = "blunders"
-publish = false
+publish = true
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -18,4 +18,4 @@ version = "0.1.0"
 members = ["blunders-engine"]
 
 [dependencies]
-blunders-engine = { path = "blunders-engine" }
+blunders-engine = { path = "blunders-engine", version = "0.1.0" }

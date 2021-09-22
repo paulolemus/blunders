@@ -1,4 +1,4 @@
-//! Main CLI interface to Blunders engine.
+//! Blunders Chess Engine UCI compatible CLI application.
 
 use std::convert::TryFrom;
 use std::io;
@@ -13,7 +13,8 @@ use blunders_engine::arrayvec::display;
 use blunders_engine::uci::{self, UciCommand, UciOption, UciOptions, UciResponse};
 use blunders_engine::{EngineBuilder, Fen, Game, Mode, SearchResult};
 
-/// Message type passed over channels.
+/// App uses message passing over channels for communication between the
+/// main, input, and search threads.
 #[derive(Debug, Clone)]
 enum Message {
     Command(UciCommand),
@@ -32,9 +33,8 @@ impl From<SearchResult> for Message {
     }
 }
 
-/// Input Handler thread function.
-/// Input is parsed in a separate thread from main so Blunders may process
-/// both input and search results at the same time.
+/// Input is parsed in a separate thread from main so Blunders CLI can receive and
+/// process both input and search results in an asynchronous fashion.
 fn input_handler(sender: mpsc::Sender<Message>) {
     loop {
         // Wait to receive a line of input.
@@ -65,8 +65,8 @@ fn input_handler(sender: mpsc::Sender<Message>) {
     }
 }
 
-/// Function that adds to panic hook by printing error data to stdout,
-/// so they are visible in GUI.
+/// Additional panic hook which sends all panic error messages over UCI
+/// so they are visible from GUIs.
 fn panic_hook() {
     // Print panic errors to STDOUT so they are visible in GUI.
     let orig_hook = panic::take_hook();

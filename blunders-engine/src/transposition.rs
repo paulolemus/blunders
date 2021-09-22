@@ -16,9 +16,12 @@ use crate::zobrist::{HashKind, ZobristTable};
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 #[repr(u8)]
 pub enum NodeKind {
-    All, // An All node has had all of its children searched.
-    Cut, // A Cut node, or a node that was pruned because it caused a beta-cutoff.
-    Pv,  // A principal variation node from a previous search.
+    /// An All node has had all of its children searched.
+    All,
+    /// A Cut node, or a node that was pruned because it caused a beta-cutoff.
+    Cut,
+    /// A principal variation node from a previous search.
+    Pv,
 }
 
 impl TryFrom<u8> for NodeKind {

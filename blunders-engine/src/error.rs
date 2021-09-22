@@ -10,8 +10,8 @@ use crate::fen::ParseFenError;
 pub type Result<T> = result::Result<T, Error>;
 
 /// A list specifying general errors for Blunders engine.
-#[non_exhaustive]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[non_exhaustive]
 pub enum ErrorKind {
     /// An argument was expected following a string key, but none was provided.
     UciNoArgument,
@@ -108,6 +108,7 @@ impl Display for ErrorKind {
     }
 }
 
+/// The primary and general error type for the Blunders Engine.
 #[derive(Debug)]
 pub enum Error {
     Simple(ErrorKind),

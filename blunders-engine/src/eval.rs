@@ -363,7 +363,7 @@ const fn generate_pass_pawn_pattern() -> [Bitboard; PASS_PAWN_SIZE] {
 
 const fn w_pass_pawn_pattern_idx(square: usize) -> Bitboard {
     use Bitboard as Bb;
-    let square_bb: bitboard::Kind = 1u64 << square;
+    let square_bb: bitboard::BitboardKind = 1u64 << square;
 
     if square_bb & Bitboard::FILE_A.0 > 0 {
         // On File A
