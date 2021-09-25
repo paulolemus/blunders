@@ -4,8 +4,10 @@
 ![Ubuntu CI](https://github.com/paulolemus/blunders/actions/workflows/ubuntu_ci.yml/badge.svg)
 ![MacOS CI](https://github.com/paulolemus/blunders/actions/workflows/macos_ci.yml/badge.svg)
 
-A Universal Chess Interface ([UCI](https://www.shredderchess.com/chess-features/uci-universal-chess-interface.html)) chess engine.  
-Blunders is currently a work in progress.
+A Universal Chess Interface ([UCI](https://www.shredderchess.com/chess-features/uci-universal-chess-interface.html)) 64-bit chess engine.
+Blunders is currently a work in progress, prior to 1.0 expect possible breaking changes and missing features.
+
+If you like this project, also go check out the awesome chess engine written from scratch in Go, [Blunder](https://github.com/algerbrex/blunder)!
 
 ## Current Features
 
@@ -43,8 +45,8 @@ Eventually Blunders will get a non-standard set of commands to make it easy to u
 
 * `Hash x`: an integer size in megabytes `x` to set the size of the engine's hash table
 * `Clear Hash`: a button command telling the engine to clear its hash table, effectively forgetting its search history
-* `Ponder bool`: tells engine whether pondering is allowed or not. Allowing this means the engine may be allowed to search during an opponent's turn
-* `Threads x`: an integer `x` telling engine the maximum number of threads it may use to search. This is best set to the number of threads your computer cpu supports
+* `Ponder bool`: tells engine whether pondering is allowed or not. Allowing this means the engine may be allowed to search during an opponent's turn. Not yet supported.
+* `Threads x`: an integer `x` telling engine the maximum number of threads it may use to search. This is best set to the number of threads your computer cpu supports. Not yet supported.
 * `Debug bool`: tell engine to print debugging or extra information strings
 
 
