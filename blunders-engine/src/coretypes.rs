@@ -1,6 +1,5 @@
 //! The fundamental and simple types of `blunders_engine`.
 
-use std::convert::TryFrom;
 use std::fmt::{self, Display, Write};
 use std::mem::replace;
 use std::mem::transmute; // unsafe

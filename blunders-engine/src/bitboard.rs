@@ -31,7 +31,6 @@
 //! * Sliding Attack Pattern per square
 //! * Pass Pawns
 
-use std::convert::TryFrom;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, Not};
 
 use crate::coretypes::{File, Rank, Square, Square::*, SquareIndexable};

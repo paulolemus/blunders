@@ -1,6 +1,5 @@
 //! Blunders Chess Engine UCI compatible CLI application.
 
-use std::convert::TryFrom;
 use std::io;
 use std::panic;
 use std::process;

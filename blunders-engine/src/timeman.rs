@@ -1,6 +1,5 @@
 //! Time Management
 
-use std::convert::TryFrom;
 use std::time::Instant;
 
 use crate::coretypes::{Color, PlyKind};

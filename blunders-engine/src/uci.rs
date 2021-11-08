@@ -1,8 +1,6 @@
 //! Universal Chess Interface
 
 use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::convert::TryInto;
 use std::fmt::{self, Display, Write};
 use std::hash::{Hash, Hasher};
 use std::io;

@@ -6,7 +6,6 @@
 //! Example:\
 //! Starting Chess FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-use std::convert::TryFrom;
 use std::error;
 use std::fmt::{self, Display};
 use std::ops::RangeInclusive;

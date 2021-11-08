@@ -1,6 +1,5 @@
 //! Shared Transposition Table.
 
-use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::mem;
