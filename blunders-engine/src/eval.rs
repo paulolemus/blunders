@@ -437,6 +437,6 @@ mod tests {
         assert!(score.is_score());
         assert!(score.is_legal());
         assert!(!score.is_mate());
-        println!("MAX POSSIBLE SCORE: {}", score);
+        println!("MAX POSSIBLE SCORE: {score}");
     }
 }

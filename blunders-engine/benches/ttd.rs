@@ -21,7 +21,7 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
         });
     });
     if result.best_move != Move::illegal() {
-        println!("{}", result);
+        println!("{result}");
     }
 
     c.bench_function("search start position ttd 3", |b| {
@@ -31,7 +31,7 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
         });
     });
     if result.best_move != Move::illegal() {
-        println!("{}", result);
+        println!("{result}");
     }
 
     c.bench_function("search start position ttd 4", |b| {
@@ -41,7 +41,7 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
         });
     });
     if result.best_move != Move::illegal() {
-        println!("{}", result);
+        println!("{result}");
     }
 
     c.bench_function("search start position ttd 5", |b| {
@@ -51,7 +51,7 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
         });
     });
     if result.best_move != Move::illegal() {
-        println!("{}", result);
+        println!("{result}");
     }
 
     c.bench_function("search start position ttd 6", |b| {
@@ -61,7 +61,7 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
         });
     });
     if result.best_move != Move::illegal() {
-        println!("{}", result);
+        println!("{result}");
     }
 }
 
@@ -82,7 +82,7 @@ pub fn start_pos_search_time_to_depth_long(c: &mut Criterion) {
         });
     });
     if result.best_move != Move::illegal() {
-        println!("{}", result);
+        println!("{result}");
     }
 
     c.bench_function("search start position ttd 8", |b| {
@@ -92,7 +92,7 @@ pub fn start_pos_search_time_to_depth_long(c: &mut Criterion) {
         });
     });
     if result.best_move != Move::illegal() {
-        println!("{}", result);
+        println!("{result}");
     }
 }
 

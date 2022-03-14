@@ -166,6 +166,6 @@ mod tests {
         let mb = Mailbox::start_position();
 
         println!("{}", mb.pretty().len());
-        println!("{}", mb);
+        println!("{mb}");
     }
 }

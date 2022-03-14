@@ -1049,7 +1049,7 @@ mod tests {
     //    // Need to verify that this is how this works, not sure since Mutex is used.
     //    use std::mem::size_of;
     //    let size = size_of::<TtEntry>();
-    //    println!("size_of::<TtEntry>() = {}", size);
+    //    println!("size_of::<TtEntry>() = {size}");
     //    assert!(size <= 64);
     //}
 

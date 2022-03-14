@@ -858,7 +858,7 @@ mod tests {
     #[test]
     fn pretty_print_position() {
         let start_pos = Position::start_position();
-        println!("{}", start_pos);
+        println!("{start_pos}");
     }
 
     #[test]

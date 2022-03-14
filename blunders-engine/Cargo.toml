@@ -5,6 +5,7 @@ keywords = ["chess", "engine", "blunder", "checkmate", "game"]
 repository = "https://github.com/paulolemus/blunders"
 homepage = "https://github.com/paulolemus/blunders"
 edition = "2021"
+rust-version = "1.59"
 readme = "README.md"
 license = "GPL-3.0-only"
 name = "blunders-engine"
@@ -15,12 +16,11 @@ version = "0.1.0"
 
 [dependencies]
 # Pseudorandom numbers for Zobrist Hashing. TODO: optionally remove to precompute.
-rand = "0.8.4" 
-arrayvec = "0.7.1"
+rand = "0.8.5"
+arrayvec = "0.7.2"
 
 [dev-dependencies]
 criterion = "0.3.5"
-num_cpus = "1.13"
 
 [[bench]]
 name = "perft"

@@ -57,7 +57,7 @@ fn input_handler(sender: mpsc::Sender<Message>) {
             Err(err) => {
                 let err_str = format!("{} could not be parsed, {}", buffer.escape_debug(), err);
                 if let Err(err) = uci::error(&err_str) {
-                    panic!("{}", err);
+                    panic!("{err}");
                 }
             }
         }
@@ -76,11 +76,8 @@ fn panic_hook() {
         }
         // Print Error location information.
         if let Some(location) = panic_info.location() {
-            let err_str = format!(
-                "panic in file '{}' at line {}",
-                location.file(),
-                location.line()
-            );
+            let (file, line) = (location.file(), location.line());
+            let err_str = format!("panic in file '{file}' at line {line}");
             uci::error(&err_str).unwrap();
         }
 
@@ -91,9 +88,9 @@ fn panic_hook() {
 }
 
 fn main() -> io::Result<()> {
-    let name_version = concat!(env!("CARGO_PKG_NAME"), ' ', env!("CARGO_PKG_VERSION"));
-    let author = env!("CARGO_PKG_AUTHORS");
-    println!("{} by {}", name_version, author);
+    const NAME_VERSION: &str = concat!(env!("CARGO_PKG_NAME"), ' ', env!("CARGO_PKG_VERSION"));
+    const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
+    println!("{NAME_VERSION} by {AUTHOR}");
 
     // Hook to print errors to STDOUT on panic.
     panic_hook();
@@ -140,7 +137,7 @@ fn main() -> io::Result<()> {
                 // GUI is telling engine to use UCI protocol.
                 // It requires a response of Id, available options, and an acknowledgement.
                 UciCommand::Uci => {
-                    UciResponse::new_id(name_version, author).send()?;
+                    UciResponse::new_id(NAME_VERSION, AUTHOR).send()?;
                     for uci_opt in uci_options.values() {
                         UciResponse::new_option(uci_opt.clone()).send()?;
                     }
@@ -178,7 +175,7 @@ fn main() -> io::Result<()> {
                 UciCommand::Debug(new_debug_value) => {
                     uci::debug(
                         debug | new_debug_value,
-                        &format!("set debug {}", new_debug_value),
+                        &format!("set debug {new_debug_value}"),
                     )?;
 
                     // Update both engine options and global debug flag.
@@ -197,7 +194,7 @@ fn main() -> io::Result<()> {
 
                             match engine.try_set_transpositions_mb(mb) {
                                 Ok(capacity) => {
-                                    let s = format!("tt mb: {}, capacity: {}", mb, capacity);
+                                    let s = format!("tt mb: {mb}, capacity: {capacity}");
                                     uci::debug(debug, &s)?;
                                 }
                                 Err(err) => uci::error(&err.to_string())?,

@@ -5,6 +5,7 @@ keywords = ["chess", "engine", "checkmate", "game", "uci"]
 repository = "https://github.com/paulolemus/blunders"
 homepage = "https://github.com/paulolemus/blunders"
 edition = "2021"
+rust-version = "1.59"
 readme = "README.md"
 license = "GPL-3.0-only"
 name = "blunders"

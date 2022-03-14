@@ -1004,7 +1004,7 @@ impl Display for Move {
         if let Some(piece_kind) = self.promotion {
             s.push(char::from(piece_kind).to_ascii_lowercase());
         }
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 

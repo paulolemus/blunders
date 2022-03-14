@@ -316,7 +316,7 @@ impl Display for UciResponse {
                 f.write_char('\n')
             }
             Self::Opt(uci_opt) => {
-                write!(f, "{}\n", uci_opt)
+                write!(f, "{uci_opt}\n")
             }
             Self::Info(_info) => {
                 // TODO
@@ -424,25 +424,25 @@ impl Display for UciOptionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             UciOptionType::Check(Check { default, .. }) => {
-                write!(f, "type check default {}", default)
+                write!(f, "type check default {default}")
             }
             UciOptionType::Spin(Spin {
                 default, min, max, ..
             }) => {
-                write!(f, "type spin default {} min {} max {}", default, min, max)
+                write!(f, "type spin default {default} min {min} max {max}")
             }
             UciOptionType::Combo(Combo {
                 default, choices, ..
             }) => {
-                write!(f, "type combo default {}", default)?;
+                write!(f, "type combo default {default}")?;
                 for choice in choices {
-                    write!(f, " var {}", choice)?;
+                    write!(f, " var {choice}")?;
                 }
                 Ok(())
             }
             UciOptionType::Button(_) => f.write_str("type button"),
             UciOptionType::String(UciOptionString { default, .. }) => {
-                write!(f, "type string default {}", default)
+                write!(f, "type string default {default}")
             }
         }
     }
@@ -949,7 +949,7 @@ mod tests {
             let game = Game::new(pos_base, moves).unwrap();
 
             let command = UciCommand::parse_command(command_str).unwrap();
-            println!("pos: {}", pos_post);
+            println!("pos: {pos_post}");
 
             if let UciCommand::Pos(ref inner_game) = command {
                 println!("com: {:?}", inner_game);

@@ -129,13 +129,13 @@ impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::Simple(error_kind) => {
-                write!(f, "{}", error_kind)
+                write!(f, "{error_kind}")
             }
             Error::Message(error_kind, string) => {
-                write!(f, "{}: {}", error_kind, string)
+                write!(f, "{error_kind}: {string}")
             }
             Error::Custom(error_kind, ref box_error) => {
-                write!(f, "{}, error: {}", error_kind, *box_error)
+                write!(f, "{error_kind}, error: {}", *box_error)
             }
         }
     }

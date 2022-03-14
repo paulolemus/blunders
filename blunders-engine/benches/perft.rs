@@ -1,5 +1,6 @@
+use std::thread::available_parallelism;
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use num_cpus;
 
 use blunders_engine::perft::*;
 use blunders_engine::*;
@@ -7,7 +8,9 @@ use blunders_engine::*;
 pub fn criterion_perft_small_benchmark(c: &mut Criterion) {
     // Setup
     let starting_position = Position::start_position();
-    let num_threads = num_cpus::get();
+    let num_threads = available_parallelism()
+        .map(|inner| inner.get())
+        .unwrap_or(1);
 
     // Benchmarks
 
@@ -18,7 +21,7 @@ pub fn criterion_perft_small_benchmark(c: &mut Criterion) {
         })
     });
     c.bench_function(
-        &format!("start_position: perft(1) threads: {}", num_threads),
+        &format!("start_position: perft(1) threads: {num_threads}"),
         |b| {
             b.iter(|| {
                 let info = perft(
@@ -38,7 +41,7 @@ pub fn criterion_perft_small_benchmark(c: &mut Criterion) {
         })
     });
     c.bench_function(
-        &format!("start_position: perft(2) threads: {}", num_threads),
+        &format!("start_position: perft(2) threads: {num_threads}"),
         |b| {
             b.iter(|| {
                 let info = perft(
@@ -58,7 +61,7 @@ pub fn criterion_perft_small_benchmark(c: &mut Criterion) {
         })
     });
     c.bench_function(
-        &format!("start_position: perft(3) threads: {}", num_threads),
+        &format!("start_position: perft(3) threads: {num_threads}"),
         |b| {
             b.iter(|| {
                 let info = perft(
@@ -78,7 +81,7 @@ pub fn criterion_perft_small_benchmark(c: &mut Criterion) {
         })
     });
     c.bench_function(
-        &format!("start_position: perft(4) threads: {}", num_threads),
+        &format!("start_position: perft(4) threads: {num_threads}"),
         |b| {
             b.iter(|| {
                 let info = perft(
@@ -92,7 +95,7 @@ pub fn criterion_perft_small_benchmark(c: &mut Criterion) {
     );
 
     c.bench_function(
-        &format!("start_position: perft(5) threads: {}", num_threads),
+        &format!("start_position: perft(5) threads: {num_threads}"),
         |b| {
             b.iter(|| {
                 let info = perft(
@@ -110,10 +113,12 @@ pub fn criterion_perft_small_benchmark(c: &mut Criterion) {
 pub fn criterion_perft_large_benchmark(c: &mut Criterion) {
     // Setup
     let starting_position = Position::start_position();
-    let num_threads = num_cpus::get();
+    let num_threads = available_parallelism()
+        .map(|inner| inner.get())
+        .unwrap_or(1);
 
     c.bench_function(
-        &format!("start_position: perft(6) threads: {}", num_threads),
+        &format!("start_position: perft(6) threads: {num_threads}"),
         |b| {
             b.iter(|| {
                 let info = perft(

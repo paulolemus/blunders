@@ -173,7 +173,7 @@ impl Display for SearchResult {
         displayed.push_str(&format!("    tt_ratio : {:.2}\n", self.tt_cut_ratio()));
         displayed.push_str("}\n");
 
-        write!(f, "{}", displayed)
+        write!(f, "{displayed}")
     }
 }
 

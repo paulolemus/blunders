@@ -3,7 +3,7 @@
 //! Tests to ensure engine passes Perft test by checking against pre-determined results.
 //! [Perft Results](https://www.chessprogramming.org/Perft_Results)
 
-use num_cpus;
+use std::thread::available_parallelism;
 
 use blunders_engine::fen::Fen;
 use blunders_engine::perft::*;
@@ -12,7 +12,9 @@ use blunders_engine::*;
 const ONE_THREAD: usize = 1;
 
 fn cpu_threads() -> usize {
-    num_cpus::get()
+    available_parallelism()
+        .map(|inner| inner.get())
+        .unwrap_or(1)
 }
 
 #[test]

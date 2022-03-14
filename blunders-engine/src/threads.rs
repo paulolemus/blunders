@@ -60,7 +60,7 @@ impl Thread {
             }
         };
 
-        let name = format!("Thread {}", id);
+        let name = format!("Thread {id}");
         let handle = thread::Builder::new()
             .name(name.clone())
             .spawn(runner)
