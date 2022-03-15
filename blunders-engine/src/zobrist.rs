@@ -157,8 +157,8 @@ impl ZobristTable {
     /// `move_info`: The MoveInfo that was applied to some position.
     /// `cache`: The original cache of the Position, before a move.
     pub fn update_hash(&self, hash: &mut HashKind, key: Key, move_info: MoveInfo, cache: Cache) {
-        let moved_player = !key.1;
         let passive_player = *key.1;
+        let moved_player = !passive_player;
 
         // Always toggle player hash because player always alternates.
         *hash ^= self.player_hash;

@@ -77,12 +77,16 @@ impl PieceSets {
     /// Note: Compiler can auto-vectorize, however looking at assembly on godbolt
     /// may be limited to avx128. Does not seem to use avx512 on supported cpus.
     pub fn occupied(&self) -> Bitboard {
-        self.pieces.iter().fold(Bitboard::EMPTY, |acc, bb| acc | bb)
+        self.pieces
+            .into_iter()
+            .fold(Bitboard::EMPTY, |acc, bb| acc | bb)
     }
 
     /// Return a bitboard representing the set of squares occupied by piece of color.
     pub fn color_occupied(&self, color: Color) -> Bitboard {
-        self[color].iter().fold(Bitboard::EMPTY, |acc, bb| acc | bb)
+        self[color]
+            .into_iter()
+            .fold(Bitboard::EMPTY, |acc, bb| acc | *bb)
     }
 
     /// Finds and returns the first piece found on target square, or None.
@@ -167,19 +171,6 @@ impl IndexMut<Piece> for PieceSets {
     }
 }
 
-impl Index<&Piece> for PieceSets {
-    type Output = Bitboard;
-    fn index(&self, piece: &Piece) -> &Self::Output {
-        &self.pieces[piece.offset()]
-    }
-}
-
-impl IndexMut<&Piece> for PieceSets {
-    fn index_mut(&mut self, piece: &Piece) -> &mut Self::Output {
-        &mut self.pieces[piece.offset()]
-    }
-}
-
 impl Index<(Color, PieceKind)> for PieceSets {
     type Output = Bitboard;
     fn index(&self, (color, piece_kind): (Color, PieceKind)) -> &Self::Output {
@@ -189,19 +180,6 @@ impl Index<(Color, PieceKind)> for PieceSets {
 
 impl IndexMut<(Color, PieceKind)> for PieceSets {
     fn index_mut(&mut self, (color, piece_kind): (Color, PieceKind)) -> &mut Self::Output {
-        &mut self.pieces[color.offset_block() + piece_kind.offset_pk()]
-    }
-}
-
-impl Index<&(Color, PieceKind)> for PieceSets {
-    type Output = Bitboard;
-    fn index(&self, (color, piece_kind): &(Color, PieceKind)) -> &Self::Output {
-        &self.pieces[color.offset_block() + piece_kind.offset_pk()]
-    }
-}
-
-impl IndexMut<&(Color, PieceKind)> for PieceSets {
-    fn index_mut(&mut self, (color, piece_kind): &(Color, PieceKind)) -> &mut Self::Output {
         &mut self.pieces[color.offset_block() + piece_kind.offset_pk()]
     }
 }
@@ -254,7 +232,7 @@ impl From<&Mailbox> for PieceSets {
         let mut pieces = Self::new();
 
         for square in Square::iter() {
-            if let Some(ref piece) = mb[square] {
+            if let Some(piece) = mb[square] {
                 pieces[piece].set_square(square);
             }
         }
@@ -293,7 +271,7 @@ mod tests {
         let white_pieces = &pieces[White];
         let w_occupancy = white_pieces
             .iter()
-            .fold(Bitboard::EMPTY, |acc, piece| acc | piece);
+            .fold(Bitboard::EMPTY, |acc, piece| acc | *piece);
         assert_eq!(w_occupancy.count_squares(), 16);
         for square in [A1, B1, C1, D1, E1, F1, G1, H1] {
             assert!(w_occupancy.has_square(&square));
@@ -305,7 +283,7 @@ mod tests {
         let black_pieces = &pieces[Black];
         let b_occupancy = black_pieces
             .iter()
-            .fold(Bitboard::EMPTY, |acc, piece| acc | piece);
+            .fold(Bitboard::EMPTY, |acc, piece| acc | *piece);
         assert_eq!(b_occupancy.count_squares(), 16);
         for square in [A7, B7, C7, D7, E7, F7, G7, H7] {
             assert!(b_occupancy.has_square(&square));

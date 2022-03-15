@@ -343,13 +343,6 @@ impl Not for Color {
     }
 }
 
-impl Not for &Color {
-    type Output = Color;
-    fn not(self) -> Self::Output {
-        Color::not(*self)
-    }
-}
-
 impl From<Color> for char {
     fn from(color: Color) -> Self {
         color.to_char()
@@ -639,32 +632,12 @@ impl FromStr for Castling {
 
 impl File {
     /// Get the File after the current file, or None if at the end.
-    pub const fn after(self) -> Option<Self> {
-        use File::*;
-        match self {
-            A => Some(B),
-            B => Some(C),
-            C => Some(D),
-            D => Some(E),
-            E => Some(F),
-            F => Some(G),
-            G => Some(H),
-            H => None,
-        }
+    pub fn after(self) -> Option<Self> {
+        Self::try_from(self as u8 + 1).ok()
     }
     /// Get the File before the current file, or None if at the start.
-    pub const fn before(self) -> Option<Self> {
-        use File::*;
-        match self {
-            H => Some(G),
-            G => Some(F),
-            F => Some(E),
-            E => Some(D),
-            D => Some(C),
-            C => Some(B),
-            B => Some(A),
-            A => None,
-        }
+    pub fn before(self) -> Option<Self> {
+        Self::try_from((self as u8).wrapping_sub(1)).ok()
     }
 }
 
@@ -814,7 +787,7 @@ pub struct SquareIterator {
 impl Square {
     /// Convert a u8 to a Square, assuming the given value is equal to a Square discriminant.
     /// WARNING: VERY UNSAFE. Causes UB for any value not equal to a variant.
-    unsafe fn from_u8_unchecked(value: u8) -> Square {
+    const unsafe fn from_u8_unchecked(value: u8) -> Square {
         transmute::<u8, Square>(value)
     }
 
@@ -836,12 +809,12 @@ impl Square {
 
     /// Returns 0-based file (0,1,2,3,4,5,6,7), not 1-based chess file.
     pub const fn file_u8(&self) -> u8 {
-        *self as u8 % NUM_RANKS as u8
+        *self as u8 & 7u8 // aka % 8
     }
 
     /// Returns 0-based rank (0,1,2,3,4,5,6,7), not 1-based chess rank.
     pub const fn rank_u8(&self) -> u8 {
-        *self as u8 / NUM_FILES as u8
+        *self as u8 >> 3 // aka / 8
     }
 
     /// Returns the Square with the Rank increased by one, "A3 -> A4".
@@ -1264,29 +1237,16 @@ mod tests {
     fn square_to_from_file_rank() {
         use File::*;
         use Rank::*;
-        let a1 = Square::from((A, R1));
-        assert_eq!(a1.file(), A);
-        assert_eq!(a1.rank(), R1);
-        assert_eq!(a1.file_u8(), A as u8);
-        assert_eq!(a1.rank_u8(), R1 as u8);
 
-        let a7 = Square::from((A, R7));
-        assert_eq!(a7.file(), A);
-        assert_eq!(a7.rank(), R7);
-        assert_eq!(a7.file_u8(), A as u8);
-        assert_eq!(a7.rank_u8(), R7 as u8);
-
-        let h8 = Square::from((H, R8));
-        assert_eq!(h8.file(), H);
-        assert_eq!(h8.rank(), R8);
-        assert_eq!(h8.file_u8(), H as u8);
-        assert_eq!(h8.rank_u8(), R8 as u8);
-
-        let e4 = Square::from((E, R4));
-        assert_eq!(e4.file(), E);
-        assert_eq!(e4.rank(), R4);
-        assert_eq!(e4.file_u8(), E as u8);
-        assert_eq!(e4.rank_u8(), R4 as u8);
+        for file in [A, B, C, D, E, F, G, H] {
+            for rank in [R1, R2, R3, R4, R5, R6, R7, R8] {
+                let square = Square::from((file, rank));
+                assert_eq!(square.file(), file);
+                assert_eq!(square.rank(), rank);
+                assert_eq!(square.file_u8(), file as u8);
+                assert_eq!(square.rank_u8(), rank as u8);
+            }
+        }
     }
 
     #[test]

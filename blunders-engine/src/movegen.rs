@@ -494,7 +494,7 @@ pub fn bishop_attackers_to(target: Square, bishops: Bitboard, occupied: Bitboard
 fn ray_attack_no(origin: Square, occupancy: Bitboard) -> Bitboard {
     let mut ray = Bitboard::from(origin).to_north();
     for _ in 0..6 {
-        if occupancy.has_any(&ray) {
+        if occupancy.has_any(ray) {
             return ray;
         }
         ray |= ray.to_north();
@@ -505,7 +505,7 @@ fn ray_attack_no(origin: Square, occupancy: Bitboard) -> Bitboard {
 fn ray_attack_ea(origin: Square, occupancy: Bitboard) -> Bitboard {
     let mut ray = Bitboard::from(origin).to_east();
     for _ in 0..6 {
-        if occupancy.has_any(&ray) {
+        if occupancy.has_any(ray) {
             return ray;
         }
         ray |= ray.to_east();
@@ -516,7 +516,7 @@ fn ray_attack_ea(origin: Square, occupancy: Bitboard) -> Bitboard {
 fn ray_attack_so(origin: Square, occupancy: Bitboard) -> Bitboard {
     let mut ray = Bitboard::from(origin).to_south();
     for _ in 0..6 {
-        if occupancy.has_any(&ray) {
+        if occupancy.has_any(ray) {
             return ray;
         }
         ray |= ray.to_south();
@@ -527,7 +527,7 @@ fn ray_attack_so(origin: Square, occupancy: Bitboard) -> Bitboard {
 fn ray_attack_we(origin: Square, occupancy: Bitboard) -> Bitboard {
     let mut ray = Bitboard::from(origin).to_west();
     for _ in 0..6 {
-        if occupancy.has_any(&ray) {
+        if occupancy.has_any(ray) {
             return ray;
         }
         ray |= ray.to_west();
@@ -538,7 +538,7 @@ fn ray_attack_we(origin: Square, occupancy: Bitboard) -> Bitboard {
 fn ray_attack_noea(origin: Square, occupancy: Bitboard) -> Bitboard {
     let mut ray = Bitboard::from(origin).to_north_east();
     for _ in 0..6 {
-        if occupancy.has_any(&ray) {
+        if occupancy.has_any(ray) {
             return ray;
         }
         ray |= ray.to_north_east();
@@ -549,7 +549,7 @@ fn ray_attack_noea(origin: Square, occupancy: Bitboard) -> Bitboard {
 fn ray_attack_soea(origin: Square, occupancy: Bitboard) -> Bitboard {
     let mut ray = Bitboard::from(origin).to_south_east();
     for _ in 0..6 {
-        if occupancy.has_any(&ray) {
+        if occupancy.has_any(ray) {
             return ray;
         }
         ray |= ray.to_south_east();
@@ -560,7 +560,7 @@ fn ray_attack_soea(origin: Square, occupancy: Bitboard) -> Bitboard {
 fn ray_attack_sowe(origin: Square, occupancy: Bitboard) -> Bitboard {
     let mut ray = Bitboard::from(origin).to_south_west();
     for _ in 0..6 {
-        if occupancy.has_any(&ray) {
+        if occupancy.has_any(ray) {
             return ray;
         }
         ray |= ray.to_south_west();
@@ -571,7 +571,7 @@ fn ray_attack_sowe(origin: Square, occupancy: Bitboard) -> Bitboard {
 fn ray_attack_nowe(origin: Square, occupancy: Bitboard) -> Bitboard {
     let mut ray = Bitboard::from(origin).to_north_west();
     for _ in 0..6 {
-        if occupancy.has_any(&ray) {
+        if occupancy.has_any(ray) {
             return ray;
         }
         ray |= ray.to_north_west();

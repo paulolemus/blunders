@@ -79,9 +79,6 @@ impl Bitboard {
     pub const FILE_F: Bitboard = bb_from_shifts!(F1, F2, F3, F4, F5, F6, F7, F8);
     pub const FILE_G: Bitboard = bb_from_shifts!(G1, G2, G3, G4, G5, G6, G7, G8);
     pub const FILE_H: Bitboard = bb_from_shifts!(H1, H2, H3, H4, H5, H6, H7, H8);
-
-    pub const NOT_FILE_A: Bitboard = Self(!Self::FILE_A.0);
-    pub const NOT_FILE_H: Bitboard = Self(!Self::FILE_H.0);
     // Squares between king and kingside rook. Useful for checking castling.
     pub const KINGSIDE_BETWEEN: Bitboard = bb_from_shifts!(F1, G1, F8, G8);
     pub const QUEENSIDE_BETWEEN: Bitboard = bb_from_shifts!(B1, C1, D1, B8, C8, D8);
@@ -91,12 +88,6 @@ impl Bitboard {
 }
 
 impl Bitboard {
-    /// Get copy of internal u64 representation of this Bitboard.
-    #[inline(always)]
-    pub const fn bits(&self) -> u64 {
-        self.0
-    }
-
     /// Returns true if there are no squares in self, false otherwise.
     #[inline(always)]
     pub const fn is_empty(&self) -> bool {
@@ -166,21 +157,21 @@ impl Bitboard {
 
     /// Remove all squares in other from self.
     #[inline(always)]
-    pub fn remove(&mut self, other: &Bitboard) {
+    pub fn remove(&mut self, other: Bitboard) {
         *self &= !other
     }
 
     /// Returns true if other is a subset of self.
     /// If all squares of other are in self, then other is a subset of self.
     #[inline(always)]
-    pub const fn contains(&self, other: &Bitboard) -> bool {
+    pub const fn contains(&self, other: Bitboard) -> bool {
         self.0 & other.0 == other.0
     }
 
     /// Returns true if self has any squares that are in other.
     /// In other words, if there is any overlap, return true.
     #[inline(always)]
-    pub const fn has_any(&self, other: &Bitboard) -> bool {
+    pub const fn has_any(&self, other: Bitboard) -> bool {
         self.0 & other.0 != Self::EMPTY.0
     }
 
@@ -198,38 +189,38 @@ impl Bitboard {
     /// To prevent wrapping of bit to other rank, bits are removed on FILE_A.
     #[inline(always)]
     pub const fn to_east(&self) -> Self {
-        Self((self.0 << 1) & Self::NOT_FILE_A.0)
+        Self((self.0 << 1) & !Self::FILE_A.0)
     }
     /// Returns new Bitboard with all squares shifted 1 square west (ex: D4 -> C4).
     /// To prevent wrapping of bit to other rank, bits are removed on FILE_H.
     #[inline(always)]
     pub const fn to_west(&self) -> Self {
-        Self((self.0 >> 1) & Self::NOT_FILE_H.0)
+        Self((self.0 >> 1) & !Self::FILE_H.0)
     }
 
     /// Returns new Bitboard with all squares shifted 1 square north east (ex: D4 -> E5).
     /// To prevent wrapping of bit to other rank, bits are removed on FILE_A.
     #[inline(always)]
     pub const fn to_north_east(&self) -> Self {
-        Self((self.0 << 9) & Self::NOT_FILE_A.0)
+        Self((self.0 << 9) & !Self::FILE_A.0)
     }
     /// Returns new Bitboard with all squares shifted 1 square north west (ex: D4 -> C5).
     /// To prevent wrapping of bit to other rank, bits are removed on FILE_H.
     #[inline(always)]
     pub const fn to_north_west(&self) -> Self {
-        Self((self.0 << 7) & Self::NOT_FILE_H.0)
+        Self((self.0 << 7) & !Self::FILE_H.0)
     }
     /// Returns new Bitboard with all squares shifted 1 square south east (ex: D4 -> E3).
     /// To prevent wrapping of bit to other rank, bits are removed on FILE_A.
     #[inline(always)]
     pub const fn to_south_east(&self) -> Self {
-        Self((self.0 >> 7) & Self::NOT_FILE_A.0)
+        Self((self.0 >> 7) & !Self::FILE_A.0)
     }
     /// Returns new Bitboard with all squares shifted 1 square south west (ex: D4 -> C3).
     /// To prevent wrapping of bit to other rank, bits are removed on FILE_H.
     #[inline(always)]
     pub const fn to_south_west(&self) -> Self {
-        Self((self.0 >> 9) & Self::NOT_FILE_H.0)
+        Self((self.0 >> 9) & !Self::FILE_H.0)
     }
 
     /// Returns a vector of all the Squares represented in the Bitboard.
@@ -271,31 +262,10 @@ impl Not for Bitboard {
     }
 }
 
-impl Not for &Bitboard {
-    type Output = Bitboard;
-    fn not(self) -> Self::Output {
-        Bitboard(!self.0)
-    }
-}
-
 impl BitOr for Bitboard {
     type Output = Self;
     fn bitor(self, rhs: Self) -> Self::Output {
         Self(self.0 | rhs.0)
-    }
-}
-
-impl BitOr<&Bitboard> for Bitboard {
-    type Output = Self;
-    fn bitor(self, rhs: &Bitboard) -> Self::Output {
-        Self(self.0 | rhs.0)
-    }
-}
-
-impl BitOr<Bitboard> for &Bitboard {
-    type Output = Bitboard;
-    fn bitor(self, rhs: Bitboard) -> Self::Output {
-        Bitboard(self.0 | rhs.0)
     }
 }
 
@@ -305,23 +275,10 @@ impl BitOrAssign for Bitboard {
     }
 }
 
-impl BitOrAssign<&Bitboard> for Bitboard {
-    fn bitor_assign(&mut self, rhs: &Bitboard) {
-        self.0 |= rhs.0
-    }
-}
-
 impl BitAnd for Bitboard {
     type Output = Self;
     fn bitand(self, rhs: Self) -> Self::Output {
         Self(self.0 & rhs.0)
-    }
-}
-
-impl BitAnd<Bitboard> for &Bitboard {
-    type Output = Bitboard;
-    fn bitand(self, rhs: Bitboard) -> Self::Output {
-        Bitboard(self.0 & rhs.0)
     }
 }
 

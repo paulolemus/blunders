@@ -344,7 +344,7 @@ impl Position {
             MoveKind::EnPassant => {
                 let to = Bitboard::from(move_info.to);
                 let captured_pawn = mg::pawn_single_pushes(to, !player);
-                self.pieces[(!player, Pawn)].remove(&captured_pawn);
+                self.pieces[(!player, Pawn)].remove(captured_pawn);
             }
             // Move Rook to castling square and clear castling rights.
             MoveKind::Castle => {
@@ -616,8 +616,8 @@ impl Position {
         // Filter illegal moves from pseudo-legal king moves.
         // King cannot move into attacked square, or into piece of same color.
         let mut possible_moves = mg::king_attacks(king);
-        possible_moves.remove(&attacked);
-        possible_moves.remove(&self.pieces.color_occupied(self.player));
+        possible_moves.remove(attacked);
+        possible_moves.remove(self.pieces.color_occupied(self.player));
 
         // Convert remaining move squares into Move structs.
         let mut legal_moves = MoveList::new(); // Eight max possible moves.
@@ -647,8 +647,8 @@ impl Position {
         let occupied_without_king = occupied & !king;
         let attacked_xray_king = self.attacks(passive_player, occupied_without_king);
         let mut possible_moves = mg::king_attacks(king);
-        possible_moves.remove(&attacked_xray_king);
-        possible_moves.remove(&us);
+        possible_moves.remove(attacked_xray_king);
+        possible_moves.remove(us);
         for to in possible_moves {
             legal_moves.push(Move::new(king_square, to, None));
         }
@@ -748,8 +748,8 @@ impl Position {
 
         // Generate all normal legal king moves.
         let mut king_tos = mg::king_attacks(king);
-        king_tos.remove(&us);
-        king_tos.remove(&attacked);
+        king_tos.remove(us);
+        king_tos.remove(attacked);
         for to in king_tos {
             legal_moves.push(Move::new(king_square, to, None));
         }
@@ -811,8 +811,8 @@ impl Position {
 
     //     // Extract only legal captures by removing attacked squares and non-enemy squares.
     //     let mut possible_captures = mg::king_attacks(king_bb);
-    //     possible_captures.remove(&attacked);
-    //     possible_captures.remove(&!self.pieces.color_occupied(enemy));
+    //     possible_captures.remove(attacked);
+    //     possible_captures.remove(!self.pieces.color_occupied(enemy));
 
     //     let mut legal_captures = MoveInfoList::new();
 
@@ -867,8 +867,8 @@ mod tests {
         let move1_piece = Piece::new(White, Pawn);
         let mut position = Position::start_position();
         position.do_move(move1);
-        assert!(position.pieces[&move1_piece].has_square(E4));
-        assert!(!position.pieces[&move1_piece].has_square(E2));
+        assert!(position.pieces[move1_piece].has_square(E4));
+        assert!(!position.pieces[move1_piece].has_square(E2));
     }
 
     #[test]
