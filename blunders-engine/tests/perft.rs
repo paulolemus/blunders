@@ -17,33 +17,23 @@ fn cpu_threads() -> usize {
         .unwrap_or(1)
 }
 
+/// Run single and multithreaded perft `expected_nodes.len()` times.
+/// The index of each expected_node value is its ply.
+#[inline(always)]
+fn perft_tester(position: Position, expected_nodes: Vec<u64>) {
+    for (ply, expected_node) in expected_nodes.into_iter().enumerate() {
+        let single_thread_result = perft(position, ply as u8, ONE_THREAD);
+        let multi_thread_result = perft(position, ply as u8, cpu_threads());
+
+        println!("perft({ply}): {single_thread_result:?}");
+        assert_eq!(single_thread_result.nodes, expected_node);
+        assert_eq!(single_thread_result, multi_thread_result);
+    }
+}
+
 #[test]
 fn perft_starting_position() {
-    let position = Position::start_position();
-    let ply0 = perft(position, 0, ONE_THREAD);
-    let ply1 = perft(position, 1, ONE_THREAD);
-    let ply2 = perft(position, 2, ONE_THREAD);
-    let ply3 = perft(position, 3, ONE_THREAD);
-    let ply4 = perft(position, 4, ONE_THREAD);
-
-    println!("perft(0): {:?}", ply0);
-    println!("perft(1): {:?}", ply1);
-    println!("perft(2): {:?}", ply2);
-    println!("perft(3): {:?}", ply3);
-    println!("perft(4): {:?}", ply4);
-
-    assert_eq!(ply0.nodes, 1);
-    assert_eq!(ply1.nodes, 20);
-    assert_eq!(ply2.nodes, 400);
-    assert_eq!(ply3.nodes, 8_902);
-    assert_eq!(ply4.nodes, 197_281);
-
-    let threaded_ply2 = perft(position, 2, cpu_threads());
-    let threaded_ply3 = perft(position, 3, cpu_threads());
-    let threaded_ply4 = perft(position, 4, cpu_threads());
-    assert_eq!(threaded_ply2, ply2);
-    assert_eq!(threaded_ply3, ply3);
-    assert_eq!(threaded_ply4, ply4);
+    perft_tester(Position::start_position(), vec![1, 20, 400, 8_902, 197_281]);
 }
 
 #[test]
@@ -69,27 +59,7 @@ fn kiwipete_position() -> Position {
 #[test]
 fn perft_kiwipete_position() {
     // https://www.chessprogramming.org/Perft_Results#Position_2
-    let position = kiwipete_position();
-    let ply0 = perft(position, 0, ONE_THREAD);
-    let ply1 = perft(position, 1, ONE_THREAD);
-    let ply2 = perft(position, 2, ONE_THREAD);
-    let ply3 = perft(position, 3, ONE_THREAD);
-
-    println!("perft(0): {:?}", ply0);
-    println!("perft(1): {:?}", ply1);
-    println!("perft(2): {:?}", ply2);
-    println!("perft(3): {:?}", ply3);
-
-    // Perft results used found in link above.
-    assert_eq!(ply0.nodes, 1);
-    assert_eq!(ply1.nodes, 48);
-    assert_eq!(ply2.nodes, 2_039);
-    assert_eq!(ply3.nodes, 97_862);
-
-    let threaded_ply2 = perft(position, 2, cpu_threads());
-    let threaded_ply3 = perft(position, 3, cpu_threads());
-    assert_eq!(threaded_ply2, ply2);
-    assert_eq!(threaded_ply3, ply3);
+    perft_tester(kiwipete_position(), vec![1, 48, 2_039, 97_862]);
 }
 
 #[test]
@@ -110,32 +80,7 @@ fn position_3() -> Position {
 #[test]
 fn perft_test_position_3() {
     // https://www.chessprogramming.org/Perft_Results#Position_3
-    let position = position_3();
-    let ply0 = perft(position, 0, ONE_THREAD);
-    let ply1 = perft(position, 1, ONE_THREAD);
-    let ply2 = perft(position, 2, ONE_THREAD);
-    let ply3 = perft(position, 3, ONE_THREAD);
-    let ply4 = perft(position, 4, ONE_THREAD);
-
-    println!("perft(0): {:?}", ply0);
-    println!("perft(1): {:?}", ply1);
-    println!("perft(2): {:?}", ply2);
-    println!("perft(3): {:?}", ply3);
-    println!("perft(4): {:?}", ply4);
-
-    // Perft results used found in link above.
-    assert_eq!(ply0.nodes, 1);
-    assert_eq!(ply1.nodes, 14);
-    assert_eq!(ply2.nodes, 191);
-    assert_eq!(ply3.nodes, 2_812);
-    assert_eq!(ply4.nodes, 43_238);
-
-    let threaded_ply2 = perft(position, 2, cpu_threads());
-    let threaded_ply3 = perft(position, 3, cpu_threads());
-    let threaded_ply4 = perft(position, 4, cpu_threads());
-    assert_eq!(threaded_ply2, ply2);
-    assert_eq!(threaded_ply3, ply3);
-    assert_eq!(threaded_ply4, ply4);
+    perft_tester(position_3(), vec![1, 14, 191, 2_812, 43_238]);
 }
 
 #[test]
@@ -159,32 +104,7 @@ fn position_4() -> Position {
 #[test]
 fn perft_test_position_4() {
     // https://www.chessprogramming.org/Perft_Results#Position_4
-    let position = position_4();
-    let ply0 = perft(position, 0, ONE_THREAD);
-    let ply1 = perft(position, 1, ONE_THREAD);
-    let ply2 = perft(position, 2, ONE_THREAD);
-    let ply3 = perft(position, 3, ONE_THREAD);
-    let ply4 = perft(position, 4, ONE_THREAD);
-
-    println!("perft(0): {:?}", ply0);
-    println!("perft(1): {:?}", ply1);
-    println!("perft(2): {:?}", ply2);
-    println!("perft(3): {:?}", ply3);
-    println!("perft(4): {:?}", ply4);
-
-    // Perft results used found in link above.
-    assert_eq!(ply0.nodes, 1);
-    assert_eq!(ply1.nodes, 6);
-    assert_eq!(ply2.nodes, 264);
-    assert_eq!(ply3.nodes, 9_467);
-    assert_eq!(ply4.nodes, 422_333);
-
-    let threaded_ply2 = perft(position, 2, cpu_threads());
-    let threaded_ply3 = perft(position, 3, cpu_threads());
-    let threaded_ply4 = perft(position, 4, cpu_threads());
-    assert_eq!(threaded_ply2, ply2);
-    assert_eq!(threaded_ply3, ply3);
-    assert_eq!(threaded_ply4, ply4);
+    perft_tester(position_4(), vec![1, 6, 264, 9_467, 422_333]);
 }
 
 fn position_5() -> Position {
@@ -195,27 +115,7 @@ fn position_5() -> Position {
 #[test]
 fn perft_test_position_5() {
     // https://www.chessprogramming.org/Perft_Results#Position_5
-    let position = position_5();
-    let ply0 = perft(position, 0, ONE_THREAD);
-    let ply1 = perft(position, 1, ONE_THREAD);
-    let ply2 = perft(position, 2, ONE_THREAD);
-    let ply3 = perft(position, 3, ONE_THREAD);
-
-    println!("perft(0): {:?}", ply0);
-    println!("perft(1): {:?}", ply1);
-    println!("perft(2): {:?}", ply2);
-    println!("perft(3): {:?}", ply3);
-
-    // Perft results used found in link above.
-    assert_eq!(ply0.nodes, 1);
-    assert_eq!(ply1.nodes, 44);
-    assert_eq!(ply2.nodes, 1_486);
-    assert_eq!(ply3.nodes, 62_379);
-
-    let threaded_ply2 = perft(position, 2, cpu_threads());
-    let threaded_ply3 = perft(position, 3, cpu_threads());
-    assert_eq!(threaded_ply2, ply2);
-    assert_eq!(threaded_ply3, ply3);
+    perft_tester(position_5(), vec![1, 44, 1_486, 62_379]);
 }
 
 #[test]
@@ -236,27 +136,7 @@ fn position_6() -> Position {
 #[test]
 fn perft_test_position_6() {
     // https://www.chessprogramming.org/Perft_Results#Position_6
-    let position = position_6();
-    let ply0 = perft(position, 0, ONE_THREAD);
-    let ply1 = perft(position, 1, ONE_THREAD);
-    let ply2 = perft(position, 2, ONE_THREAD);
-    let ply3 = perft(position, 3, ONE_THREAD);
-
-    println!("perft(0): {:?}", ply0);
-    println!("perft(1): {:?}", ply1);
-    println!("perft(2): {:?}", ply2);
-    println!("perft(3): {:?}", ply3);
-
-    // Perft results used found in link above.
-    assert_eq!(ply0.nodes, 1);
-    assert_eq!(ply1.nodes, 46);
-    assert_eq!(ply2.nodes, 2_079);
-    assert_eq!(ply3.nodes, 89_890);
-
-    let threaded_ply2 = perft(position, 2, cpu_threads());
-    let threaded_ply3 = perft(position, 3, cpu_threads());
-    assert_eq!(threaded_ply2, ply2);
-    assert_eq!(threaded_ply3, ply3);
+    perft_tester(position_6(), vec![1, 46, 2_079, 89_890]);
 }
 
 #[test]
@@ -265,6 +145,9 @@ fn perft_test_position_6_expensive() {
     let position = position_6();
 
     let ply4 = perft(position, 4, ONE_THREAD);
-    println!("perft(4): {:?}", ply4);
+    let ply5 = perft(position, 5, ONE_THREAD);
+    println!("perft(4): {ply4:?}");
+    println!("perft(5): {ply5:?}");
     assert_eq!(ply4.nodes, 3_894_594);
+    assert_eq!(ply5.nodes, 164_075_551);
 }

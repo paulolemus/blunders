@@ -817,35 +817,17 @@ mod tests {
     /// Tests commands: uci, isready, ucinewgame, stop, ponderhit, quit
     #[test]
     fn parse_command_singles() {
-        {
-            let input = "uci";
-            let command = UciCommand::parse_command(&input);
-            assert_eq!(UciCommand::Uci, command.unwrap());
-        }
-        {
-            let input = "isready\n";
-            let command = UciCommand::parse_command(&input);
-            assert_eq!(UciCommand::IsReady, command.unwrap());
-        }
-        {
-            let input = "ucinewgame";
-            let command = UciCommand::parse_command(&input);
-            assert_eq!(UciCommand::UciNewGame, command.unwrap());
-        }
-        {
-            let input = "stop";
-            let command = UciCommand::parse_command(&input);
-            assert_eq!(UciCommand::Stop, command.unwrap());
-        }
-        {
-            let input = "ponderhit";
-            let command = UciCommand::parse_command(&input);
-            assert_eq!(UciCommand::PonderHit, command.unwrap());
-        }
-        {
-            let input = "quit";
-            let command = UciCommand::parse_command(&input);
-            assert_eq!(UciCommand::Quit, command.unwrap());
+        let input_command_pairs = [
+            ("uci", UciCommand::Uci),
+            ("isready\n", UciCommand::IsReady),
+            ("ucinewgame", UciCommand::UciNewGame),
+            ("stop", UciCommand::Stop),
+            ("ponderhit", UciCommand::PonderHit),
+            ("quit", UciCommand::Quit),
+        ];
+        for (input_str, expected_command) in input_command_pairs {
+            let command = UciCommand::parse_command(input_str).unwrap();
+            assert_eq!(command, expected_command);
         }
     }
 

@@ -31,9 +31,12 @@
 //! * Sliding Attack Pattern per square
 //! * Pass Pawns
 
+use std::fmt;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, Not};
 
-use crate::coretypes::{File, Rank, Square, Square::*, SquareIndexable};
+use crate::coretypes::{
+    File, Rank, Square, Square::*, SquareIndexable, NUM_FILES, NUM_RANKS, NUM_SQUARES,
+};
 
 /// Alias for inner type of Bitboard. Useful for const evaluation.
 pub type BitboardKind = u64;
@@ -94,12 +97,13 @@ impl Bitboard {
         self.0 == 0
     }
 
-    /// Returns number of squares present.
+    /// Returns number of elements (squares) in bitboard.
     /// Equivalent to number of bits in binary representation that are '1'.
+    /// The limits of the return value is 0 <= len <= 64.
     /// When compiled for targets with BMI1 popcnt instruction, should resolve to a single instruction.
     #[inline(always)]
-    pub const fn count_squares(&self) -> u32 {
-        self.0.count_ones()
+    pub const fn len(&self) -> usize {
+        self.0.count_ones() as usize
     }
 
     /// Returns true if index is populated.
@@ -241,7 +245,7 @@ impl Bitboard {
     /// * Convert square index to a Square and add to list.
     pub fn squares(&self) -> Vec<Square> {
         let mut bits = self.clone();
-        let num_ones = self.count_squares() as usize;
+        let num_ones = self.len();
         let mut vec = Vec::with_capacity(num_ones);
 
         for _ in 0..num_ones {
@@ -356,7 +360,7 @@ impl Iterator for BitboardSquareIterator {
         maybe_square
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.bb.count_squares() as usize;
+        let size = self.bb.len();
         (size, Some(size))
     }
 }
@@ -371,37 +375,49 @@ impl IntoIterator for Bitboard {
     }
 }
 
+impl fmt::Display for Bitboard {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Square::*;
+        const RANK_SQUARES: [[Square; NUM_FILES]; NUM_RANKS] = [
+            [A8, B8, C8, D8, E8, F8, G8, H8],
+            [A7, B7, C7, D7, E7, F7, G7, H7],
+            [A6, B6, C6, D6, E6, F6, G6, H6],
+            [A5, B5, C5, D5, E5, F5, G5, H5],
+            [A4, B4, C4, D4, E4, F4, G4, H4],
+            [A3, B3, C3, D3, E3, F3, G3, H3],
+            [A2, B2, C2, D2, E2, F2, G2, H2],
+            [A1, B1, C1, D1, E1, F1, G1, H1],
+        ];
+        let mut buf = String::with_capacity(NUM_SQUARES + NUM_RANKS);
+        for rank in RANK_SQUARES {
+            for square in rank {
+                buf.push(if self.has_square(square) { '1' } else { '.' });
+            }
+            buf.push('\n');
+        }
+
+        f.write_str(&buf)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn from_square_indexable() {
-        let a1 = Bitboard::from(Square::A1);
-        let a2 = Bitboard::from(Square::A2);
-        let a4 = Bitboard::from(Square::A4);
-        let a8 = Bitboard::from(Square::A8);
-        let d3 = Bitboard::from(Square::D3);
-        let h8 = Bitboard::from(Square::H8);
-        assert!(a1.has_square(Square::A1));
-        assert!(a2.has_square(Square::A2));
-        assert!(a4.has_square(Square::A4));
-        assert!(a8.has_square(Square::A8));
-        assert!(d3.has_square(Square::D3));
-        assert!(h8.has_square(Square::H8));
-        assert_eq!(a1.count_squares(), 1);
-        assert_eq!(a2.count_squares(), 1);
-        assert_eq!(a4.count_squares(), 1);
-        assert_eq!(a8.count_squares(), 1);
-        assert_eq!(d3.count_squares(), 1);
-        assert_eq!(h8.count_squares(), 1);
+        for square in [A1, A2, A4, A8, D3, F6, G7, H1, H8] {
+            let bb = Bitboard::from(square);
+            assert!(bb.has_square(square));
+            assert_eq!(bb.len(), 1);
+        }
     }
 
     #[test]
     fn from_square_indexable_slice() {
         let slice1 = vec![A1, A2, A3];
         let bb = Bitboard::from(slice1.as_slice());
-        assert_eq!(bb.count_squares(), 3);
+        assert_eq!(bb.len(), 3);
         assert!(bb.has_square(A1));
         assert!(bb.has_square(A2));
         assert!(bb.has_square(A3));
@@ -416,41 +432,49 @@ mod tests {
         let empty1 = a1.to_south();
         let empty2 = a1.to_west();
 
-        assert_eq!(a2.count_squares(), 1);
-        assert_eq!(b1.count_squares(), 1);
-        assert_eq!(empty1.count_squares(), 0);
-        assert_eq!(empty2.count_squares(), 0);
+        assert_eq!(a2.len(), 1);
+        assert_eq!(b1.len(), 1);
+        assert_eq!(empty1.len(), 0);
+        assert_eq!(empty2.len(), 0);
         assert!(a2.has_square(Square::A2));
         assert!(b1.has_square(Square::B1));
-        assert!(empty1 == Bitboard::EMPTY);
-        assert!(empty2 == Bitboard::EMPTY);
+        assert_eq!(empty1, Bitboard::EMPTY);
+        assert_eq!(empty2, Bitboard::EMPTY);
 
-        let empty3 = a1.to_south().to_east().to_east();
-        let empty4 = a1.to_south().to_south().to_east();
-        let empty5 = a1.to_south().to_south().to_west();
-        let empty6 = a1.to_south().to_west().to_west();
-        let empty7 = a1.to_north().to_west().to_west();
-        let empty8 = a1.to_north().to_north().to_west();
-        assert_eq!(empty3.count_squares(), 0);
-        assert_eq!(empty4.count_squares(), 0);
-        assert_eq!(empty5.count_squares(), 0);
-        assert_eq!(empty6.count_squares(), 0);
-        assert_eq!(empty7.count_squares(), 0);
-        assert_eq!(empty8.count_squares(), 0);
-        assert!(empty3 == Bitboard::EMPTY);
-        assert!(empty4 == Bitboard::EMPTY);
-        assert!(empty5 == Bitboard::EMPTY);
-        assert!(empty6 == Bitboard::EMPTY);
-        assert!(empty7 == Bitboard::EMPTY);
-        assert!(empty8 == Bitboard::EMPTY);
+        let empty_boards = [
+            a1.to_south().to_east().to_east(),
+            a1.to_south().to_south().to_east(),
+            a1.to_south().to_south().to_west(),
+            a1.to_south().to_west().to_west(),
+            a1.to_north().to_west().to_west(),
+            a1.to_north().to_north().to_west(),
+        ];
+        for empty_board in empty_boards {
+            assert_eq!(empty_board.len(), 0);
+            assert_eq!(empty_board, Bitboard::EMPTY);
+            assert!(empty_board.is_empty());
+        }
     }
     #[test]
     fn to_east_west_wrapping() {
         // Test that a sideways move does not wrap to another rank.
-        let a4 = Bitboard::from(Square::A4);
-        let h4 = Bitboard::from(Square::H4);
-        assert_eq!(a4.to_west(), Bitboard::EMPTY);
-        assert_eq!(h4.to_east(), Bitboard::EMPTY);
+        {
+            let right_side_squares = [H1, H2, H3, H4, H5, H6, H7, H8];
+            for right_square in right_side_squares {
+                let bb = Bitboard::from(right_square);
+                assert_eq!(bb.to_east(), Bitboard::EMPTY);
+                assert_eq!(bb.to_north_east(), Bitboard::EMPTY);
+                assert_eq!(bb.to_south_east(), Bitboard::EMPTY);
+            }
+        }
+
+        let left_side_squares = [A1, A2, A3, A4, A5, A6, A7, A8];
+        for left_square in left_side_squares {
+            let bb = Bitboard::from(left_square);
+            assert_eq!(bb.to_west(), Bitboard::EMPTY);
+            assert_eq!(bb.to_north_west(), Bitboard::EMPTY);
+            assert_eq!(bb.to_south_west(), Bitboard::EMPTY);
+        }
     }
 
     #[test]

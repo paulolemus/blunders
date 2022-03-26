@@ -18,8 +18,7 @@ fn threefold_repetition_perpetual_check_1() {
         Move::new(E1, H4, None),
         Move::new(H2, G1, None),
     ]
-    .iter()
-    .copied()
+    .into_iter()
     .collect();
 
     let repeated_game = Game::new(pos, moves).unwrap();

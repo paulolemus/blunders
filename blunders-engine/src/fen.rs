@@ -287,81 +287,41 @@ mod tests {
     #[test]
     fn parse_placement_fen_substrings() {
         //! Assert Fen::parse_placement(&str) works properly.
-        const VALID1: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-        const VALID2: &str = "rn1qkb1r/ppp2ppp/4pn2/3p4/3P2bP/2N1PN2/PPP2PP1/R1BQKB1R";
-        const VALID3: &str = "r1Q2rk1/p3qppp/np1bpn2/3p4/1PpP2bP/2N1PN2/PBP2PPR/R3KB2";
-        const VALID4: &str = "2r2rk1/p4p2/nR4Pp/3p4/3P2P1/P1p5/2P1KP1R/4b3";
+        let valid_strings = [
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR",
+            "rn1qkb1r/ppp2ppp/4pn2/3p4/3P2bP/2N1PN2/PPP2PP1/R1BQKB1R",
+            "r1Q2rk1/p3qppp/np1bpn2/3p4/1PpP2bP/2N1PN2/PBP2PPR/R3KB2",
+            "2r2rk1/p4p2/nR4Pp/3p4/3P2P1/P1p5/2P1KP1R/4b3",
+        ];
+        for valid_str in valid_strings {
+            let mailbox = Mailbox::try_from_fen_str(valid_str).unwrap();
+            assert_eq!(mailbox.to_fen_str(), valid_str);
+        }
 
-        const INVALID1: &str = "";
-        const INVALID2: &str = "hello world";
-        const INVALID3: &str = "nbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-        const INVALID4: &str = "nbqkbnr/ pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-        const INVALID5: &str = " rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-        const INVALID6: &str = "rnbqkbnr/pppppppp/27/8/8/8/PPPPPPPP/RNBQKBNR";
-
-        assert_eq!(
-            Mailbox::try_from_fen_str(VALID1).unwrap().to_fen_str(),
-            VALID1
-        );
-        assert_eq!(
-            Mailbox::try_from_fen_str(VALID2).unwrap().to_fen_str(),
-            VALID2
-        );
-        assert_eq!(
-            Mailbox::try_from_fen_str(VALID3).unwrap().to_fen_str(),
-            VALID3
-        );
-        assert_eq!(
-            Mailbox::try_from_fen_str(VALID4).unwrap().to_fen_str(),
-            VALID4
-        );
-        assert!(Mailbox::try_from_fen_str(INVALID1).is_err());
-        assert!(Mailbox::try_from_fen_str(INVALID2).is_err());
-        assert!(Mailbox::try_from_fen_str(INVALID3).is_err());
-        assert!(Mailbox::try_from_fen_str(INVALID4).is_err());
-        assert!(Mailbox::try_from_fen_str(INVALID5).is_err());
-        assert!(Mailbox::try_from_fen_str(INVALID6).is_err());
+        let invalid_strings = [
+            "",
+            "hello world",
+            "nbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR",
+            "nbqkbnr/ pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR",
+            " rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR",
+            "rnbqkbnr/pppppppp/27/8/8/8/PPPPPPPP/RNBQKBNR",
+        ];
+        for invalid_str in invalid_strings {
+            assert!(Mailbox::try_from_fen_str(invalid_str).is_err());
+        }
     }
 
     #[test]
     fn parse_castling_fen_substring() {
-        const VALID1: &str = "-";
-        const VALID2: &str = "Q";
-        const VALID3: &str = "K";
-        const VALID4: &str = "q";
-        const VALID5: &str = "k";
-        const VALID6: &str = "KQkq";
+        let valid_strings = ["-", "Q", "K", "q", "k", "KQkq"];
+        for valid_str in valid_strings {
+            let castling = Castling::try_from_fen_str(valid_str).unwrap();
+            assert_eq!(castling.to_fen_str(), valid_str);
+        }
 
-        const INVALID1: &str = "";
-        const INVALID2: &str = "a";
-        const INVALID3: &str = " KQkq";
-
-        assert_eq!(
-            Castling::try_from_fen_str(VALID1).unwrap().to_fen_str(),
-            VALID1
-        );
-        assert_eq!(
-            Castling::try_from_fen_str(VALID2).unwrap().to_fen_str(),
-            VALID2
-        );
-        assert_eq!(
-            Castling::try_from_fen_str(VALID3).unwrap().to_fen_str(),
-            VALID3
-        );
-        assert_eq!(
-            Castling::try_from_fen_str(VALID4).unwrap().to_fen_str(),
-            VALID4
-        );
-        assert_eq!(
-            Castling::try_from_fen_str(VALID5).unwrap().to_fen_str(),
-            VALID5
-        );
-        assert_eq!(
-            Castling::try_from_fen_str(VALID6).unwrap().to_fen_str(),
-            VALID6
-        );
-        assert!(Castling::try_from_fen_str(INVALID1).is_err());
-        assert!(Castling::try_from_fen_str(INVALID2).is_err());
-        assert!(Castling::try_from_fen_str(INVALID3).is_err());
+        let invalid_strings = ["", "a", " KQkq"];
+        for invalid_str in invalid_strings {
+            assert!(Castling::try_from_fen_str(invalid_str).is_err());
+        }
     }
 }

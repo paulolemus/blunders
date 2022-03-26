@@ -121,11 +121,8 @@ impl PieceSets {
     /// In other words, there is no more than 1 piece per square. If a square is in one set, it is in no other.
     /// PieceSets should be disjoint at all times.
     pub fn is_disjoint(&self) -> bool {
-        let occupied_sum = self.occupied().count_squares();
-        let individual_sum = self
-            .pieces
-            .iter()
-            .fold(0, |acc, bb| acc + bb.count_squares());
+        let occupied_sum = self.occupied().len();
+        let individual_sum = self.pieces.iter().fold(0, |acc, bb| acc + bb.len());
 
         occupied_sum == individual_sum
     }
@@ -136,11 +133,11 @@ impl PieceSets {
     /// * Each bitboard is disjoint (mutually exclusive) meaning a square cannot have more than one piece.
     pub fn is_valid(&self) -> bool {
         // Illegal if no White King.
-        if self[(White, King)].count_squares() != 1 {
+        if self[(White, King)].len() != 1 {
             return false;
         }
         // Illegal if no Black King.
-        if self[(Black, King)].count_squares() != 1 {
+        if self[(Black, King)].len() != 1 {
             return false;
         }
         // Illegal if more than one piece per any square.
@@ -261,7 +258,7 @@ mod tests {
     fn piece_indexing() {
         let pieces = PieceSets::start_position();
         let w_king = &pieces[Piece::new(White, King)];
-        assert_eq!(w_king.count_squares(), 1);
+        assert_eq!(w_king.len(), 1);
         assert!(w_king.has_square(E1));
     }
 
@@ -272,7 +269,7 @@ mod tests {
         let w_occupancy = white_pieces
             .iter()
             .fold(Bitboard::EMPTY, |acc, piece| acc | *piece);
-        assert_eq!(w_occupancy.count_squares(), 16);
+        assert_eq!(w_occupancy.len(), 16);
         for square in [A1, B1, C1, D1, E1, F1, G1, H1] {
             assert!(w_occupancy.has_square(&square));
         }
@@ -284,7 +281,7 @@ mod tests {
         let b_occupancy = black_pieces
             .iter()
             .fold(Bitboard::EMPTY, |acc, piece| acc | *piece);
-        assert_eq!(b_occupancy.count_squares(), 16);
+        assert_eq!(b_occupancy.len(), 16);
         for square in [A7, B7, C7, D7, E7, F7, G7, H7] {
             assert!(b_occupancy.has_square(&square));
         }

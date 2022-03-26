@@ -81,10 +81,10 @@ pub struct Castling(u8);
 
 /// Castling Enum constants.
 impl Castling {
-    pub const W_KING: Castling = Castling(0b00000001);
-    pub const W_QUEEN: Castling = Castling(0b00000010);
-    pub const B_KING: Castling = Castling(0b00000100);
-    pub const B_QUEEN: Castling = Castling(0b00001000);
+    pub const W_KING: Castling = Castling(1u8 << 0);
+    pub const W_QUEEN: Castling = Castling(1u8 << 1);
+    pub const B_KING: Castling = Castling(1u8 << 2);
+    pub const B_QUEEN: Castling = Castling(1u8 << 3);
     pub const W_SIDE: Castling = Castling(Self::W_KING.0 | Self::W_QUEEN.0);
     pub const B_SIDE: Castling = Castling(Self::B_KING.0 | Self::B_QUEEN.0);
     pub const KING_SIDE: Castling = Castling(Self::W_KING.0 | Self::B_KING.0);
@@ -118,7 +118,7 @@ pub enum Rank {
 /// that Square's bit position in a bitboard.
 /// WARNING: The exact ordering of enums is important for their discriminants.
 ///          Changing the discriminant of any variant is breaking.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[rustfmt::skip]
 #[repr(u8)]
 pub enum Square {
@@ -292,10 +292,10 @@ impl Mul for Cp {
         Self(self.0 * rhs.0)
     }
 }
-impl Mul<u32> for Cp {
+impl Mul<CpKind> for Cp {
     type Output = Cp;
-    fn mul(self, rhs: u32) -> Self::Output {
-        Self(self.0 * rhs as CpKind)
+    fn mul(self, rhs: CpKind) -> Self::Output {
+        Self(self.0 * rhs)
     }
 }
 impl Neg for Cp {
@@ -1156,81 +1156,51 @@ mod tests {
 
     #[test]
     fn castling_to_from_string() {
-        let valid_none = "-";
-        let valid_w_king = "K";
-        let valid_kings = "Kk";
-        let valid_all = "KQkq";
-        let valid_queens = "Qq";
-        let invalid_empty = "";
-        let invalid_char = "x";
+        let valid_pairs = [
+            ("-", Castling::NONE),
+            ("K", Castling::W_KING),
+            ("Kk", Castling::W_KING | Castling::B_KING),
+            ("KQkq", Castling::ALL),
+            ("Qq", Castling::W_QUEEN | Castling::B_QUEEN),
+        ];
+        for (valid_str, expected_castling) in valid_pairs {
+            let parsed_castling = Castling::from_str(valid_str).unwrap();
+            assert_eq!(parsed_castling, expected_castling);
+        }
 
-        let none = Castling::from_str(valid_none);
-        let w_king = Castling::from_str(valid_w_king);
-        let kings = Castling::from_str(valid_kings);
-        let all = Castling::from_str(valid_all);
-        let queens = Castling::from_str(valid_queens);
-        let empty = Castling::from_str(invalid_empty);
-        let ch = Castling::from_str(invalid_char);
-
-        assert_eq!(none.unwrap(), Castling::NONE);
-        assert_eq!(w_king.unwrap(), Castling::W_KING);
-        assert_eq!(kings.unwrap(), Castling::W_KING | Castling::B_KING);
-        assert_eq!(all.unwrap(), Castling::ALL);
-        assert_eq!(queens.unwrap(), Castling::W_QUEEN | Castling::B_QUEEN);
-        assert!(empty.is_err());
-        assert!(ch.is_err());
+        let invalid_strings = ["", "x"];
+        for invalid in invalid_strings {
+            let result = Castling::from_str(invalid);
+            assert!(result.is_err());
+        }
     }
 
     #[test]
     fn square_to_from_string() {
-        let valid_a1 = "a1"; // valid strings.
-        let valid_a2 = "a2";
-        let valid_a3 = "a3";
-        let valid_a4 = "a4";
-        let valid_a5 = "a5";
-        let valid_a6 = "a6";
-        let valid_a7 = "a7";
-        let valid_a8 = "a8";
-        let valid_b7 = "b7";
-        let valid_h8 = "h8";
-        let invalid_1 = "A1"; // invalid strings.
-        let invalid_2 = "X3";
-        let invalid_3 = "a$";
-        let invalid_4 = "g";
-        let a1 = Square::from_str(valid_a1).unwrap(); // valid squares.
-        let a2 = Square::from_str(valid_a2).unwrap();
-        let a3 = Square::from_str(valid_a3).unwrap();
-        let a4 = Square::from_str(valid_a4).unwrap();
-        let a5 = Square::from_str(valid_a5).unwrap();
-        let a6 = Square::from_str(valid_a6).unwrap();
-        let a7 = Square::from_str(valid_a7).unwrap();
-        let a8 = Square::from_str(valid_a8).unwrap();
-        let b7 = Square::from_str(valid_b7).unwrap();
-        let h8: Square = valid_h8.parse().unwrap();
-        assert_eq!(a1, Square::A1); // compare parsed Square with expected.
-        assert_eq!(a2, Square::A2);
-        assert_eq!(a3, Square::A3);
-        assert_eq!(a4, Square::A4);
-        assert_eq!(a5, Square::A5);
-        assert_eq!(a6, Square::A6);
-        assert_eq!(a7, Square::A7);
-        assert_eq!(a8, Square::A8);
-        assert_eq!(b7, Square::B7);
-        assert_eq!(h8, Square::H8);
-        assert!(Square::from_str(invalid_1).is_err()); // Errors are errors.
-        assert!(Square::from_str(invalid_2).is_err());
-        assert!(Square::from_str(invalid_3).is_err());
-        assert!(Square::from_str(invalid_4).is_err());
-        assert_eq!(a1.to_string(), valid_a1); // Square as string equals parsed.
-        assert_eq!(a2.to_string(), valid_a2);
-        assert_eq!(a3.to_string(), valid_a3);
-        assert_eq!(a4.to_string(), valid_a4);
-        assert_eq!(a5.to_string(), valid_a5);
-        assert_eq!(a6.to_string(), valid_a6);
-        assert_eq!(a7.to_string(), valid_a7);
-        assert_eq!(a8.to_string(), valid_a8);
-        assert_eq!(b7.to_string(), valid_b7);
-        assert_eq!(h8.to_string(), valid_h8);
+        let valid_pairs = [
+            ("a1", A1),
+            ("a2", A2),
+            ("a3", A3),
+            ("a4", A4),
+            ("a5", A5),
+            ("a6", A6),
+            ("a7", A7),
+            ("a8", A8),
+            ("b7", B7),
+            ("h1", H1),
+            ("h8", H8),
+        ];
+        for (valid_str, square) in valid_pairs {
+            let parsed_square = Square::from_str(valid_str).unwrap();
+            assert_eq!(parsed_square, square);
+            assert_eq!(parsed_square.to_string(), valid_str);
+            assert_eq!(square.to_string(), valid_str);
+        }
+
+        let invalid_strings = ["A1", "X3", "a$", "g", "1a", "1b", "d9", "g0", ""];
+        for invalid_str in invalid_strings {
+            assert!(Square::from_str(invalid_str).is_err());
+        }
     }
 
     #[test]

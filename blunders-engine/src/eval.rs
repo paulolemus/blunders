@@ -94,11 +94,11 @@ pub fn evaluate_abs(position: &Position) -> Cp {
 /// A positive value is an advantage for white, 0 is even, negative is advantage for black.
 pub fn material(position: &Position) -> Cp {
     let w_piece_cp: Cp = PieceKind::iter()
-        .map(|pk| pk.centipawns() * position.pieces[(White, pk)].count_squares())
+        .map(|pk| pk.centipawns() * position.pieces[(White, pk)].len() as CpKind)
         .fold(Cp::default(), |acc, value| acc + value);
 
     let b_piece_cp: Cp = PieceKind::iter()
-        .map(|pk| pk.centipawns() * position.pieces[(Black, pk)].count_squares())
+        .map(|pk| pk.centipawns() * position.pieces[(Black, pk)].len() as CpKind)
         .fold(Cp::default(), |acc, value| acc + value);
 
     w_piece_cp - b_piece_cp
@@ -115,13 +115,13 @@ pub fn king_safety(position: &Position) -> Cp {
     let b_sliding = position.pieces[(Black, Queen)]
         | position.pieces[(Black, Rook)]
         | position.pieces[(Black, Bishop)];
-    let w_num_sliding = w_sliding.count_squares();
-    let b_num_sliding = b_sliding.count_squares();
+    let w_num_sliding = w_sliding.len();
+    let b_num_sliding = b_sliding.len();
     let w_king = position.pieces[(White, King)];
     let b_king = position.pieces[(Black, King)];
 
-    let w_king_open_squares = mg::queen_attacks(w_king, occupied).count_squares();
-    let b_king_open_squares = mg::queen_attacks(b_king, occupied).count_squares();
+    let w_king_open_squares = mg::queen_attacks(w_king, occupied).len();
+    let b_king_open_squares = mg::queen_attacks(b_king, occupied).len();
 
     // The more sliding pieces the enemy has, the more value each open square has.
     let w_value = b_king_open_squares * w_num_sliding / 2;
@@ -138,8 +138,7 @@ pub fn mobility(position: &Position) -> Cp {
     let w_attacks = position.attacks(White, position.pieces().occupied());
     let b_attacks = position.attacks(Black, position.pieces().occupied());
 
-    let attack_surface_area_diff =
-        w_attacks.count_squares() as CpKind - b_attacks.count_squares() as CpKind;
+    let attack_surface_area_diff = w_attacks.len() as CpKind - b_attacks.len() as CpKind;
 
     Cp(attack_surface_area_diff) * MOBILITY_CP
 }
@@ -152,8 +151,8 @@ pub fn pass_pawns(position: &Position) -> Cp {
     const RANK_CP: [CpKind; NUM_RANKS] = [0, 0, 1, 2, 10, 50, 250, 900];
     let w_passed: Bitboard = pass_pawns_bb(position, White);
     let b_passed: Bitboard = pass_pawns_bb(position, Black);
-    let w_num_passed = w_passed.count_squares() as CpKind;
-    let b_num_passed = b_passed.count_squares() as CpKind;
+    let w_num_passed = w_passed.len() as CpKind;
+    let b_num_passed = b_passed.len() as CpKind;
 
     // Sum the bonus rank value of each pass pawn.
     let w_rank_bonus = w_passed
@@ -176,8 +175,8 @@ pub fn xray_king_attacks(position: &Position) -> Cp {
     let b_king = position.pieces[(Black, King)].get_lowest_square().unwrap();
     let w_king_ortho = Bitboard::from(w_king.file()) | Bitboard::from(w_king.rank());
     let b_king_ortho = Bitboard::from(b_king.file()) | Bitboard::from(b_king.rank());
-    let w_king_diags = mg::bishop_pattern(w_king);
-    let b_king_diags = mg::bishop_pattern(b_king);
+    let w_king_diags = mg::tables::bishop_pattern(w_king);
+    let b_king_diags = mg::tables::bishop_pattern(b_king);
 
     let w_diags = position.pieces[(White, Queen)] | position.pieces[(White, Bishop)];
     let b_diags = position.pieces[(Black, Queen)] | position.pieces[(Black, Bishop)];
@@ -187,8 +186,8 @@ pub fn xray_king_attacks(position: &Position) -> Cp {
     let w_xray_attackers_bb = (b_king_diags & w_diags) | (b_king_ortho & w_ortho);
     let b_xray_attackers_bb = (w_king_diags & b_diags) | (w_king_ortho & b_ortho);
 
-    let w_xray_attackers: CpKind = w_xray_attackers_bb.count_squares() as CpKind;
-    let b_xray_attackers: CpKind = b_xray_attackers_bb.count_squares() as CpKind;
+    let w_xray_attackers: CpKind = w_xray_attackers_bb.len() as CpKind;
+    let b_xray_attackers: CpKind = b_xray_attackers_bb.len() as CpKind;
 
     Cp(w_xray_attackers - b_xray_attackers) * SCALAR
 }

@@ -31,8 +31,8 @@ enum Message {
 /// Long lived Thread type. Each Thread receives commands through a receiver.
 #[derive(Debug)]
 struct Thread {
-    pub id: usize,
-    pub name: String,
+    pub _id: usize,    // TODO
+    pub _name: String, // TODO
     handle: Option<JoinHandle<()>>,
 }
 
@@ -67,8 +67,8 @@ impl Thread {
             .unwrap();
 
         Self {
-            id,
-            name,
+            _id: id,
+            _name: name,
             handle: Some(handle),
         }
     }
@@ -93,7 +93,7 @@ impl Drop for Thread {
 #[derive(Debug)]
 pub struct ThreadPool {
     num_threads: usize,
-    threads: Vec<Thread>,
+    _threads: Vec<Thread>, // TODO
     sender: Sender<Message>,
     receiver: Arc<Mutex<Receiver<Message>>>,
 }
@@ -112,7 +112,7 @@ impl ThreadPool {
 
         Self {
             num_threads,
-            threads,
+            _threads: threads,
             sender,
             receiver,
         }

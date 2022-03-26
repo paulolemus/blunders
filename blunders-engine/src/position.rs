@@ -523,11 +523,11 @@ impl Position {
         (single_check, double_check)
     }
 
-    pub fn num_active_king_checks(&self) -> u32 {
+    pub fn num_active_king_checks(&self) -> usize {
         let king_bb = self.pieces[(self.player, King)];
         let king_square = king_bb.get_lowest_square().unwrap();
         let king_attackers = self.attackers_to(king_square, !self.player);
-        king_attackers.count_squares()
+        king_attackers.len()
     }
 
     /// Returns bitboard with positions of all pieces of a player attacking a square.
@@ -552,7 +552,7 @@ impl Position {
 
     /// Returns true if target square is attacked by any piece of attacking color.
     pub fn is_attacked_by(&self, target: Square, attacking: Color) -> bool {
-        self.attackers_to(target, attacking).count_squares() > 0
+        self.attackers_to(target, attacking).len() > 0
     }
 
     /// Returns bitboard with all squares attacked by a player's pieces.
@@ -928,22 +928,22 @@ mod tests {
 
     #[test]
     fn king_checks() {
-        let check1_1 = Position::parse_fen("8/8/8/8/3K3r/8/8/8 w - - 0 1").unwrap();
-        let check1_2 =
-            Position::parse_fen("rnb1kbnr/ppp1pppp/8/3p4/1qPPP3/8/PP3PPP/RNBQKBNR w KQkq - 1 4")
-                .unwrap();
-        let check2_1 = Position::parse_fen("3q4/8/4b3/3k4/4P1n1/8/3Q4/2R5 b - - 0 1").unwrap();
-        let check4_1 =
-            Position::parse_fen("6b1/2r1r3/pp4n1/4K2r/2p5/7p/1p1q2q1/4r2r w - - 0 1").unwrap();
-        let check5_1 = Position::parse_fen("4r3/8/2b2n2/5p2/4K3/5q2/8/8 w - - 0 1").unwrap();
-        let check5_2 = Position::parse_fen("8/8/5n2/3brp2/Q3K2q/5P2/3N4/1B2R3 w - - 0 1").unwrap();
+        let check_fen_pairs = [
+            (1, "8/8/8/8/3K3r/8/8/8 w - - 0 1"),
+            (
+                1,
+                "rnb1kbnr/ppp1pppp/8/3p4/1qPPP3/8/PP3PPP/RNBQKBNR w KQkq - 1 4",
+            ),
+            (2, "3q4/8/4b3/3k4/4P1n1/8/3Q4/2R5 b - - 0 1"),
+            (4, "6b1/2r1r3/pp4n1/4K2r/2p5/7p/1p1q2q1/4r2r w - - 0 1"),
+            (5, "4r3/8/2b2n2/5p2/4K3/5q2/8/8 w - - 0 1"),
+            (5, "8/8/5n2/3brp2/Q3K2q/5P2/3N4/1B2R3 w - - 0 1"),
+        ];
 
-        assert_eq!(check1_1.num_active_king_checks(), 1);
-        assert_eq!(check1_2.num_active_king_checks(), 1);
-        assert_eq!(check2_1.num_active_king_checks(), 2);
-        assert_eq!(check4_1.num_active_king_checks(), 4);
-        assert_eq!(check5_1.num_active_king_checks(), 5);
-        assert_eq!(check5_2.num_active_king_checks(), 5);
+        for (num_checks, fen_str) in check_fen_pairs {
+            let position = Position::parse_fen(fen_str).unwrap();
+            assert_eq!(position.num_active_king_checks(), num_checks)
+        }
     }
 
     #[test]
@@ -968,29 +968,20 @@ mod tests {
 
     #[test]
     fn checkmated() {
-        {
-            let pos1 =
-                Position::parse_fen("rnb1k1nr/ppp2ppp/4p3/8/P7/1Pb3BQ/3qPPPP/4KBNR w Kkq - 0 14")
-                    .unwrap();
-            let moves1 = pos1.get_legal_moves();
-            assert_eq!(moves1.len(), 0);
-        }
-
-        {
-            let pos2 =
-                Position::parse_fen("r4r1k/1b3p1p/pp2pQ2/2p5/P1B3R1/3P3P/2q3P1/7K b - - 0 26")
-                    .unwrap();
-            let moves2 = pos2.get_legal_moves();
-            assert_eq!(moves2.len(), 0);
+        let checkmate_fens = [
+            "rnb1k1nr/ppp2ppp/4p3/8/P7/1Pb3BQ/3qPPPP/4KBNR w Kkq - 0 14",
+            "r4r1k/1b3p1p/pp2pQ2/2p5/P1B3R1/3P3P/2q3P1/7K b - - 0 26",
+        ];
+        for fen in checkmate_fens {
+            let position = Position::parse_fen(fen).unwrap();
+            assert_eq!(position.get_legal_moves().len(), 0);
         }
     }
 
     #[test]
     fn stalemated() {
         let pos1 = Position::parse_fen("8/8/8/8/p7/P3k3/4p3/4K3 w - - 1 2").unwrap();
-
-        let moves1 = pos1.get_legal_moves();
-        assert_eq!(moves1.len(), 0);
+        assert_eq!(pos1.get_legal_moves().len(), 0);
     }
 
     #[test]
