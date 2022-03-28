@@ -331,27 +331,18 @@ mod tests {
 
     #[test]
     fn check_knight_patterns() {
-        let a1 = KNIGHT_PATTERN[A1.idx()];
-        println!("a1: {:?}", a1);
-        println!("a1 knight attack squares: {:?}", a1.squares());
-        assert_eq!(a1.len(), 2);
-        assert!(a1.has_square(C2));
-        assert!(a1.has_square(B3));
-
-        let h1 = KNIGHT_PATTERN[H1.idx()];
-        assert_eq!(h1.len(), 2);
-        assert!(h1.has_square(F2));
-        assert!(h1.has_square(G3));
-
-        let h8 = KNIGHT_PATTERN[H8.idx()];
-        assert_eq!(h8.len(), 2);
-        assert!(h8.has_square(F7));
-        assert!(h8.has_square(G6));
-
-        let d4 = KNIGHT_PATTERN[D4.idx()];
-        assert_eq!(d4.len(), 8);
-        for square in [E6, F5, F3, E2, C2, B3, B5, C6] {
-            assert!(d4.has_square(&square));
+        let origin_squares_pairs = vec![
+            (A1, vec![C2, B3]),
+            (H1, vec![F2, G3]),
+            (H8, vec![F7, G6]),
+            (D4, vec![E6, F5, F3, E2, C2, B3, B5, C6]),
+        ];
+        for (origin, contained_squares) in origin_squares_pairs {
+            let board = knight_pattern(origin);
+            assert_eq!(board.len(), contained_squares.len());
+            for contained_sq in contained_squares {
+                assert!(board.has_square(contained_sq));
+            }
         }
 
         // Does not attack own square.
@@ -362,41 +353,21 @@ mod tests {
 
     #[test]
     fn check_king_patterns() {
-        {
-            let a1 = KING_PATTERN[A1.idx()];
-            assert_eq!(a1.len(), 3);
-            assert!(a1.has_square(A2));
-            assert!(a1.has_square(B2));
-            assert!(a1.has_square(B1));
-        }
-        {
-            let a8 = KING_PATTERN[A8.idx()];
-            assert_eq!(a8.len(), 3);
-            assert!(a8.has_square(A7));
-            assert!(a8.has_square(B7));
-            assert!(a8.has_square(B8));
-        }
-        {
-            let h1 = KING_PATTERN[H1.idx()];
-            assert_eq!(h1.len(), 3);
-            assert!(h1.has_square(G1));
-            assert!(h1.has_square(G2));
-            assert!(h1.has_square(H2));
-        }
-        {
-            let h8 = KING_PATTERN[H8.idx()];
-            assert_eq!(h8.len(), 3);
-            assert!(h8.has_square(G7));
-            assert!(h8.has_square(G8));
-            assert!(h8.has_square(H7));
-        }
-        {
-            let d6 = KING_PATTERN[D6.idx()];
-            assert_eq!(d6.len(), 8);
-            for square in [C5, C6, C7, D5, D7, E5, E6, E7] {
-                assert!(d6.has_square(&square));
+        let origin_squares_pairs = vec![
+            (A1, vec![A2, B1, B2]),
+            (A8, vec![A7, B7, B8]),
+            (H1, vec![G1, G2, H2]),
+            (H8, vec![G7, G8, H7]),
+            (D6, vec![C5, C6, C7, D5, D7, E5, E6, E7]),
+        ];
+        for (origin, contained_squares) in origin_squares_pairs {
+            let board = king_pattern(origin);
+            assert_eq!(board.len(), contained_squares.len());
+            for contained_sq in contained_squares {
+                assert!(board.has_square(contained_sq));
             }
         }
+
         // Does not attack own square.
         for square in Square::iter() {
             assert!(!king_pattern(square).has_square(square));
@@ -405,30 +376,34 @@ mod tests {
 
     #[test]
     fn check_rook_patterns() {
-        {
-            let a1 = ROOK_PATTERN[A1.idx()];
-            assert_eq!(a1.len(), 14);
-            for square in [A2, A3, A4, A5, A6, A7, A8, B1, C1, D1, E1, F1, G1, H1] {
-                assert!(a1.has_square(&square));
-            }
-        }
-        {
-            let h8 = ROOK_PATTERN[H8.idx()];
-            assert_eq!(h8.len(), 14);
-            for square in [A8, B8, C8, D8, E8, F8, G8, H1, H2, H3, H4, H5, H6, H7] {
-                assert!(h8.has_square(&square));
-            }
-        }
-        {
-            let f3 = ROOK_PATTERN[F3.idx()];
-            assert_eq!(f3.len(), 14);
-            for square in [A3, B3, C3, D3, E3, G3, H3, F1, F2, F4, F5, F6, F7, F8] {
-                assert!(f3.has_square(&square));
+        let origin_squares_pairs = vec![
+            (
+                A1,
+                vec![A2, A3, A4, A5, A6, A7, A8, B1, C1, D1, E1, F1, G1, H1],
+            ),
+            (
+                H8,
+                vec![A8, B8, C8, D8, E8, F8, G8, H1, H2, H3, H4, H5, H6, H7],
+            ),
+            (
+                F3,
+                vec![A3, B3, C3, D3, E3, G3, H3, F1, F2, F4, F5, F6, F7, F8],
+            ),
+        ];
+        for (origin, contained_squares) in origin_squares_pairs {
+            let board = rook_pattern(origin);
+            assert_eq!(board.len(), contained_squares.len());
+            for contained_sq in contained_squares {
+                assert!(board.has_square(contained_sq));
             }
         }
         // Does not attack own square.
         for square in Square::iter() {
             assert!(!rook_pattern(square).has_square(square));
+        }
+        // All rooks have 14 squares in pattern.
+        for board in ROOK_PATTERN {
+            assert_eq!(board.len(), 14);
         }
     }
 

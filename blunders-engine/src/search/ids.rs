@@ -4,8 +4,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::arrayvec::display;
 use crate::coretypes::MAX_DEPTH;
+use crate::movelist::display;
 use crate::search;
 use crate::search::History;
 use crate::search::SearchResult;

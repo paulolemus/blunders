@@ -19,8 +19,8 @@ use std::sync::{atomic::AtomicBool, mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 
-use crate::arrayvec::display;
 use crate::coretypes::{Color, Cp, Move, PlyKind};
+use crate::movelist::display;
 use crate::movelist::Line;
 use crate::timeman::Mode;
 use crate::transposition::TranspositionTable;

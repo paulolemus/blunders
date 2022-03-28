@@ -501,4 +501,10 @@ mod tests {
         let empty_vec: Vec<Square> = empty.into_iter().collect();
         assert_eq!(empty_vec.len(), 0);
     }
+
+    #[test]
+    fn display_bitboard() {
+        let bb = Bitboard::RANK_1 | Bitboard::FILE_A | Bitboard::from(H8);
+        println!("{bb}");
+    }
 }

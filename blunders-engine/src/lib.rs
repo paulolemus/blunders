@@ -1,6 +1,5 @@
 //! Blunders Chess Engine Core Library.
 
-pub mod arrayvec;
 pub mod bitboard;
 pub mod boardrepr;
 pub mod coretypes;

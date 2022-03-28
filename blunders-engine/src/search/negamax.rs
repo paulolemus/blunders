@@ -4,7 +4,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::arrayvec::{self, ArrayVec};
+use arrayvec::ArrayVec;
+
 use crate::coretypes::{Cp, Move, MoveInfo, MoveKind, PieceKind, PlyKind, MAX_DEPTH};
 use crate::eval::{draw, terminal};
 use crate::movelist::{Line, MoveInfoList};
@@ -184,7 +185,7 @@ fn negamax_impl(
             alpha = best_score;
             pv.clear();
             pv.push(best_move);
-            arrayvec::append(pv, local_pv.clone());
+            pv.try_extend_from_slice(&local_pv).unwrap();
         }
     }
 
@@ -574,7 +575,7 @@ pub fn iterative_negamax(
                 // Give parent updated PV by appending child PV to our best move.
                 parent.local_pv.clear();
                 parent.local_pv.push(us.best_move);
-                arrayvec::append(&mut parent.local_pv, us.local_pv.clone());
+                parent.local_pv.try_extend_from_slice(&us.local_pv).unwrap();
             }
 
             // Default action is to attempt to continue searching this node.

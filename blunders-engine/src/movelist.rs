@@ -3,7 +3,10 @@
 //! The underlying type of MoveList may change at any time during
 //! pre-1.0 development, so a MoveList type alias makes changes easy.
 
-use crate::arrayvec::ArrayVec;
+use std::fmt::Display;
+
+use arrayvec::ArrayVec;
+
 use crate::coretypes::{Move, MoveInfo};
 use crate::coretypes::{MAX_DEPTH, MAX_HISTORY, MAX_MOVES};
 
@@ -22,3 +25,15 @@ pub type Line = ArrayVec<Move, { MAX_DEPTH as usize }>;
 /// MoveHistory stores the sequence of moves that have been applied to some base position.
 /// The size limit of this is the longest contiguous game that Blunders can support.
 pub type MoveHistory = ArrayVec<Move, MAX_HISTORY>;
+
+/// Returns a string of all items in `arrayvec` in displayed string format, space separated.
+pub fn display<T: Display, const CAP: usize>(arrayvec: &ArrayVec<T, CAP>) -> String {
+    let mut displayed = String::new();
+    for item in arrayvec {
+        displayed.push_str(&item.to_string());
+        displayed.push(' ');
+    }
+    displayed.pop();
+
+    displayed
+}

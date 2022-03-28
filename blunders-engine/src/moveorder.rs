@@ -14,7 +14,8 @@
 //! There are several strategies for move ordering which may be used.
 //! 1. Sort first by principal variation moves, then by hash moves, then by Captures (SEE)
 
-use crate::arrayvec::ArrayVec;
+use arrayvec::ArrayVec;
+
 use crate::coretypes::{Cp, Move, MoveInfo, MAX_MOVES};
 use crate::movelist::MoveInfoList;
 

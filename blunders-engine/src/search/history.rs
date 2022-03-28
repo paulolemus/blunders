@@ -1,6 +1,7 @@
 //! History structure used within search.
 
-use crate::arrayvec::ArrayVec;
+use arrayvec::ArrayVec;
+
 use crate::coretypes::MAX_HISTORY;
 use crate::position::Game;
 use crate::zobrist::{HashKind, ZobristTable};

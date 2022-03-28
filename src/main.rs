@@ -8,7 +8,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
 
-use blunders_engine::arrayvec::display;
+use blunders_engine::movelist::display;
 use blunders_engine::uci::{self, UciCommand, UciOption, UciOptions, UciResponse};
 use blunders_engine::{EngineBuilder, Fen, Game, Mode, SearchResult};
 
