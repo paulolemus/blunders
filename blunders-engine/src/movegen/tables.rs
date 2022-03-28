@@ -4,8 +4,8 @@
 // Some functions are unused but complete symmetry for all piece types.
 #![allow(dead_code)]
 
-use crate::bitboard::Bitboard;
-use crate::coretypes::{SquareIndexable, NUM_SQUARES};
+use crate::bitboard::{bb_from_shifts, Bitboard};
+use crate::coretypes::{Square, Square::*, SquareIndexable, NUM_SQUARES};
 
 ///////////////////////////////////
 // Pre-generated move/attack Lookup
@@ -24,9 +24,8 @@ pub const BISHOP_PATTERN: [Bitboard; NUM_SQUARES] = generate_bishop_patterns();
 // Single Piece, Square Indexed, Symmetrical. Attacks == pseudo-legal Moves on empty board.
 pub const QUEEN_PATTERN: [Bitboard; NUM_SQUARES] = generate_queen_patterns();
 
-///////////////////////////////////////
-// Runtime Move Generation Functions //
-///////////////////////////////////////
+////////////////////////////////////
+// Convenience *_PATTERN accessors.
 
 /// Convenience function for pre-generated lookup array.
 pub fn knight_pattern<I: SquareIndexable>(idx: I) -> Bitboard {
@@ -47,6 +46,39 @@ pub fn bishop_pattern<I: SquareIndexable>(idx: I) -> Bitboard {
 /// Convenience function for pre-generated lookup array.
 pub fn queen_pattern<I: SquareIndexable>(idx: I) -> Bitboard {
     ROOK_PATTERN[idx.idx()] | BISHOP_PATTERN[idx.idx()]
+}
+
+////////////////////////////////////////////
+// Diagonal mask bitboard lookup from Square
+//
+// There are 15 diagonals, and 15 anti-diagonals.
+// Rank and File enum discriminants range from (0..=7).
+
+/// Diagonals on line of moving North-East and South-West.
+const DIAGONAL_MASK: [Bitboard; 15] = generate_diagonal();
+/// Anti-Diagonals on line of moving North-West and South-East.
+const ANTI_DIAGONAL_MASK: [Bitboard; 15] = generate_anti_diagonal();
+
+/// Returns the bitboard mask of the diagonal that contains `square`.
+#[inline]
+pub const fn diagonal(square: Square) -> Bitboard {
+    DIAGONAL_MASK[diagonal_mask_index(square)]
+}
+
+/// Returns the bitboard mask of the anti-diagonal that contains `square`.
+#[inline]
+pub const fn anti_diagonal(square: Square) -> Bitboard {
+    ANTI_DIAGONAL_MASK[anti_diagonal_mask_index(square)]
+}
+
+#[inline]
+const fn diagonal_mask_index(square: Square) -> usize {
+    (7 + square.rank_u8() - square.file_u8()) as usize
+}
+
+#[inline]
+const fn anti_diagonal_mask_index(square: Square) -> usize {
+    (square.rank_u8() + square.file_u8()) as usize
 }
 
 //////////////////////////////////////
@@ -249,10 +281,53 @@ const fn queen_pattern_index(index: usize) -> Bitboard {
     Bitboard(ROOK_PATTERN[index].0 | BISHOP_PATTERN[index].0)
 }
 
+// Hard to generate with loops currently due to const constraints.
+const fn generate_diagonal() -> [Bitboard; 15] {
+    [
+        bb_from_shifts!(H1),
+        bb_from_shifts!(G1, H2),
+        bb_from_shifts!(F1, G2, H3),
+        bb_from_shifts!(E1, F2, G3, H4),
+        bb_from_shifts!(D1, E2, F3, G4, H5),
+        bb_from_shifts!(C1, D2, E3, F4, G5, H6),
+        bb_from_shifts!(B1, C2, D3, E4, F5, G6, H7),
+        bb_from_shifts!(A1, B2, C3, D4, E5, F6, G7, H8),
+        bb_from_shifts!(A2, B3, C4, D5, E6, F7, G8),
+        bb_from_shifts!(A3, B4, C5, D6, E7, F8),
+        bb_from_shifts!(A4, B5, C6, D7, E8),
+        bb_from_shifts!(A5, B6, C7, D8),
+        bb_from_shifts!(A6, B7, C8),
+        bb_from_shifts!(A7, B8),
+        bb_from_shifts!(A8),
+    ]
+}
+
+// Hard to generate with loops currently due to const constraints.
+const fn generate_anti_diagonal() -> [Bitboard; 15] {
+    [
+        bb_from_shifts!(A1),
+        bb_from_shifts!(B1, A2),
+        bb_from_shifts!(C1, B2, A3),
+        bb_from_shifts!(D1, C2, B3, A4),
+        bb_from_shifts!(E1, D2, C3, B4, A5),
+        bb_from_shifts!(F1, E2, D3, C4, B5, A6),
+        bb_from_shifts!(G1, F2, E3, D4, C5, B6, A7),
+        bb_from_shifts!(H1, G2, F3, E4, D5, C6, B7, A8),
+        bb_from_shifts!(H2, G3, F4, E5, D6, C7, B8),
+        bb_from_shifts!(H3, G4, F5, E6, D7, C8),
+        bb_from_shifts!(H4, G5, F6, E7, D8),
+        bb_from_shifts!(H5, G6, F7, E8),
+        bb_from_shifts!(H6, G7, F8),
+        bb_from_shifts!(H7, G8),
+        bb_from_shifts!(H8),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coretypes::{Square, Square::*};
+    use crate::coretypes::{File::*, Rank::*, Square};
+    use crate::movegen::rays::ray_scan;
 
     #[test]
     fn check_knight_patterns() {
@@ -427,6 +502,36 @@ mod tests {
         // Does not attack own square.
         for square in Square::iter() {
             assert!(!queen_pattern(square).has_square(square));
+        }
+    }
+
+    #[test]
+    fn check_all_diagonals() {
+        let occ = Bitboard::EMPTY;
+        for rank in [R1, R2, R3, R4, R5, R6, R7, R8] {
+            for file in [A, B, C, D, E, F, G, H] {
+                let sq = Square::from((file, rank));
+
+                let diag_lookup = diagonal(sq);
+                let diag_traced = Bitboard::from(sq)
+                    | ray_scan(sq, occ, Bitboard::to_north_east)
+                    | ray_scan(sq, occ, Bitboard::to_south_west);
+                assert_eq!(diag_lookup.len(), diag_traced.len());
+                assert!(diag_lookup.len() <= 8);
+                for expected_sq in diag_lookup {
+                    assert!(diag_traced.has_square(expected_sq));
+                }
+
+                let anti_lookup = anti_diagonal(sq);
+                let anti_traced = Bitboard::from(sq)
+                    | ray_scan(sq, occ, Bitboard::to_north_west)
+                    | ray_scan(sq, occ, Bitboard::to_south_east);
+                assert_eq!(anti_lookup.len(), anti_traced.len());
+                assert!(anti_lookup.len() <= 8);
+                for expected_sq in anti_lookup {
+                    assert!(anti_traced.has_square(expected_sq));
+                }
+            }
         }
     }
 }

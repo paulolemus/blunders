@@ -58,6 +58,7 @@ macro_rules! bb_from_shifts {
         Bitboard(0u64 $( | (1u64 << $shiftable as u8))*)
     };
 }
+pub(crate) use bb_from_shifts;
 
 /// Bitboard Constants
 impl Bitboard {

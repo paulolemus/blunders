@@ -2,13 +2,14 @@
 
 use crate::bitboard::Bitboard;
 use crate::coretypes::Square;
+use crate::movegen::tables;
 
 // Each of 8-Directional rays, North, East, South, West, 4 Diagonals.
 
 /// Given one of Bitboard::to_(north|south|east|west|noea|nowe|soea|sowe),
 /// generate a ray from the origin exclusive to the first occupied piece inclusive along the ray direction.
 #[inline(always)]
-fn ray_scan(
+pub(crate) fn ray_scan(
     origin: Square,
     occupancy: Bitboard,
     direction_func: fn(&Bitboard) -> Bitboard,
@@ -43,9 +44,18 @@ pub(crate) fn south(origin: Square, occupancy: Bitboard) -> Bitboard {
 pub(crate) fn west(origin: Square, occupancy: Bitboard) -> Bitboard {
     ray_scan(origin, occupancy, Bitboard::to_west)
 }
+
 /// Return all squares attacked in NorthEast-direction ray, stopping on first attacked piece.
 pub(crate) fn noea(origin: Square, occupancy: Bitboard) -> Bitboard {
-    ray_scan(origin, occupancy, Bitboard::to_north_east)
+    let rays = positive_xor_trick(origin, occupancy, tables::diagonal(origin));
+    debug_assert_eq!(rays, ray_scan(origin, occupancy, Bitboard::to_north_east));
+    rays
+}
+/// Return all squares attacked in NorthWest-direction ray, stopping on first attacked piece.
+pub(crate) fn nowe(origin: Square, occupancy: Bitboard) -> Bitboard {
+    let rays = positive_xor_trick(origin, occupancy, tables::anti_diagonal(origin));
+    debug_assert_eq!(rays, ray_scan(origin, occupancy, Bitboard::to_north_west));
+    rays
 }
 /// Return all squares attacked in SouthEast-direction ray, stopping on first attacked piece.
 pub(crate) fn soea(origin: Square, occupancy: Bitboard) -> Bitboard {
@@ -54,10 +64,6 @@ pub(crate) fn soea(origin: Square, occupancy: Bitboard) -> Bitboard {
 /// Return all squares attacked in SouthWest-direction ray, stopping on first attacked piece.
 pub(crate) fn sowe(origin: Square, occupancy: Bitboard) -> Bitboard {
     ray_scan(origin, occupancy, Bitboard::to_south_west)
-}
-/// Return all squares attacked in NorthWest-direction ray, stopping on first attacked piece.
-pub(crate) fn nowe(origin: Square, occupancy: Bitboard) -> Bitboard {
-    ray_scan(origin, occupancy, Bitboard::to_north_west)
 }
 
 /// Bit trick known as [o^(o-2r)](https://www.chessprogramming.org/Subtracting_a_Rook_from_a_Blocking_Piece).
