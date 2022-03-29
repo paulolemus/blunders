@@ -3,7 +3,7 @@
 use arrayvec::ArrayVec;
 
 use crate::coretypes::MAX_HISTORY;
-use crate::position::Game;
+use crate::game::Game;
 use crate::zobrist::{HashKind, ZobristTable};
 
 type HashHistory = ArrayVec<HashKind, MAX_HISTORY>;

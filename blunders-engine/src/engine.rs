@@ -6,7 +6,8 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use crate::error::{self, ErrorKind};
-use crate::position::{Game, Position};
+use crate::game::Game;
+use crate::position::Position;
 use crate::search::{self, SearchResult};
 use crate::timeman::Mode;
 use crate::TranspositionTable;

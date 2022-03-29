@@ -11,8 +11,9 @@ use std::str::{FromStr, SplitWhitespace};
 use crate::coretypes::{Move, PlyKind};
 use crate::error::{self, ErrorKind};
 use crate::fen::Fen;
+use crate::game::Game;
 use crate::movelist::MoveHistory;
-use crate::position::{Game, Position};
+use crate::position::Position;
 
 /// UciCommands commands from an external program sent to this chess engine.
 #[derive(Debug, Clone, Eq, PartialEq)]
