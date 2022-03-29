@@ -134,7 +134,7 @@ impl Depth {
             }
         }
 
-        return false;
+        false
     }
 
     /// Returns true if search controls has all required fields for Depth mode.
@@ -164,7 +164,7 @@ impl MoveTime {
             }
         }
 
-        return false;
+        false
     }
 
     /// Returns true if search controls has all required fields for MoveTime mode.

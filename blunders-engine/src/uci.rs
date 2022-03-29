@@ -76,7 +76,7 @@ impl UciCommand {
 
         // the id following `name` consists of the input string until the token
         // `value` or end of input is encountered.
-        while let Some(token) = input.next() {
+        for token in input.by_ref() {
             if token == "value" {
                 had_value = true;
                 break;
@@ -86,7 +86,7 @@ impl UciCommand {
             }
         }
         name.pop(); // Remove trailing space.
-        (name.len() > 0)
+        (!name.is_empty())
             .then(|| ())
             .ok_or(ErrorKind::UciSetOptionNoName)?;
 
@@ -98,7 +98,7 @@ impl UciCommand {
                 value.push(' ');
             }
             value.pop(); // Remove trailing space.
-            (value.len() > 0)
+            (!value.is_empty())
                 .then(|| ())
                 .ok_or((ErrorKind::UciNoArgument, "expected argument after value"))?;
         }
@@ -140,7 +140,7 @@ impl UciCommand {
             }
         }
 
-        Game::new(base_position, moves).map(|game| UciCommand::Pos(game))
+        Game::new(base_position, moves).map(UciCommand::Pos)
     }
 
     /// Extract a `go` command if possible.
@@ -150,7 +150,7 @@ impl UciCommand {
         // ponder, infinite
         // The following options must be followed with an integer value:
         // wtime, btime, winc, binc, depth, nodes, mate, movetime, movestogo
-        const HAS_U32_ARG: [&'static str; 9] = [
+        const HAS_U32_ARG: [&str; 9] = [
             "wtime",
             "btime",
             "winc",
@@ -316,7 +316,7 @@ impl Display for UciResponse {
                 f.write_char('\n')
             }
             Self::Opt(uci_opt) => {
-                write!(f, "{uci_opt}\n")
+                writeln!(f, "{uci_opt}")
             }
             Self::Info(_info) => {
                 // TODO
@@ -633,7 +633,9 @@ impl UciOption {
                 max,
                 ..
             }) => {
-                let new_value = i64::from_str_radix(&raw_opt.value, 10)
+                let new_value: i64 = raw_opt
+                    .value
+                    .parse()
                     .map_err(|err| (ErrorKind::UciOptionCannotUpdate, err))?;
                 (min..=max)
                     .contains(&new_value)
@@ -681,15 +683,15 @@ impl PartialEq for CaselessString {
 }
 impl Eq for CaselessString {}
 
-impl Hash for CaselessString {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.to_lowercase().hash(state);
+impl PartialEq<&str> for CaselessString {
+    fn eq(&self, other: &&str) -> bool {
+        self.0.to_lowercase() == other.to_lowercase()
     }
 }
 
-impl PartialEq<&str> for CaselessString {
-    fn eq(&self, other: &&str) -> bool {
-        *self == Self::from(*other)
+impl Hash for CaselessString {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_lowercase().hash(state);
     }
 }
 
@@ -711,6 +713,7 @@ type OptionsMap = HashMap<CaselessString, UciOption>;
 
 /// A HashMap wrapper for UciOption that has extra functionality for UciOption.
 /// An option can only be updated with an option of equivalent type.
+#[derive(Default)]
 pub struct UciOptions(OptionsMap);
 
 impl UciOptions {
@@ -746,7 +749,7 @@ impl UciOptions {
                 ErrorKind::UciOptionCannotUpdate,
                 "RawOption name not a valid UciOption",
             ))?
-            .try_update(&raw_opt)
+            .try_update(raw_opt)
     }
 }
 
@@ -772,7 +775,7 @@ impl Deref for UciOptions {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Hash)]
 pub struct SearchControls {
     pub wtime: Option<i32>,
     pub btime: Option<i32>,
@@ -789,23 +792,6 @@ pub struct SearchControls {
 impl SearchControls {
     pub fn new() -> Self {
         Self::default()
-    }
-}
-
-impl Default for SearchControls {
-    fn default() -> Self {
-        Self {
-            wtime: None,
-            btime: None,
-            winc: None,
-            binc: None,
-            moves_to_go: None,
-            depth: None,
-            nodes: None,
-            mate: None,
-            move_time: None,
-            infinite: false,
-        }
     }
 }
 

@@ -62,7 +62,7 @@ pub(crate) fn alpha_beta_root(
     let cache = position.cache();
     let legal_moves = position.get_legal_moves();
     debug_assert_ne!(ply, 0);
-    debug_assert!(legal_moves.len() > 0);
+    debug_assert!(!legal_moves.is_empty());
 
     let mut best_move = Move::new(Square::D2, Square::D4, None);
 

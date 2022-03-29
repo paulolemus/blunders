@@ -56,7 +56,7 @@ impl History {
 
         if is_unrepeatable {
             self.unrepeatables.push(self.head);
-            self.head = self.hash_history.len().checked_sub(1).unwrap_or(0);
+            self.head = self.hash_history.len().saturating_sub(1);
         }
     }
 

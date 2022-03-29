@@ -90,5 +90,5 @@ pub fn quiescence(
         }
     }
 
-    return best_score;
+    best_score
 }

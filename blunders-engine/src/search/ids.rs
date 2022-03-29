@@ -88,9 +88,9 @@ pub fn ids(
         // Check for possible bugs where the pv is incorrect.
         // This might be fixed by checking if a position exists in the tt already,
         // but has different values from what is recreated.
-        let mut position = position.clone();
-        let mut hash = hash.clone();
-        let mut move_ply = ply.clone();
+        let mut position = position;
+        let mut hash = hash;
+        let mut move_ply = ply;
         let mut relative_pv_score = search_result.relative_score();
 
         for &pv_move in search_result.pv.iter().take(move_ply as usize) {

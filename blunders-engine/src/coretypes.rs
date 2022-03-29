@@ -260,7 +260,7 @@ impl Cp {
 
     /// Returns true if this Centipawn score is an eval score, not mate.
     pub fn is_score(&self) -> bool {
-        Cp::score_range().contains(&self)
+        Cp::score_range().contains(self)
     }
 
     /// Returns true if this Centipawn score is illegal.
@@ -394,10 +394,7 @@ impl PieceKind {
     /// Sliding piece_kinds are Rooks, Bishops, and Queens.
     pub const fn is_sliding(&self) -> bool {
         use PieceKind::*;
-        match self {
-            Rook | Bishop | Queen => true,
-            _ => false,
-        }
+        matches!(self, Rook | Bishop | Queen)
     }
 
     pub const fn iter() -> PieceKindIterator {
@@ -905,7 +902,7 @@ impl Iterator for SquareIterator {
         if self.square_discriminant <= Square::H8 as u8 {
             self.square_discriminant += 1;
         }
-        return maybe_item;
+        maybe_item
     }
 }
 

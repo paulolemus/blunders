@@ -245,7 +245,7 @@ impl Bitboard {
     /// * Use shift index to remove bit from Bitboard.
     /// * Convert square index to a Square and add to list.
     pub fn squares(&self) -> Vec<Square> {
-        let mut bits = self.clone();
+        let mut bits = *self;
         let num_ones = self.len();
         let mut vec = Vec::with_capacity(num_ones);
 

@@ -58,7 +58,7 @@ pub fn perft(mut position: Position, ply: PlyKind, threads: usize) -> PerftInfo 
 
     let legal_moves = position.get_legal_moves();
     // Guard no moves to search.
-    if legal_moves.len() == 0 {
+    if legal_moves.is_empty() {
         return PerftInfo::new(0);
     }
 
@@ -69,7 +69,7 @@ pub fn perft(mut position: Position, ply: PlyKind, threads: usize) -> PerftInfo 
     // Create threads to process partitioned moves.
     for _ in 0..threads {
         // Arcs
-        let position = position.clone();
+        let position = position;
         let legal_moves = legal_moves.clone();
         let total_perft_info = total_perft_info.clone();
 

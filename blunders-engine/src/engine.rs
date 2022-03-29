@@ -84,6 +84,12 @@ impl EngineBuilder {
     }
 }
 
+impl Default for EngineBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Engine wraps up all parameters required for running any kind of search.
 /// It is stateful because to properly evaluate a chess position the history of
 /// moves for the current game need to be tracked.
@@ -148,7 +154,7 @@ impl Engine {
     pub fn try_set_transpositions_mb(&mut self, new_mb: usize) -> error::Result<usize> {
         Arc::get_mut(&mut self.tt)
             .map(|inner_tt| inner_tt.set_mb(new_mb))
-            .ok_or(ErrorKind::EngineTranspositionTableInUse.into())
+            .ok_or_else(|| ErrorKind::EngineTranspositionTableInUse.into())
     }
 
     /// Attempt to clear the transposition table. Table is cleared only if there
@@ -157,7 +163,7 @@ impl Engine {
     pub fn try_clear_transpositions(&mut self) -> error::Result<()> {
         Arc::get_mut(&mut self.tt)
             .map(|inner_tt| inner_tt.clear())
-            .ok_or(ErrorKind::EngineTranspositionTableInUse.into())
+            .ok_or_else(|| ErrorKind::EngineTranspositionTableInUse.into())
     }
 
     /// Run a blocking search.

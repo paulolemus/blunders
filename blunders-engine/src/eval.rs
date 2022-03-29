@@ -84,9 +84,7 @@ pub fn evaluate_abs(position: &Position) -> Cp {
     let cp_mobility = mobility(position);
     let cp_king_safety = king_safety(position);
 
-    let cp_total =
-        cp_material + cp_piece_sq + cp_pass_pawns + cp_xray_king + cp_mobility + cp_king_safety;
-    cp_total
+    cp_material + cp_piece_sq + cp_pass_pawns + cp_xray_king + cp_mobility + cp_king_safety
 }
 
 /// Returns relative strength difference of pieces in position.

@@ -129,7 +129,7 @@ impl Drop for ThreadPool {
         // Clear all pending jobs in queue.
         {
             let locked_receiver = self.receiver.lock().unwrap();
-            while let Ok(_) = locked_receiver.try_recv() {}
+            while locked_receiver.try_recv().is_ok() {}
         }
 
         // Tell each thread to terminate.

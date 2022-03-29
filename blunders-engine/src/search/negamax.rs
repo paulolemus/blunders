@@ -24,9 +24,9 @@ use crate::zobrist::HashKind;
 pub fn negamax(mut position: Position, ply: PlyKind, tt: &TranspositionTable) -> SearchResult {
     assert!(0 < ply && ply < MAX_DEPTH);
 
+    let instant = Instant::now();
     let root_player = *position.player();
     let hash = tt.generate_hash(&position);
-    let instant = Instant::now();
     let age = position.age();
 
     let mut pv = Line::new();
@@ -101,7 +101,7 @@ fn negamax_impl(
     // Terminal and leaf nodes have no following moves so pv of parent is cleared.
     if num_moves == 0 {
         pv.clear();
-        return terminal(&position);
+        return terminal(position);
     }
     // Check if current move exists in tt. If so, we might be able to return that value
     // right away if has a greater or equal depth than we are considering.
@@ -149,7 +149,7 @@ fn negamax_impl(
     for legal_move_info in ordered_legal_moves.into_iter().rev() {
         // Get value of a move relative to active player.
         position.do_move_info(legal_move_info);
-        let move_hash = tt.update_from_hash(hash, &position, legal_move_info, cache);
+        let move_hash = tt.update_from_hash(hash, position, legal_move_info, cache);
         let move_score = -negamax_impl(
             position,
             tt,
@@ -326,7 +326,7 @@ pub fn iterative_negamax(
 
     // Meta Search variables
     let instant = Instant::now(); // Timer for search.
-    let root_position = position.clone(); // For assertions
+    let root_position = position; // For assertions
     let root_hash = tt.generate_hash(&position); // Keep copy of root hash for assertions
     let root_history = history.clone();
     let age = position.age();
@@ -340,10 +340,11 @@ pub fn iterative_negamax(
     let contempt = Cp(50);
 
     // Update Metrics in SearchResult.
-    let mut metrics = SearchResult::default();
-    metrics.player = root_position.player;
-    metrics.depth = ply;
-    metrics.stopped = false;
+    let mut metrics = SearchResult {
+        player: root_position.player,
+        depth: ply,
+        ..Default::default()
+    };
 
     // Stack holds frame data, where each ply gets one frame.
     // Size is +1 because the 0th index holds the PV so far for root position.
@@ -596,7 +597,7 @@ pub fn iterative_negamax(
     // This PV can be returned as a best guess. If this is coming from iterative deepening
     // this partial-search PV is guaranteed to be at least more accurate than what came from
     // a lesser depth, as long as the previous depth PV was searched first.
-    if stack[BASE_IDX].local_pv.len() == 0 {
+    if stack[BASE_IDX].local_pv.is_empty() {
         None
     } else {
         let best_move = stack[ROOT_IDX].best_move;

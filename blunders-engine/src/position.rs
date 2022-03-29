@@ -31,13 +31,11 @@ impl Game {
     /// This generates the current position by applying the sequence of moves to the base.
     /// If a move in the move history was illegal, Err is returned.
     pub fn new(base_position: Position, moves: MoveHistory) -> error::Result<Self> {
-        let mut position = base_position.clone();
+        let mut position = base_position;
 
         for move_ in &moves {
             let maybe_move_info = position.do_legal_move(*move_);
-            if maybe_move_info.is_none() {
-                return Err(ErrorKind::GameIllegalMove.into());
-            }
+            maybe_move_info.ok_or(ErrorKind::GameIllegalMove)?;
         }
 
         Ok(Self {
@@ -171,7 +169,7 @@ impl Position {
     /// This is useful for checking that an evaluation function scores the same scenario
     /// presented to either player.
     pub fn color_flip(&self) -> Self {
-        let mut flipped = self.clone();
+        let mut flipped = *self;
 
         // For each piece, flip its rank and color
         let mut pieces = PieceSets::new();
@@ -478,27 +476,19 @@ impl Position {
     /// Returns true if it is mate, false otherwise.
     pub fn is_checkmate(&self) -> bool {
         let legal_moves = self.get_legal_moves();
-        if legal_moves.len() == 0 && self.is_in_check() {
-            true
-        } else {
-            false
-        }
+        legal_moves.is_empty() && self.is_in_check()
     }
 
     /// Check if the current position is stalemated.
     /// Returns true if it is stalemate, false otherwise.
     pub fn is_stalemate(&self) -> bool {
         let legal_moves = self.get_legal_moves();
-        if legal_moves.len() == 0 && !self.is_in_check() {
-            true
-        } else {
-            false
-        }
+        legal_moves.is_empty() && !self.is_in_check()
     }
 
     /// Generates a new Position from applying move on current Position.
     pub fn make_move(&self, move_: Move) -> Self {
-        let mut position_clone: Position = self.clone();
+        let mut position_clone: Position = *self;
         position_clone.do_move(move_);
         position_clone
     }
@@ -552,7 +542,7 @@ impl Position {
 
     /// Returns true if target square is attacked by any piece of attacking color.
     pub fn is_attacked_by(&self, target: Square, attacking: Color) -> bool {
-        self.attackers_to(target, attacking).len() > 0
+        !self.attackers_to(target, attacking).is_empty()
     }
 
     /// Returns bitboard with all squares attacked by a player's pieces.
@@ -685,7 +675,7 @@ impl Position {
             self.en_passant,
         );
 
-        let mut position = self.clone();
+        let mut position = *self;
         let cache = position.cache();
         pseudo_moves
             .into_iter()
@@ -772,7 +762,7 @@ impl Position {
             self.en_passant,
         );
 
-        let mut position = self.clone();
+        let mut position = *self;
         let cache = position.cache();
         pseudo_moves
             .into_iter()

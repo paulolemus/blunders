@@ -85,7 +85,7 @@ impl PieceSets {
     /// Return a bitboard representing the set of squares occupied by piece of color.
     pub fn color_occupied(&self, color: Color) -> Bitboard {
         self[color]
-            .into_iter()
+            .iter()
             .fold(Bitboard::EMPTY, |acc, bb| acc | *bb)
     }
 

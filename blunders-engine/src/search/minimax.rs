@@ -53,7 +53,7 @@ fn minimax_root(mut position: Position, ply: PlyKind, nodes: &mut u64) -> (Cp, M
     let cache = position.cache();
     let legal_moves = position.get_legal_moves();
     assert_ne!(ply, 0);
-    assert!(legal_moves.len() > 0);
+    assert!(!legal_moves.is_empty());
 
     let mut best_move = Move::new(Square::D2, Square::D4, None);
     let mut best_cp;

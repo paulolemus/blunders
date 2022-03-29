@@ -77,7 +77,7 @@ impl Mailbox {
     /// Returns pretty-printed chess board representation of Self.
     /// The chess board has borders and file/rank indicators.
     pub fn pretty(&self) -> String {
-        const RANK_SEP: &'static str = "+---+---+---+---+---+---+---+---+\n";
+        const RANK_SEP: &str = "+---+---+---+---+---+---+---+---+\n";
         let mut pretty = String::with_capacity(626); // Measured in test.
 
         pretty.push_str(RANK_SEP);
