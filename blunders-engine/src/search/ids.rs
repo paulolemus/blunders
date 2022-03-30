@@ -22,6 +22,7 @@ pub fn ids(
     mode: Mode,
     history: History,
     tt: &TranspositionTable,
+    start_time: Instant,
     stopper: Arc<AtomicBool>,
     debug: bool,
 ) -> SearchResult {
@@ -41,13 +42,14 @@ pub fn ids(
     // iteration is in the tt.
     for ply in 1..=MAX_DEPTH {
         // Check if we need to stop before the current iteration.
-        if mode.stop(position.player, ply) {
+        if mode.stop(position.player, ply, start_time) {
             break;
         }
 
         let stopper = Arc::clone(&stopper);
         let history = history.clone();
-        let maybe_result = search::iterative_negamax(position, ply, mode, history, tt, stopper);
+        let maybe_result =
+            search::iterative_negamax(position, ply, mode, history, tt, start_time, stopper);
 
         // Update search_result from deeper iteration, and return early if it's flagged as stop.
         // Need to update nodes, q_nodes, and q_elapsed to get running total.

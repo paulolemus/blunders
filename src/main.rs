@@ -132,6 +132,8 @@ fn main() -> io::Result<()> {
     // Message can either be A UciCommand received from external source,
     // or the results of a search. Process accordingly.
     while let Ok(message) = receiver.recv() {
+        let recv_time = Instant::now();
+
         match message {
             Message::Command(command) => match command {
                 // GUI is telling engine to use UCI protocol.
@@ -251,7 +253,7 @@ fn main() -> io::Result<()> {
                     };
 
                     // TODO: consider stopping any active search to ensure new search can always start.
-                    match engine.search(mode, sender.clone()) {
+                    match engine.search(mode, sender.clone(), Some(recv_time)) {
                         Ok(()) => uci::debug(debug, "go starting search...")?,
                         Err(err) => uci::error(&err.to_string())?,
                     };

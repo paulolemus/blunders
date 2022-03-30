@@ -1,4 +1,5 @@
 use std::sync::{atomic::AtomicBool, Arc};
+use std::time::Instant;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
@@ -49,6 +50,7 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
                 black_box(mode),
                 black_box(history.clone()),
                 black_box(&tt),
+                black_box(Instant::now()),
                 black_box(stopper),
             )
             .unwrap();
@@ -67,6 +69,7 @@ pub fn criterion_mates_3_sac_knight(c: &mut Criterion) {
                 black_box(mode),
                 black_box(history.clone()),
                 black_box(&tt),
+                black_box(Instant::now()),
                 black_box(stopper),
                 false,
             );
@@ -117,6 +120,7 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
                 black_box(mode),
                 black_box(history.clone()),
                 black_box(&tt),
+                black_box(Instant::now()),
                 black_box(stopper),
             )
             .unwrap();
@@ -135,6 +139,7 @@ pub fn criterion_mates_3_knights_and_bishop(c: &mut Criterion) {
                 black_box(mode),
                 black_box(history.clone()),
                 black_box(&tt),
+                black_box(Instant::now()),
                 black_box(stopper),
                 false,
             );

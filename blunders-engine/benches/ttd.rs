@@ -17,7 +17,7 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
     c.bench_function("search start position ttd 2", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            result = engine.search_sync(black_box(Mode::depth(2, None)));
+            result = engine.search_sync(black_box(Mode::depth(2, None)), black_box(None));
         });
     });
     if result.best_move != Move::illegal() {
@@ -27,7 +27,7 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
     c.bench_function("search start position ttd 3", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            result = engine.search_sync(black_box(Mode::depth(3, None)));
+            result = engine.search_sync(black_box(Mode::depth(3, None)), black_box(None));
         });
     });
     if result.best_move != Move::illegal() {
@@ -37,7 +37,7 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
     c.bench_function("search start position ttd 4", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            result = engine.search_sync(black_box(Mode::depth(4, None)));
+            result = engine.search_sync(black_box(Mode::depth(4, None)), black_box(None));
         });
     });
     if result.best_move != Move::illegal() {
@@ -47,7 +47,7 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
     c.bench_function("search start position ttd 5", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            result = engine.search_sync(black_box(Mode::depth(5, None)));
+            result = engine.search_sync(black_box(Mode::depth(5, None)), black_box(None));
         });
     });
     if result.best_move != Move::illegal() {
@@ -57,7 +57,7 @@ pub fn start_pos_search_time_to_depth(c: &mut Criterion) {
     c.bench_function("search start position ttd 6", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            result = engine.search_sync(black_box(Mode::depth(6, None)));
+            result = engine.search_sync(black_box(Mode::depth(6, None)), black_box(None));
         });
     });
     if result.best_move != Move::illegal() {
@@ -78,7 +78,7 @@ pub fn start_pos_search_time_to_depth_long(c: &mut Criterion) {
     c.bench_function("search start position ttd 7", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            result = engine.search_sync(black_box(Mode::depth(7, None)));
+            result = engine.search_sync(black_box(Mode::depth(7, None)), black_box(None));
         });
     });
     if result.best_move != Move::illegal() {
@@ -88,7 +88,7 @@ pub fn start_pos_search_time_to_depth_long(c: &mut Criterion) {
     c.bench_function("search start position ttd 8", |b| {
         b.iter(|| {
             let mut engine = engine_builder.build();
-            result = engine.search_sync(black_box(Mode::depth(8, None)));
+            result = engine.search_sync(black_box(Mode::depth(8, None)), black_box(None));
         });
     });
     if result.best_move != Move::illegal() {

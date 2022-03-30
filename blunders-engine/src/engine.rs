@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use std::thread::JoinHandle;
+use std::time::Instant;
 
 use crate::error::{self, ErrorKind};
 use crate::game::Game;
@@ -168,14 +169,15 @@ impl Engine {
     }
 
     /// Run a blocking search.
-    pub fn search_sync(&mut self, mode: Mode) -> SearchResult {
+    pub fn search_sync(&mut self, mode: Mode, start_time: Option<Instant>) -> SearchResult {
+        let start_time = Some(start_time.unwrap_or_else(Instant::now));
         // Block until a search is ready to run.
         self.stop();
         self.wait();
         self.unstop();
 
         let (sender, receiver) = mpsc::channel();
-        self.search(mode, sender).unwrap();
+        self.search(mode, sender, start_time).unwrap();
         self.wait();
         receiver.recv().unwrap()
     }
@@ -183,10 +185,17 @@ impl Engine {
     /// Run a non-blocking search.
     /// The engine only runs one search at a time, so if it is not ready, it fails to begin.
     /// If the engine is available for searching, it ensures its stopper is unset.
-    pub fn search<T>(&mut self, mode: Mode, sender: Sender<T>) -> error::Result<()>
+    pub fn search<T>(
+        &mut self,
+        mode: Mode,
+        sender: Sender<T>,
+        start_time: Option<Instant>,
+    ) -> error::Result<()>
     where
         T: From<SearchResult> + Send + 'static,
     {
+        let start_time = Some(start_time.unwrap_or_else(Instant::now));
+
         if self.search_handle.is_none() {
             self.unstop();
 
@@ -194,6 +203,7 @@ impl Engine {
                 self.game.clone(),
                 mode,
                 Arc::clone(&self.tt),
+                start_time,
                 Arc::clone(&self.stopper),
                 self.debug,
                 sender,

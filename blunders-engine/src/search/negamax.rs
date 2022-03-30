@@ -318,6 +318,7 @@ pub fn iterative_negamax(
     mode: Mode,
     mut history: History,
     tt: &TranspositionTable,
+    start_time: Instant,
     stopper: Arc<AtomicBool>,
 ) -> Option<SearchResult> {
     // Guard: must have a valid searchable ply, and root position must not be terminal.
@@ -377,7 +378,7 @@ pub fn iterative_negamax(
         if label == Label::Initialize && stop_check_counter <= 0 {
             stop_check_counter = nodes_per_stop_check;
             stopped |= stopper.load(Ordering::Acquire);
-            stopped |= mode.stop(root_position.player, ply);
+            stopped |= mode.stop(root_position.player, ply, start_time);
         }
 
         // If stopped flag is ever set, breaking ends search early.
@@ -500,15 +501,12 @@ pub fn iterative_negamax(
 
             // Every move for this node has been evaluated, so its complete score is returned.
             } else {
-                let node_kind = match us.alpha_raised {
-                    true => {
-                        metrics.pv_nodes += 1;
-                        NodeKind::Pv
-                    }
-                    false => {
-                        metrics.all_nodes += 1;
-                        NodeKind::All
-                    }
+                let node_kind = if us.alpha_raised {
+                    metrics.pv_nodes += 1;
+                    NodeKind::Pv
+                } else {
+                    metrics.all_nodes += 1;
+                    NodeKind::All
                 };
 
                 let entry = Entry::new(

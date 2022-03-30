@@ -12,7 +12,7 @@ use blunders_engine::*;
 fn mate_tester(fen_str: &str, best_move: Move, ply: u8, winner: Color) {
     let pos = Position::parse_fen(fen_str).unwrap();
     let mut tt = TranspositionTable::new();
-    let result = search(pos, ply, &mut tt);
+    let result = search(pos, Mode::depth(ply, None), &mut tt, None);
     assert_eq!(result.leading(), Some(winner));
     assert_eq!(result.best_move, best_move);
     assert!(result.score.is_mate());

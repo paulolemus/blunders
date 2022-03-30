@@ -28,7 +28,7 @@ fn threefold_repetition_perpetual_check_1() {
     {
         // Search once without the history of repeated moves -> Losing.
         engine.set_game(repeated_game.position);
-        let search_result = engine.search_sync(mode);
+        let search_result = engine.search_sync(mode, None);
         assert_eq!(search_result.best_move, Move::new(H4, E1, None));
         assert_eq!(search_result.leading(), Some(White));
     }
@@ -37,7 +37,7 @@ fn threefold_repetition_perpetual_check_1() {
         // Search again with repeated moves -> Draw.
         engine.new_game().unwrap();
         engine.set_game(repeated_game);
-        let search_result = engine.search_sync(mode);
+        let search_result = engine.search_sync(mode, None);
         assert_eq!(search_result.best_move, Move::new(H4, E1, None));
         // assert_eq!(search_result.leading(), None); How to assess draw with contempt?
     }

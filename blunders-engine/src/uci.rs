@@ -7,6 +7,7 @@ use std::io;
 use std::ops::Deref;
 use std::ops::{Index, IndexMut};
 use std::str::{FromStr, SplitWhitespace};
+use std::time::Duration;
 
 use crate::coretypes::{Move, PlyKind};
 use crate::error::{self, ErrorKind};
@@ -99,9 +100,9 @@ impl UciCommand {
                 value.push(' ');
             }
             value.pop(); // Remove trailing space.
-            (!value.is_empty())
-                .then(|| ())
-                .ok_or((ErrorKind::UciNoArgument, "expected argument after value"))?;
+            if value.is_empty() {
+                return Err((ErrorKind::UciNoArgument, "expected argument after value").into());
+            }
         }
 
         Ok(UciCommand::SetOption(RawOption {
@@ -150,91 +151,63 @@ impl UciCommand {
         // The following options have no arguments:
         // ponder, infinite
         // The following options must be followed with an integer value:
-        // wtime, btime, winc, binc, depth, nodes, mate, movetime, movestogo
-        const HAS_U32_ARG: [&str; 9] = [
-            "wtime",
-            "btime",
-            "winc",
-            "binc",
-            "depth",
-            "movestogo",
-            "mate",
-            "movetime",
-            "nodes",
-        ];
+        // If they are negative, they can be converted to 0 as they behave the same.
+        const INTEGER_ARGS: [&str; 3] = ["wtime", "btime", "movetime"];
+        // The following options must be followed with an positive integer value:
+        const POSITIVE_ARGS: [&str; 6] = ["winc", "binc", "depth", "movestogo", "mate", "nodes"];
 
         let mut controls = SearchControls::new();
 
         while let Some(input_str) = input.next() {
-            // Attempt to parse all options with a u32 argument type.
-            if HAS_U32_ARG.contains(&input_str) {
+            if INTEGER_ARGS.contains(&input_str) {
                 let argument: i64 = input
                     .next()
                     .ok_or(ErrorKind::UciNoArgument)?
                     .parse()
                     .map_err(|err| (ErrorKind::UciCannotParseInt, err))?;
 
+                let corrected_argument = u64::try_from(argument).unwrap_or(0);
+
                 match input_str {
                     "wtime" => {
-                        controls.wtime = Some(
-                            argument
-                                .try_into()
-                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
-                        )
+                        controls.wtime = Some(Duration::from_millis(corrected_argument));
                     }
                     "btime" => {
-                        controls.btime = Some(
-                            argument
-                                .try_into()
-                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
-                        )
+                        controls.btime = Some(Duration::from_millis(corrected_argument));
                     }
-                    "winc" => {
-                        controls.winc = Some(
-                            argument
-                                .try_into()
-                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
-                        )
+                    "movetime" => {
+                        controls.move_time = Some(Duration::from_millis(corrected_argument));
                     }
-                    "binc" => {
-                        controls.binc = Some(
-                            argument
-                                .try_into()
-                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
-                        )
+                    _ => {
+                        return Err(ErrorKind::UciInvalidOption.into());
                     }
+                }
+            } else if POSITIVE_ARGS.contains(&input_str) {
+                let argument: u64 = input
+                    .next()
+                    .ok_or(ErrorKind::UciNoArgument)?
+                    .parse()
+                    .map_err(|err| (ErrorKind::UciCannotParseInt, err))?;
+
+                match input_str {
+                    "winc" => controls.winc = Some(Duration::from_millis(argument)),
+                    "binc" => controls.binc = Some(Duration::from_millis(argument)),
+                    "nodes" => controls.nodes = Some(argument),
                     "depth" => {
                         controls.depth = Some(
-                            argument
-                                .try_into()
+                            u8::try_from(argument)
                                 .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
                         )
                     }
                     "movestogo" => {
                         controls.moves_to_go = Some(
-                            argument
-                                .try_into()
+                            u32::try_from(argument)
                                 .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
                         )
                     }
                     "mate" => {
                         controls.mate = Some(
-                            argument
-                                .try_into()
-                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
-                        )
-                    }
-                    "movetime" => {
-                        controls.move_time = Some(
-                            argument
-                                .try_into()
-                                .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
-                        )
-                    }
-                    "nodes" => {
-                        controls.nodes = Some(
-                            argument
-                                .try_into()
+                            u32::try_from(argument)
                                 .map_err(|err| (ErrorKind::UciCannotParseInt, err))?,
                         )
                     }
@@ -778,15 +751,15 @@ impl Deref for UciOptions {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Hash)]
 pub struct SearchControls {
-    pub wtime: Option<i32>,
-    pub btime: Option<i32>,
-    pub winc: Option<u32>,
-    pub binc: Option<u32>,
+    pub wtime: Option<Duration>,
+    pub btime: Option<Duration>,
+    pub winc: Option<Duration>,
+    pub binc: Option<Duration>,
     pub moves_to_go: Option<u32>,
     pub depth: Option<PlyKind>,
     pub nodes: Option<u64>,
     pub mate: Option<u32>,
-    pub move_time: Option<u32>,
+    pub move_time: Option<Duration>,
     pub infinite: bool,
 }
 
@@ -938,7 +911,7 @@ mod tests {
             let command = UciCommand::parse_command(input).unwrap();
             let mut search_ctrl = SearchControls::new();
             search_ctrl.depth = Some(10);
-            search_ctrl.wtime = Some(40000);
+            search_ctrl.wtime = Some(Duration::from_millis(40000));
             assert_eq!(UciCommand::Go(search_ctrl), command);
         }
     }

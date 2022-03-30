@@ -17,7 +17,7 @@ pub use quiescence::*;
 use std::fmt::{self, Display};
 use std::sync::{atomic::AtomicBool, mpsc, Arc};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::coretypes::{Color, Cp, Move, PlyKind};
 use crate::movelist::display;
@@ -37,7 +37,7 @@ pub struct SearchResult {
     pub pv: Line,
     /// The player to move for the root position that was searched.
     pub player: Color,
-    /// Depth (aka ply, half move) that was searched to. This depth is only fully searched if the `stopped` flag is false.
+    /// Depth (aka ply, half move) in plies that was searched. This depth is only fully searched if `stopped` flag is false.
     pub depth: PlyKind,
     /// Total number of nodes visited in a search, including main search nodes and quiescence nodes.
     pub nodes: u64,
@@ -178,15 +178,20 @@ impl Display for SearchResult {
 }
 
 /// Blunders Engine primary position search function. WIP.
-pub fn search(position: Position, ply: PlyKind, tt: &TranspositionTable) -> SearchResult {
-    assert_ne!(ply, 0);
-    let mode = Mode::depth(ply, None);
+pub fn search(
+    position: Position,
+    mode: Mode,
+    tt: &TranspositionTable,
+    start_time: Option<Instant>,
+) -> SearchResult {
+    let start_time = start_time.unwrap_or_else(Instant::now);
     let history = History::new(&position.into(), tt.zobrist_table());
     ids(
         position,
         mode,
         history,
         tt,
+        start_time,
         Arc::new(AtomicBool::new(false)),
         true,
     )
@@ -207,6 +212,7 @@ pub fn search_nonblocking<P, T>(
     game: P,
     mode: Mode,
     tt: Arc<TranspositionTable>,
+    start_time: Option<Instant>,
     stopper: Arc<AtomicBool>,
     debug: bool,
     sender: mpsc::Sender<T>,
@@ -215,12 +221,13 @@ where
     T: 'static + Send + From<SearchResult>,
     P: Into<Game>,
 {
+    let start_time = start_time.unwrap_or_else(Instant::now);
     let game: Game = game.into();
     let position = game.position;
     let history = History::new(&game, tt.zobrist_table());
 
     thread::spawn(move || {
-        let search_result = ids(position, mode, history, &tt, stopper, debug);
+        let search_result = ids(position, mode, history, &tt, start_time, stopper, debug);
         sender.send(search_result.into()).unwrap();
     })
 }

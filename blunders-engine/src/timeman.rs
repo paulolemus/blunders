@@ -1,13 +1,18 @@
 //! Time Management
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::coretypes::{Color, PlyKind};
 use crate::error::{self, ErrorKind};
 use crate::uci::SearchControls;
 
 const TIME_RATIO: u32 = 15; // Use 1/15th of remaining time per timed move.
-const OVERHEAD: u128 = 10; // Expected amount of time loss in ms.
+const OVERHEAD: Duration = Duration::from_millis(10); // Expected amount of time loss in ms.
+
+// Returns true if the duration since the start of search is gte to the provided time to move.
+fn is_out_of_time(start_time: Instant, move_time: Duration) -> bool {
+    start_time.elapsed() + OVERHEAD >= move_time
+}
 
 /// There are 4 supported search modes currently, Infinite, Standard, Depth, and MoveTime.  
 /// Infinite mode: do not stop searching. Search must be signaled externally to stop.  
@@ -24,12 +29,12 @@ pub enum Mode {
 
 impl Mode {
     /// Returns true if a search should be stopped.
-    pub fn stop(&self, root_player: Color, ply: PlyKind) -> bool {
+    pub fn stop(&self, root_player: Color, ply: PlyKind, start_time: Instant) -> bool {
         match self {
             Mode::Infinite => Infinite::stop(),
-            Mode::Depth(depth_mode) => depth_mode.stop(ply),
-            Mode::MoveTime(movetime_mode) => movetime_mode.stop(ply),
-            Mode::Standard(standard_mode) => standard_mode.stop(root_player, ply),
+            Mode::Depth(depth_mode) => depth_mode.stop(ply, start_time),
+            Mode::MoveTime(movetime_mode) => movetime_mode.stop(ply, start_time),
+            Mode::Standard(standard_mode) => standard_mode.stop(root_player, ply, start_time),
         }
     }
 
@@ -39,28 +44,26 @@ impl Mode {
     }
 
     /// Returns a new Depth Mode.
-    pub fn depth(ply: PlyKind, movetime: Option<u32>) -> Self {
+    pub fn depth(ply: PlyKind, movetime: Option<Duration>) -> Self {
         Self::Depth(Depth {
             depth: ply,
-            instant: Instant::now(),
             movetime,
         })
     }
 
     /// Returns a new MoveTime mode.
-    pub fn movetime(movetime: u32, ply: Option<PlyKind>) -> Self {
+    pub fn movetime(movetime: Duration, ply: Option<PlyKind>) -> Self {
         Self::MoveTime(MoveTime {
             movetime,
-            instant: Instant::now(),
             depth: ply,
         })
     }
 
     pub fn standard(
-        wtime: i32,
-        btime: i32,
-        winc: Option<u32>,
-        binc: Option<u32>,
+        wtime: Duration,
+        btime: Duration,
+        winc: Option<Duration>,
+        binc: Option<Duration>,
         moves_to_go: Option<u32>,
         ply: Option<PlyKind>,
     ) -> Self {
@@ -71,7 +74,6 @@ impl Mode {
             binc,
             moves_to_go,
             depth: ply,
-            instant: Instant::now(),
         })
     }
 }
@@ -116,20 +118,18 @@ impl Infinite {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct Depth {
     pub depth: PlyKind,
-    instant: Instant,
-    movetime: Option<u32>,
+    movetime: Option<Duration>,
 }
 
 impl Depth {
     /// Depth mode stops when its depth limit is passed, or optionally if movetime is met.
-    fn stop(&self, ply: PlyKind) -> bool {
+    fn stop(&self, ply: PlyKind, start_time: Instant) -> bool {
         if ply > self.depth {
             return true;
         }
 
         if let Some(movetime) = self.movetime {
-            let elapsed_ms = self.instant.elapsed().as_millis();
-            if elapsed_ms >= (movetime as u128).saturating_sub(OVERHEAD) {
+            if is_out_of_time(start_time, movetime) {
                 return true;
             }
         }
@@ -145,19 +145,16 @@ impl Depth {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct MoveTime {
-    movetime: u32,
-    instant: Instant,
+    movetime: Duration,
     depth: Option<PlyKind>,
 }
 
 impl MoveTime {
     /// MoveTime mode stops after a given time has passed, or optionally if its depth is passed.
-    fn stop(&self, ply: PlyKind) -> bool {
-        let elapsed_ms = self.instant.elapsed().as_millis();
-        if elapsed_ms >= (self.movetime as u128).saturating_sub(OVERHEAD) {
+    fn stop(&self, ply: PlyKind, start_time: Instant) -> bool {
+        if is_out_of_time(start_time, self.movetime) {
             return true;
         }
-
         if let Some(depth) = self.depth {
             if ply > depth {
                 return true;
@@ -175,11 +172,10 @@ impl MoveTime {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct Standard {
-    instant: Instant,
-    wtime: i32,
-    btime: i32,
-    winc: Option<u32>,
-    binc: Option<u32>,
+    wtime: Duration,
+    btime: Duration,
+    winc: Option<Duration>,
+    binc: Option<Duration>,
     moves_to_go: Option<u32>,
     depth: Option<PlyKind>,
 }
@@ -187,11 +183,8 @@ pub struct Standard {
 impl Standard {
     /// Standard stops after using some heuristic to determine how much of remaining time to use.
     /// Optionally, stops when a depth is passed.
-    fn stop(&self, root_player: Color, ply: PlyKind) -> bool {
-        let target_elapsed = self.target_elapsed_ms(root_player);
-        let elapsed_ms = self.instant.elapsed().as_millis();
-
-        if elapsed_ms >= target_elapsed {
+    fn stop(&self, root_player: Color, ply: PlyKind, start_time: Instant) -> bool {
+        if is_out_of_time(start_time, self.player_movetime(root_player)) {
             return true;
         }
 
@@ -205,20 +198,13 @@ impl Standard {
         false
     }
 
-    fn target_elapsed_ms(&self, root_player: Color) -> u128 {
-        let remaining_time = match root_player {
+    /// Return the target movetime for a player.
+    fn player_movetime(&self, root_player: Color) -> Duration {
+        let player_time = match root_player {
             Color::White => self.wtime,
             Color::Black => self.btime,
         };
-
-        // Clamp to lower bound of 0.
-        let remaining_time: u128 = if remaining_time.is_negative() {
-            0
-        } else {
-            remaining_time as u128
-        };
-
-        (remaining_time / TIME_RATIO as u128).saturating_sub(OVERHEAD)
+        player_time / TIME_RATIO
     }
 
     /// Returns true if search controls has all required fields for Standard Mode.
@@ -233,10 +219,11 @@ mod tests {
 
     #[test]
     fn standard() {
-        let mut controls = SearchControls::default();
-        controls.wtime = Some(5000);
-        controls.btime = Some(5000);
-
+        let controls = SearchControls {
+            wtime: Some(Duration::from_millis(5000)),
+            btime: Some(Duration::from_millis(5000)),
+            ..Default::default()
+        };
         let mode = Mode::try_from(controls);
 
         assert!(mode.is_ok());
